@@ -1,14 +1,17 @@
 #   lbd2 = _N.array([0.001, 0.08, 0.35, 1.2, 1.5, 1.1, 1.01, 1.])     #  use this for 080402,0,121
-exf("kflib.py")
-exf("restartPickle.py")
+#exf("kflib.py")
+#exf("restartPickle.py")
 
+from kflib import createDataAR
+import numpy as _N
 from mcmcARpFuncs import loadDat, initBernoulli
+import patsy
 
-from gibbs import build_lrn, build_lrnLambda2
 import scipy.stats as _ss
 from kassdirs import resFN, datFN
 
-from mcmcARpPlot import plotFigs, plotARcomps, plotQ2
+from   mcmcARpPlot import plotFigs, plotARcomps, plotQ2
+from mcmcARpFuncs import loadL2, runNotes
 import kfardat as _kfardat
 import time as _tm
 
@@ -18,7 +21,7 @@ import numpy.polynomial.polynomial as _Npp
 import time as _tm
 import ARlib as _arl
 import LogitWrapper as lw
-from gibbsMP import gibbsSampH
+from   gibbsMP import gibbsSampH, build_lrn, build_lrnLambda2
 
 import logerfc as _lfc
 import commdefs as _cd
@@ -27,222 +30,193 @@ from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
 
 import os
 
-os.system("taskset -p 0xff %d" % os.getpid())
-_lfc.init()
+#os.system("taskset -p 0xff %d" % os.getpid())
 
-#setname="oscCts-45"   #  params_XXX.py   Results/XXX/params.py
-#model  ="binomial"
-#setname="spksSloHm-1"   #  params_XXX.py   Results/XXX/params.py
-#setname="ArbRef-LF-HM-2"   #  params_XXX.py   Results/XXX/params.py
-setname="mdOsc-1"   #  params_XXX.py   Results/XXX/params.py
-model  ="bernoulli"
+#  Sampled 
+Bsmpx         = None
+smp_u         = None
+smp_al        = None
+smp_B         = None
+smp_q2        = None
+smp_x00       = None
+#  store samples of
+allalfas      = None
+uts           = None
+wts           = None
+ranks         = None
+pgs           = None
+fs            = None
+amps          = None
+#  
+setname       = None
+model         = None
+ARord         = _cd.__NF__
+rs            = -1
+burn          = None
+NMC           = None
+model         = None
+_t0           = None
+_t1           = None
+ID_q2         = True
+bpsth         = False
+use_prior     = _cd.__COMP_REF__
 
-burn  = 100
-NMC   = 400
-ARord =_cd.__NF__    #  AR coefficient sampling order, signal first
+k             = None
+Cn            = 6
+Cs            = None
+C             = None
 
-rs=-1
-rsDir="%(sn)s/AR16_[0-300]_cmpref_nf_MW" % {"sn" : setname}
+_d            = None
 
-if rs >= 0:
-    unpickle(rsDir, rs)
-else:   #  First run
-    restarts = 0
-    use_prior=_cd.__COMP_REF__
-    bMW      = True
+fSigMax       = 500.
+freq_lims     = [[1 / .85, fSigMax]]
+ifs           = [(5. / fSigMax) * _N.pi]    #  initial values
 
-    #  restrict AR class
-    fSigMax      = 500.
-    freq_lims   = [[1/.85, fSigMax], ]#[1/.85, fSigMax]]
-    spkHz       = 5.
-    ifs         = [(5. / fSigMax) * _N.pi]#, (60. / fSigMax) * _N.pi]
-    Cn          = 6   #  # of noize components
-    Cs          = len(freq_lims)
-    C     = Cn + Cs
-    R     = 1
-    k     = 2*C + R
-
-    #  only use a portion
-    _t0    = 0
-    _t1    = 1000   #  1700
-
-bGetFP = False
-#TR, rn, _x, _y, _fx, _px, N, kp, _u, rmTrl, kpTrl = loadDat(setname, model, t0=_t0, t1=_t1, filtered=bGetFP, phase=bGetFP)  # u is set initialized
-TR, rn, _x, _y, N, kp, _u, rmTrl, kpTrl = loadDat(setname, model, t0=_t0, t1=_t1, filtered=bGetFP, phase=bGetFP)  # u is set initialized
-
-
-l2 = loadL2(setname)
-if (l2 != None) and (len(l2.shape) == 0):
-    l2 = _N.array([l2])
-
-ID_q2 = False
-TR = 5
-TR0 = 0
-TR1 = TR0 + TR
-runNotes(setname, ID_q2, TR0, TR1)
-
-y     = _N.array(_y[kpTrl][TR0:TR1])
-x     = _N.array(_x[kpTrl][TR0:TR1])
-if bGetFP:
-    fx    = _N.array(_fx[kpTrl][TR0:TR1])
-    px    = _N.array(_px[kpTrl][TR0:TR1])
-u     = _N.array(_u[kpTrl][TR0:TR1])
-
-###########  PRIORs
 #  u   --  Gaussian prior
 u_u          = 0;             s2_u         = 5
 #  q2  --  Inverse Gamma prior
 a_q2         = 1e-1;          B_q2         = 1e-6
-#  x0  --  Gaussian prior
-u_x00        = _N.zeros(k);   s2_x00       = _arl.dcyCovMat(k, _N.ones(k), 0.4)
-priors = {"u_u" : u_u, "s2_u" : s2_u, "a_q2" : a_q2, "B_q2" : B_q2,
-          "u_x00" : u_x00, "s2_x00" : s2_x00}
+#  initial states
+u_x00        = None;          s2_x00       = None
 
-# #generate initial values of parameters
-_d = _kfardat.KFARGauObsDat(TR, N, k)
-_d.copyData(y)
+def run(runDir=None, useTrials=None):
+    #_lfc.init()
+    global setname  #  only these that we are setting inside
+    setname = os.getcwd().split("/")[-1]
 
-sPR="cmpref"
-if use_prior==_cd.__FREQ_REF__:
-    sPR="frqref"
-elif use_prior==_cd.__ONOF_REF__:
-    sPR="onfref"
-sAO="sf"
-if ARord==_cd.__SF__:
+    Cs          = len(freq_lims)
+    C           = Cn + Cs
+    R           = 1
+    k           = 2*C + R
+    #  x0  --  Gaussian prior
+    u_x00        = _N.zeros(k)
+    s2_x00       = _arl.dcyCovMat(k, _N.ones(k), 0.4)
+
+    rs=-1
+    if runDir == None:
+        runDir="%(sn)s/AR%(k)d_[%(t0)d-%(t1)d]" % {"sn" : setname, "ar" : k, "t0" : _t0, "t1" : _t1}
+
+    if rs >= 0:
+        unpickle(runDir, rs)
+    else:   #  First run
+        restarts = 0
+
+    bGetFP = False
+    #TR, rn, _x, _y, _fx, _px, N, kp, _u, rmTrl, kpTrl = loadDat(setname, model, t0=_t0, t1=_t1, filtered=bGetFP, phase=bGetFP)  # u is set initialized
+    TR, rn, _x, _y, N, kp, _u, rmTrl, kpTrl = loadDat(setname, model, t0=_t0, t1=_t1, filtered=bGetFP, phase=bGetFP)  # u is set initialized
+
+    print setname
+    l2 = loadL2(setname)
+    if (l2 != None) and (len(l2.shape) == 0):
+        l2 = _N.array([l2])
+
+    #  if a trial requested in useTrials is not in kpTrl, warn user
+    if useTrials == None:
+        useTrials = range(TR)
+    useTrialsFltrd = []
+    for utrl in useTrials:
+        try:
+            ki = kpTrl.index(utrl)
+            useTrialsFltrd.append(ki)
+        except ValueError:
+            print "a trial requested to use will be removed %d" % utrl
+    y     = _N.array(_y[useTrialsFltrd])
+    x     = _N.array(_x[useTrialsFltrd])
+    if bGetFP:
+        fx    = _N.array(_fx[useTrialsFltrd])
+        px    = _N.array(_px[useTrialsFltrd])
+    u     = _N.array(_u[useTrialsFltrd])
+
+    if bpsth:
+        B = patsy.bs(_N.linspace(0, (_t1 - _t0)*dt, (_t1-_t0)), df=nbs, include_intercept=True)    #  spline basis
+        B = B.T    #  My convention for beta
+        aS = _N.linalg.solve(_N.dot(B, B.T), _N.dot(B, _N.ones(_t1 - _t0)*_N.mean(u)))
+
+    ###########  PRIORs
+    priors = {"u_u" : u_u, "s2_u" : s2_u, "a_q2" : a_q2, "B_q2" : B_q2,
+              "u_x00" : u_x00, "s2_x00" : s2_x00}
+
+    # #generate initial values of parameters
+    _d = _kfardat.KFARGauObsDat(TR, N, k)
+    _d.copyData(y)
+
+    sPR="cmpref"
+    if use_prior==_cd.__FREQ_REF__:
+        sPR="frqref"
+    elif use_prior==_cd.__ONOF_REF__:
+        sPR="onfref"
     sAO="sf"
-elif ARord==_cd.__NF__:
-    sAO="nf"
+    if ARord==_cd.__SF__:
+        sAO="sf"
+    elif ARord==_cd.__NF__:
+        sAO="nf"
 
-
-ts        = "[%(1)d-%(2)d]" % {"1" : _t0, "2" : _t1}
-baseFN    = "rs=%(rs)d" % {"pr" : sPR, "rs" : restarts}
-if bMW:
-    setdir="%(sd)s/AR%(k)d_%(ts)s_%(pr)s_%(ao)s_MW" % {"sd" : setname, "k" : k, "ts" : ts, "pr" : sPR, "ao" : sAO}
-else:
+    ts        = "[%(1)d-%(2)d]" % {"1" : _t0, "2" : _t1}
+    baseFN    = "rs=%(rs)d" % {"pr" : sPR, "rs" : restarts}
     setdir="%(sd)s/AR%(k)d_%(ts)s_%(pr)s_%(ao)s" % {"sd" : setname, "k" : k, "ts" : ts, "pr" : sPR, "ao" : sAO}
 
-#  baseFN_inter   baseFN_comps   baseFN_comps
+    #  baseFN_inter   baseFN_comps   baseFN_comps
 
-###############
+    ###############
 
-Bsmpx   = _N.zeros((TR, NMC+burn, (N+1) + 2))
-smp_u   = _N.zeros((TR, burn + NMC))
-smp_q2  = _N.zeros((TR, burn + NMC))
-smp_x00 = _N.empty((TR, burn + NMC-1, k))
-#  store samples of
-allalfas=     _N.empty((burn + NMC, k), dtype=_N.complex)
-uts     = _N.empty((TR, burn + NMC, R, N+2))
-wts     = _N.empty((TR, burn + NMC, C, N+3))
-ranks   = _N.empty((burn + NMC, C), dtype=_N.int)
-pgs     = _N.empty((TR, burn + NMC, N+1))
-fs          =     _N.empty((burn + NMC, C))
-amps        =     _N.empty((burn + NMC, C))
+    Bsmpx        = _N.zeros((TR, NMC+burn, (N+1) + 2))
+    smp_u        = _N.zeros((TR, burn + NMC))
+    smp_q2       = _N.zeros((TR, burn + NMC))
+    smp_x00      = _N.empty((TR, burn + NMC-1, k))
+    #  store samples of
+    allalfas     = _N.empty((burn + NMC, k), dtype=_N.complex)
+    uts          = _N.empty((TR, burn + NMC, R, N+2))
+    wts          = _N.empty((TR, burn + NMC, C, N+3))
+    ranks        = _N.empty((burn + NMC, C), dtype=_N.int)
+    pgs          = _N.empty((TR, burn + NMC, N+1))
+    fs           = _N.empty((burn + NMC, C))
+    amps         = _N.empty((burn + NMC, C))
 
-radians     = buildLims(Cn, freq_lims, nzLimL=1.)
-AR2lims     = 2*_N.cos(radians)
+    radians      = buildLims(Cn, freq_lims, nzLimL=1.)
+    AR2lims      = 2*_N.cos(radians)
 
-if (rs < 0):
-    smpx        = _N.zeros((TR, (_d.N + 1) + 2, k))   #  start at 0 + u
-    ws          = _N.empty((_d.TR, _d.N+1), dtype=_N.float)
+    if (rs < 0):
+        smpx        = _N.zeros((TR, (_d.N + 1) + 2, k))   #  start at 0 + u
+        ws          = _N.empty((_d.TR, _d.N+1), dtype=_N.float)
 
-    F_alfa_rep  = initF(R, Cs, Cn, ifs=ifs)   #  init F_alfa_rep
+        F_alfa_rep  = initF(R, Cs, Cn, ifs=ifs)   #  init F_alfa_rep
 
-    print "begin---"
-    print ampAngRep(F_alfa_rep)
-    print "begin^^^"
-    q20         = 1e-3
-    q2          = _N.ones(TR)*q20
+        print "begin---"
+        print ampAngRep(F_alfa_rep)
+        print "begin^^^"
+        q20         = 1e-3
+        q2          = _N.ones(TR)*q20
 
-    F0          = (-1*_Npp.polyfromroots(F_alfa_rep)[::-1].real)[1:]
-    ########  Limit the amplitude to something reasonable
-    xE, nul = createDataAR(N, F0, q20, 0.1)
-    mlt  = _N.std(xE) / 0.5    #  we want amplitude around 0.5
-    q2          /= mlt*mlt
-    xE, nul = createDataAR(N, F0, q2[0], 0.1)
+        F0          = (-1*_Npp.polyfromroots(F_alfa_rep)[::-1].real)[1:]
+        ########  Limit the amplitude to something reasonable
+        xE, nul = createDataAR(N, F0, q20, 0.1)
+        mlt  = _N.std(xE) / 0.5    #  we want amplitude around 0.5
+        q2          /= mlt*mlt
+        xE, nul = createDataAR(N, F0, q2[0], 0.1)
 
-    initBernoulli(model, k, F0, TR, _d.N, y, fSigMax, smpx, Bsmpx)
-    #smpx[0, 2:, 0] = x[0]    ##########  DEBUG
+        initBernoulli(model, k, F0, TR, _d.N, y, fSigMax, smpx, Bsmpx)
+        #smpx[0, 2:, 0] = x[0]    ##########  DEBUG
 
-    ####  initialize ws if starting for first time
-    if TR == 1:
-        ws   = ws.reshape(1, _d.N+1)
-    for m in xrange(_d.TR):
-        lw.rpg_devroye(rn, smpx[m, 2:, 0] + u[m], num=(N + 1), out=ws[m, :])
+        ####  initialize ws if starting for first time
+        if TR == 1:
+            ws   = ws.reshape(1, _d.N+1)
+        for m in xrange(_d.TR):
+            lw.rpg_devroye(rn, smpx[m, 2:, 0] + u[m], num=(N + 1), out=ws[m, :])
+    ARo   = _N.empty((TR, _d.N+1))
+    smp_u[:, 0] = u
+    smp_q2[:, 0]= q2
 
+    t1    = _tm.time()
 
-ARo   = _N.empty((TR, _d.N+1))
-smp_u[:, 0] = u
-smp_q2[:, 0]= q2
+    # if model == "bernoulli":
+    F_alfa_rep = gibbsSampH(burn, NMC, AR2lims, F_alfa_rep, R, Cs, Cn, TR, rn, _d, u, q2, uts, wts, kp, ws, smpx, Bsmpx, smp_u, smp_q2, allalfas, fs, amps, ranks, priors, ARo, l2, prior=use_prior, aro=ARord)
 
-t1    = _tm.time()
+    t2    = _tm.time()
+    print (t2-t1)
 
-# if model == "bernoulli":
-F_alfa_rep = gibbsSampH(burn, NMC, AR2lims, F_alfa_rep, R, Cs, Cn, TR, rn, _d, u, q2, uts, wts, kp, ws, smpx, Bsmpx, smp_u, smp_q2, allalfas, fs, amps, ranks, priors, ARo, l2, bMW=bMW, prior=use_prior, aro=ARord)
+    _plt.ioff()
+    for m in xrange(TR):
+        plotFigs(setdir, N, k, burn, NMC, x, y, Bsmpx, smp_u, smp_q2, _t0, _t1, Cs, Cn, C, baseFN, TR, m, ID_q2)
 
-t2    = _tm.time()
-print (t2-t1)
+    plotARcomps(setdir, N, k, burn, NMC, fs, amps, _t0, _t1, Cs, Cn, C, baseFN, TR, m)
 
-_plt.ioff()
-for m in xrange(TR):
-    plotFigs(setdir, N, k, burn, NMC, x, y, Bsmpx, smp_u, smp_q2, _t0, _t1, Cs, Cn, C, baseFN, TR, m, ID_q2)
-
-plotARcomps(setdir, N, k, burn, NMC, fs, amps, _t0, _t1, Cs, Cn, C, baseFN, TR, m)
-
-#if ID_q2:
-    #plotQ2(setname, baseFN, burn, NMC, TR0, TR1, smp_q2)
-    #plotQ2(setdir, baseFN, burn, NMC, TR0, TR1, smp_q2, hilite=None):
-"""
-pickleForLater()
-
-pcsf = []
-T   = 500
-allWFs = _N.empty(TR*T)
-allXs  = _N.empty(TR*T)
-for tr in xrange(TR):
-    print tr
-    fwf   = _N.mean(zt[tr, 350:400, 1:, 0], axis=0)
-    allWFs[tr*T:(tr+1)*T] = fwf
-    allXs[tr*T:(tr+1)*T] = fx[tr]
-    #fwf  = bpFilt(8, 20, 1, 30, 500, wf)
-    pcf, pvf = _ss.pearsonr(fwf, fx[tr])
-    fig = _plt.figure(figsize=(12, 4))
-    _plt.plot(fwf, lw=2, color="red")
-    _plt.plot((fx[tr] * _N.std(fwf) / _N.std(fx[tr])), lw=2, color="black")
-    _plt.suptitle("pcf=%(pcf).3f" % {"pcf" : pcf})
-    _plt.savefig(resFN("smpx,theta,%d" % tr, dir=setdir)) 
-    _plt.close()
-
-    plotWFandSpks(N, y[tr], [fx[tr]*_N.std(fwf)/_N.std(fx[tr]), fwf], sFilename=resFN("fx_smpx_spks%d" % tr, dir=setdir), tMult=2)
-
-    pcsf.append(pcf)
-
-
-fig = _plt.figure(figsize=(4, 3))
-_plt.hist(pcsf, bins=_N.linspace(-0.8, 0.8, 26), color="black")
-_plt.xlim(-0.7, 0.7)
-_plt.axvline(x=_N.mean(pcsf), color="red", lw=2, ls="--")
-_plt.grid()
-_plt.savefig(resFN("pc_hist", dir=setdir))
-_plt.close()
-
-
-
-sz1 = []
-sz2 = []
-sz3 = []
-pcs = _N.empty(TR)
-
-#dat = _N.loadtxt(resFN("xprbsdN.dat", dir=setname))
-for m in xrange(TR):
-    sz1.append(_N.std(dat[0:400, 1+4*m]))
-    mn      = _N.mean(Bsmpx[m, 1000:, 2:], axis=0)
-    sz2.append(_N.std(mn))
-    sz3.append(_N.sqrt(_N.mean(smp_q2[m, 1000:])))
-    pc, pv  = _ss.pearsonr(dat[0:400, 1+4*m], mn)
-    pcs[m] = pc
-
-i = sz2.index(max(sz2))
-sz1.pop(i)
-sz2.pop(i)
-sz3.pop(i)
-"""

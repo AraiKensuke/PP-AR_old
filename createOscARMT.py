@@ -9,15 +9,15 @@ import warnings
 import numpy.polynomial.polynomial as _Npp
 import utilities as _U
 
-TR = 40
+TR = 1
 dt = 0.001
-setname="mdOsc-1"   #  params_XXX.py   Results/XXX/params.py
+setname="frft-osc-3"   #  params_XXX.py   Results/XXX/params.py
 
 _plt.ioff()
 #  now using the same data, I might want to run it with different EM settings
 
 #  start with
-nzs   = _N.array([[1e-8, 7e-3]])   #  rhthm0  low high
+nzs   = _N.array([[1e-8, 1e-4]])   #  rhthm0  low high
 #                  [1e-6, 8e-3]])
 nRhythms = nzs.shape[0]
 #  data length N + 1.  n=0...N
@@ -25,10 +25,11 @@ nRhythms = nzs.shape[0]
 
 # observations.  dim-l vector  (l=1 here)
 
-rs = [0.95, ]
-ths= [_N.pi*0.05]#, _N.pi*0.1]
+rs = [0.99, ]
+ths= [_N.pi*0.02]#, _N.pi*0.1]
 
 lambda2 = _N.array([0.001, 0.05, 0.2, 0.5, 0.8, 0.9, 0.96, 0.99])
+#lambda2 = _N.array([1,])
 #lambda2 = _N.array([0.001, 0.1, 0.4, 0.95])
 
 
@@ -40,14 +41,14 @@ alfa  = _N.array([[rs[0]*(_N.cos(ths[0]) + 1j*_N.sin(ths[0])),
 ARcoeff = _N.empty((nRhythms, 2))
 ARcoeff[0]          = (-1*_Npp.polyfromroots(alfa[0])[::-1][1:]).real
 #ARcoeff[1]          = (-1*_Npp.polyfromroots(alfa[1])[::-1][1:]).real
-u0     = 3.9
+u0     = 3.4
 
 
 #  AR weights.  In Kitagawa, a[0] is weight for most recent state
 #  when used like dot(a, x), a needs to be stored in reverse direction
 k      = 2
 
-N     = 2000
+N     = 20000
 trim  = 1000
 
 #  x, prbs, spks    3 columns
@@ -72,7 +73,7 @@ for tr in xrange(TR):
     us[tr]    = u0
 
     if lambda2 == None:
-        x, dN, prbs, fs = createDataPP(N+trim, ARcoeff, us[tr], stNzs[tr], p=1, trim=trim, absrefr=absrefr, nRhythms=nRhythms)
+        x, dN, prbs, fs = createDataPP(N+trim, ARcoeff, us[tr], stNzs[tr], p=1, trim=trim, absrefr=0)
     else:
         x, dN, prbs, fs = createDataPPl2(N+trim, ARcoeff, us[tr], stNzs[tr], lambda2=lambda2, p=1, trim=trim, nRhythms=nRhythms)
 
@@ -118,3 +119,4 @@ lambda2db = 0.5*(lambda2[1::2] + lambda2[::2])
 _N.savetxt(resFN("lambda2db.dat", dir=setname), lambda2db, fmt="%.7f")
 
 
+_plt.ion()

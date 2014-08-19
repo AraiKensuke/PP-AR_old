@@ -4,7 +4,7 @@ import re as _re
 exf("filter.py")
 
 #  modulation histogram.  phase @ spike
-setname="mdOsc-1"
+setname="frft-osc-3"
 
 dat = _N.loadtxt(resFN("xprbsdN.dat", dir=setname))
 N, cols = dat.shape
@@ -34,8 +34,8 @@ phs  = []
 for tr in xrange(TR):
     phst  = []
     x   = dat[:, tr*COLS]
-    #fx = lpFilt(20, 26, 500, x)
-    fx = bpFilt(20, 40, 10, 55, 500, x)  #(fpL, fpH, fsL, fsH, nyqf, y):
+    fx = lpFilt(20, 26, 500, x)
+    #fx = bpFilt(20, 40, 10, 55, 500, x)  #(fpL, fpH, fsL, fsH, nyqf, y):
     ht_x  = _ssig.hilbert(fx)
     ph_x  = _N.empty(N)
     for n in xrange(N):

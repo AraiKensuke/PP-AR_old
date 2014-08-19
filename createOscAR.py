@@ -11,7 +11,7 @@ import numpy.polynomial.polynomial as _Npp
 
 
 dt = 0.001
-setname="mt"   #  params_XXX.py   Results/XXX/params.py
+setname="frFitTest"   #  params_XXX.py   Results/XXX/params.py
 
 #  now using the same data, I might want to run it with different EM settings
 
@@ -39,7 +39,7 @@ k   = len(ARcoeff)      #  this is user set2
 beta  = _N.zeros(k)
 beta[0] = 1.   #  FOR pp-0, setting beta0 to 0 causes nan.  investigate
 
-N     = 100000
+N     = 10000
 trim  = 1000
 x, dN, prbs, fs = createDataPP(N+trim, ARcoeff, beta, u, stNz, p=1, trim=trim, absrefr=absrefr)
 #x     = _N.zeros(N + trim)

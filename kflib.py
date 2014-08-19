@@ -1,34 +1,7 @@
 #import kfpp as _kfpp
+import numpy as _N
 from ARcfSmplFuncs import ampAngRep, dcmpcff, betterProposal
 
-def loadL2(setname):
-    fn = resFN("lambda2.dat", dir=setname)
-
-    if os.access(fn, os.F_OK):
-        return _N.loadtxt(fn)
-    return None
-
-def runNotes(setname, ID_q2, TR0, TR1):
-    fp = open(resFN("notes.txt", dir=setname), "w")
-    fp.write("ID_q2=%s\n" % str(ID_q2))
-    fp.write("TR0=%d\n" % TR0)
-    fp.write("TR1=%d\n" % TR1)
-    fp.close()
-
-    #  ID_q2
-    #  Trials using
-    
-def covMat(dim, cc=1):
-    cm   = _N.empty((dim, dim))
-    stds = _N.abs(_N.random.randn(dim))
-    pij  = _N.random.rand(dim, dim) * cc   #  use upper half only
-    for i in xrange(dim):
-        pij[i, i] = 1
-    for i in xrange(dim):
-        for j in xrange(i, dim):
-            cm[i, j] = pij[i, j] * stds[i] * stds[j]
-            cm[j, i] = cm[i, j]
-    return cm
 
 def createDataAR(N, B, err, obsnz, trim=0):
     #  a[1]^2 + 4a[0]
@@ -97,70 +70,6 @@ def createDataPP(N, B, beta, u, stNz, p=1, trim=0, x=None, absrefr=0):
 
     fs[:] = prbs / dt
 
-    return x[trim:N], spks[trim:N], prbs[trim:N], fs[trim:N]
-
-def createDataPPl2_old(N, B, beta, u, stNz, lambda2, p=1, trim=0, x=None, offset=None):
-    #  a[1]^2 + 4a[0]
-    #  B[0] = -0.45
-    #  B[1] =  0.9
-    if type(u) != _N.ndarray:
-        u = _N.ones(N) * u
-    if x == None:
-        k = len(B)
-        stNz = _N.sqrt(stNz)
-
-        rands = _N.random.randn(N)
-        x    = _N.empty(N)
-        for i in xrange(k+1):
-            x[i] = stNz*rands[i]
-        for i in xrange(k+1, N):
-            #  for k = 2, x[i] = B[0]*x[i-2], B[1]*x[i - 1]
-            #  B[0]   is the weight of oldest time point
-            #  B[k-1] is weight of most recent time point
-            #        x[i] = _N.dot(B, x[i-k:i]) + err*_N.random.randn()
-            x[i] = _N.dot(B, x[i-1:i-k-1:-1]) + stNz*rands[i]
-    else:
-        k = 0
-
-    spks = _N.zeros(N)
-    prbs = _N.zeros(N)
-    fs   = _N.zeros(N)
-
-    #  initial few
-
-    beta0 = beta[0]
-    lh    = len(lambda2)
-    hst  = []    #  spikes whose history is still felt
-
-    for i in xrange(k, N):
-        if offset != None:
-            e = _N.exp(u[i] + offset[i] + beta0* x[i]) * dt
-        else:
-            e = _N.exp(u[i] + beta0* x[i]) * dt
-        prbs[i]  = (p*e) / (1 + e)
-
-        L  = len(hst)
-        lmbd = 1
-
-        for j in xrange(L - 1, -1, -1):
-            ht = hst[j]
-            #  if i == 10, ht == 9, lh == 1
-            #  10 - 9 -1 == 0  < 1.   Still efective
-            #  11 - 9 -1 == 1         No longer effective
-            if i - ht - 1 < lh:
-                lmbd *= lambda2[i - ht - 1]
-            else:
-                hst.pop(j)
-        prbs[i] *= lmbd
-        spks[i] = _N.random.binomial(1, prbs[i])
-        if spks[i] == 1:
-            hst.append(i)
-            #print "lspk   %d" % lspk
-
-    fs[:] = prbs / dt
-
-    if offset != None:
-        return x[trim:N], offset[trim:N], spks[trim:N], prbs[trim:N], fs[trim:N]
     return x[trim:N], spks[trim:N], prbs[trim:N], fs[trim:N]
 
 def createDataPPl2(N, B, u, stNz, lambda2, nRhythms=1, p=1, trim=0, x=None, offset=None):
@@ -234,28 +143,6 @@ def createDataPPl2(N, B, u, stNz, lambda2, nRhythms=1, p=1, trim=0, x=None, offs
         return x[:, trim:N], offset[trim:N], spks[trim:N], prbs[trim:N], fs[trim:N]
     return xc[:, trim:N], spks[trim:N], prbs[trim:N], fs[trim:N]
 
-def rootIsMode(x, *args):
-    F    = args[0]
-    fltx = args[1]
-    prV  = args[2]
-    B0   = args[3]   #  first component of beta
-    u    = args[4]
-    spks = args[5]
-    t    = args[6]
-#    return x - _N.dot(F, fltx[:, t - 1])[0] - prV[0, 0, t] * B0 * (spks[t] - _N.exp(u + B0 * x)*0.001)
-    return x - _N.dot(F, fltx[:, t - 1])[0] - prV[0, 0, t] * B0 * (spks[t] - _N.exp(u + B0 * x)*0.001)
-
-def d_rootIsMode(x, *args):
-    F    = args[0]
-    fltx = args[1]
-    prV  = args[2]
-    B0   = args[3]   #  first component of beta
-    u    = args[4]
-    spks = args[5]
-    t    = args[6]
-
-    return 1 + prV[0, 0, t] * B0 * B0 * _N.exp(u + B0 * x) * 0.001
-
 #def plottableSpkTms(dN, ymin, ymax):
 def plottableSpkTms(dN, y):
     #  for each spike time,
@@ -273,28 +160,6 @@ def plottableSpkTms(dN, y):
 #        x_ticks.append([t, t])
 #        y_ticks.append([ymin, ymax])
     return x_ticks, y_ticks
-
-def cmplxRoots(arC):
-    N   = len(arC)   # polynomial degree       a_1 B + a_2 B^2
-    A   = _N.zeros((N, N))
-    bBdd = True
-
-    for col in xrange(N):
-        A[0, col] = arC[col]
-
-    for row in xrange(1, N):
-        A[row, row - 1] = 1
-
-    vals, vecs = _N.linalg.eig(A)
-    vroots = _N.empty(N)
-
-    for roots in xrange(N):
-        zR = 1 / vals[roots]
-        vroots[roots] = (zR * zR.conj()).real
-        if vroots[roots] < 1:
-            bBdd = False
-
-    return bBdd, vroots
 
 def saveset(name, noparam=False):
     #  u, B, singleFreqAR, dt, stNz, x, dN, prbs
@@ -330,7 +195,7 @@ def savesetMT(model, name, psth=False):
     if model=="bernoulli":
         bfn = "xprbsdN"
         fmt += "% .2e "
-        fmt += "%.3f %d "
+        fmt += "%.4e %d "
         fmt *= TR
 
     _N.savetxt(resFN("%s.dat" % bfn, dir=name, create=True), alldat, fmt=fmt)

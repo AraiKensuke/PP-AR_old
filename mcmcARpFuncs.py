@@ -5,6 +5,7 @@ from ARcfSmpl import ARcfSmpl
 from filter import gauKer, lpFilt, bpFilt
 from kassdirs import resFN
 import re as _re
+import os
 
 
 def loadDat(setname, model, t0=0, t1=None, filtered=False, phase=False):  ##################################
@@ -159,4 +160,19 @@ def plot_cmptSpksAndX(N, z, x, y):  #  a component
     _plt.yticks(fontsize=20)
     _plt.grid()
 
+def loadL2(setname):
+    fn = resFN("lambda2.dat", dir=setname)
 
+    if os.access(fn, os.F_OK):
+        return _N.loadtxt(fn)
+    return None
+
+def runNotes(setname, ID_q2, TR0, TR1):
+    fp = open(resFN("notes.txt", dir=setname), "w")
+    fp.write("ID_q2=%s\n" % str(ID_q2))
+    fp.write("TR0=%d\n" % TR0)
+    fp.write("TR1=%d\n" % TR1)
+    fp.close()
+
+    #  ID_q2
+    #  Trials using

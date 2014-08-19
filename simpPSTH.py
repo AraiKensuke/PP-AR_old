@@ -1,4 +1,3 @@
-exf("kflib.py")
 from kassdirs import resFN, datFN
 
 import pickle as _pk
@@ -6,9 +5,9 @@ import warnings
 import numpy.polynomial.polynomial as _Npp
 import utilities as _U
 
-TR = 10
+TR = 200
 dt = 0.001
-setname="simpPSTH1"   #  params_XXX.py   Results/XXX/params.py
+setname="simpPSTH2"   #  params_XXX.py   Results/XXX/params.py
 
 N     = 1000
 
@@ -17,9 +16,10 @@ alldat= _N.empty((N, TR*3))
 us    = _N.empty(TR)
 dNs   = _N.empty(TR)
 
-ps    = _N.empty(N)  
-ps[0:N-600] = 5*dt
-ps[N-600:N] = 5*dt + _N.linspace(0, 5, 600)*dt
+#ps    = _N.empty(N)  
+ps    = (30 + 22*_N.sin(2*_N.pi*_N.linspace(0, 1, N)))*dt
+#ps[0:N-600] = 15*dt
+#ps[N-600:N] = 15*dt + _N.linspace(0, 10, 600)*dt
 dN    = _N.empty(N)
 
 for tr in xrange(TR):

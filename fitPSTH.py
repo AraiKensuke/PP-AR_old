@@ -5,7 +5,7 @@ from kassdirs import resFN
 
 
 ##########################################################
-setname = "simpPSTH2"
+setname = "nohistPSTH2"
 
 useIntvs = True
 
@@ -42,7 +42,7 @@ else:
 
 dt= 0.001
 x = _N.linspace(0., (N-1)*dt, N)
-nbs = 6
+nbs = 4
 B = patsy.bs(x, df=nbs, include_intercept=True)    #  spline basis
 B  = B.T
 
@@ -52,7 +52,7 @@ h, bs = _N.histogram(rpsth, bins=_N.linspace(0, N, nbins+1))
 bnsz   = (N/nbins)
 fs     = h / (M * bnsz * dt)
 apsth = _N.repeat(fs, bnsz)    #    piecewise boxy approximate PSTH
-fsbnsz = _N.mean(fs) + _N.random.randn(1000)*0.5
+fsbnsz = _N.mean(fs) * _N.ones(N)
 aS     = _N.linalg.solve(_N.dot(B, B.T), _N.dot(B, _N.log(fsbnsz)))
 print aS
 

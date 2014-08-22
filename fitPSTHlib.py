@@ -6,6 +6,7 @@ def dL(a, *args):
 
     dL  = _N.empty(nbs)
 
+    print a
     expV = _N.exp(_N.dot(B.T, a))
     for j in xrange(nbs):
         dL[j] = -M*dt*_N.dot(B.T[:, j], expV)

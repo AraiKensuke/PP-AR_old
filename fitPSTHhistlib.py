@@ -3,7 +3,7 @@ import numpy as _N
 # Functions for the history term #
 ##################################
 
-def h_L(aS, phiS, M, B, Gm, sts, itvs, TM, dt, frstSpk):
+def h_L(aS, phiS, M, B, Gm, sts, itvs, TM, dt, ):
     L    = 0
     for m in xrange(M):
         ITVS = len(itvs[m])
@@ -36,7 +36,6 @@ def h_dL(a_phi, *args):
     #  history term expressed in terms of splines until time TM
     TM   = args[9]       #  how much of history term expressed by spline
     dt   = args[10]
-    frstSpk = args[11]   #  Ignore first spike or not.  (0 or 1)
     
     aS   = a_phi[0:nbs1]
     phiS = a_phi[nbs1:]
@@ -50,36 +49,37 @@ def h_dL(a_phi, *args):
     for m in xrange(M):
         ITVS = len(itvs[m])
 
-        for it in xrange(frstSpk, ITVS):    #  
+        for it in xrange(ITVS):    #  
             i0 = itvs[m][it][0]
             i1 = itvs[m][it][1]
-            Tunt = i1 - i0
-            if i1 - i0 > TM:
-                Tunt = TM
 
-            gt0= 0      #  
+            gt0= 0      #  if first is a real spike
             if i0 < 1:  #  reference to fake spike
                 gt0 = 0-i0
             gt1= i1-i0
             if i0 < 1:  #  reference to fake spike
                 i0 = 0  #  if there was a spike, i0==1
             #  The time integral
-            expV = _N.exp(_N.dot(B.T[i0:i1], aS) + _N.dot(Gm.T[gt0:gt1], phiS))
 
+            expV = _N.exp(_N.dot(B.T[i0:i1], aS) + _N.dot(Gm.T[gt0:gt1], phiS))
             if doAl:
                 for j in xrange(nbs1):
                     dL[j] += -dt*_N.dot(B.T[i0:i1, j], expV)
             if doPh:
-                Tunt = i1 - i0
-                if i1 - i0 > TM:
-                    Tunt = TM
                 for j in xrange(nbs1, nbs1+nbs2):
-                    dL[j] += -dt*_N.dot(Gm.T[gt0:Tunt, j-nbs1], expV[gt0:Tunt])
+                    dL[j] += -dt*_N.dot(Gm.T[gt0:gt1, j-nbs1], expV)
+
+        i0 = itvs[m][0][0]
+        iFR= 0      #  index of first real spike
+        if i0 < 1:  #  not real spike
+            iFR= 1      #  index of first real spike
+        #print "%(iFR)d   %(st)d" % {"iFR" : iFR, "st" : sts[m][iFR]}
+        ####  outside of previous for loop
         if doAl:
             for j in xrange(nbs1):
-                dL[j] += _N.sum(B.T[sts[m][1:], j])   #  always use 1st real spk
+                dL[j] += _N.sum(B.T[sts[m][iFR:], j])   #  use 1st real spk
         if doPh:
-            allISIs = sts[m][frstSpk+1:] - sts[m][frstSpk:-1]
+            allISIs = sts[m][iFR+1:] - sts[m][iFR:-1]
             shrtISIs= allISIs[_N.where(allISIs < TM)[0]]
             for j in xrange(nbs1, nbs1 + nbs2):
                 dL[j] += _N.sum(Gm.T[shrtISIs, j-nbs1])
@@ -114,15 +114,14 @@ def h_d2L(a_phi, *args):
         ITVS = len(itvs[m])
 
         for it in xrange(frstSpk, ITVS):    #  
+            iFR= 0      #  index of first real spike
             i0 = itvs[m][it][0]
             i1 = itvs[m][it][1]
-            Tunt = i1 - i0
-            if i1 - i0 > TM:
-                Tunt = TM
 
-            gt0= 0      #  
+            gt0= 0      #  if first is a real spike
             if i0 < 1:  #  reference to fake spike
                 gt0 = 0-i0
+                iFR= 1      #  index of first real spike
             gt1= i1-i0
             if i0 < 1:  #  reference to fake spike
                 i0 = 0  #  if there was a spike, i0==1
@@ -136,11 +135,11 @@ def h_d2L(a_phi, *args):
             if doAl and doPh:
                 for j in xrange(nbs1):
                     for k in xrange(nbs1, nbs1+nbs2):
-                        d2L[j, k] += -dt*_N.dot((Gm.T[0:Tunt, k-nbs1] * B.T[i0:i0+Tunt, j]), expV[0:Tunt])
+                        d2L[j, k] += -dt*_N.dot((Gm.T[gt0:gt1, k-nbs1] * B.T[i0:i1, j]), expV)
             if doPh:
                 for j in xrange(nbs1, nbs1 + nbs2):
                     for k in xrange(j, nbs1+nbs2):
-                        d2L[j, k] += -dt*_N.dot((Gm.T[0:Tunt, j-nbs1] * Gm.T[0:Tunt, k-nbs1]), expV[0:Tunt])
+                        d2L[j, k] += -dt*_N.dot((Gm.T[gt0:gt1, j-nbs1] * Gm.T[gt0:gt1, k-nbs1]), expV)
 
         for j in xrange(nbs1 + nbs2):
             for k in xrange(j, nbs1+nbs2):

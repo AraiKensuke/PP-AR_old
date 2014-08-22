@@ -12,7 +12,6 @@ def dL(a, *args):
     
     dL  = _N.zeros(nbs)
 
-    print M
     ##  phi COMPONENTS
     for m in xrange(M):
         ITVS = len(itvs[m])

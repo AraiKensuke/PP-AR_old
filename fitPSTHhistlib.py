@@ -18,7 +18,6 @@ def h_L(aS, phiS, M, B, Gm, sts, itvs, TM, dt, ):
         L += _N.sum(_N.dot(B.T[sts[m][1:]], aS))   #  First spk is fake
         allISIs = sts[m][frstSpk+1:] - sts[m][frstSpk:-1]
         shrtISIs= allISIs[_N.where(allISIs < TM)[0]]
-        print len(shrtISIs)
         L += _N.sum(_N.dot(Gm.T[shrtISIs], phiS))
 
     return L
@@ -39,8 +38,6 @@ def h_dL(a_phi, *args):
     
     aS   = a_phi[0:nbs1]
     phiS = a_phi[nbs1:]
-    #Gm[TM:, 0:nbs2-1] = 0    #  extended Gm so lambda(2) = 1 for t > TM
-    #Gm[TM:, nbs2-1]   = 1./phiS[nbs2-1]
 
     N    = B.shape[1]    #  
     dL  = _N.zeros(nbs1 + nbs2)
@@ -99,13 +96,9 @@ def h_d2L(a_phi, *args):
     doPh = args[8]
     TM   = args[9]
     dt   = args[10]
-    frstSpk = args[11]   #  Ignore first spike or not.  (0 or 1)
 
     aS   = a_phi[0:nbs1]
     phiS  = a_phi[nbs1:]
-
-    #Gm[TM:, 0:nbs2-1] = 0
-    #Gm[TM:, nbs2-1]   = 1./phiS[nbs2-1]
 
     d2L  = _N.zeros((nbs1 + nbs2, nbs1 + nbs2))
 
@@ -113,7 +106,7 @@ def h_d2L(a_phi, *args):
     for m in xrange(M):
         ITVS = len(itvs[m])
 
-        for it in xrange(frstSpk, ITVS):    #  
+        for it in xrange(ITVS):    #  
             iFR= 0      #  index of first real spike
             i0 = itvs[m][it][0]
             i1 = itvs[m][it][1]

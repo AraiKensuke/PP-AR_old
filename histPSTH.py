@@ -104,7 +104,3 @@ _plt.savefig(resFN("PSTHandHIST.png", dir=setname))
 _plt.close()
 
 _N.savetxt(resFN("generate-l2.dat", dir=setname, create=True), l2, fmt="%.3e")
-
-
-
-    

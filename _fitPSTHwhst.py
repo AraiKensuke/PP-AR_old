@@ -78,6 +78,20 @@ def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
         phiSi = _N.linalg.solve(_N.dot(Gm[:, 0:TM], Gm[:, 0:TM].T), _N.dot(Gm[:, 0:TM], _N.log(l2)))
 
     x     = _N.array(aSi.tolist() + phiSi.tolist())
+    print "^^^^^^^^"
+    print x
+
+    print nbs1
+    print nbs2
+    print M
+    print B
+    print Gm
+    print sts[0]
+    print itvs[0]
+    print doAl
+    print doPh
+    print TM
+    print dt
 
     #  If we estimate the the Jacobian, then even if h_dL 
     sol = _sco.root(h_dL, x, jac=h_d2L, args=(nbs1, nbs2, M, B, Gm, sts, itvs, doAl, doPh, TM, dt))

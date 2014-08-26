@@ -6,6 +6,7 @@ import numpy as _N
 import matplotlib.pyplot as _plt
 from utildirs import setFN
 from shutil import copyfile
+from kstat import ranFromPercentile
 
 from fitPSTHhistlib import h_dL, h_d2L, h_L, h_L_func, mkBounds
 
@@ -20,11 +21,12 @@ dCols = 3
 N     = None;  M     = None    #  number of data points per trial, # trials
 aSi   = None;  phiSi = None
 mL    = -1;
+pctl  = None;
 
 ######  INITIALIZE
 def init(ebf):
     copyfile("%s.py" % ebf, "%(s)s/%(s)s.py" % {"s" : ebf, "to" : setFN("%s.py" % ebf, dir=ebf, create=True)})
-    global nbs1, knts1, nbs2, knts2, TM, Gm, B, N, M, _dat, dat, aSi, phiSi, M0, M1
+    global nbs1, knts1, nbs2, knts2, TM, Gm, B, N, M, _dat, dat, aSi, phiSi, M0, M1, pctl
     _dat   = _N.loadtxt("xprbsdN.dat")
 
     N     = _dat.shape[0]            #  how many bins per trial
@@ -56,23 +58,23 @@ def init(ebf):
     Gm[0:TM] = _Gm
     Gm = Gm.T
 
+    pctl  = _N.loadtxt("isis0pctl.dat")
+
 ######  fitPSTH routine    
 def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
-    global aSi, phiSi, M
+    global aSi, phiSi, M, pctl
     aSi   = aS
     phiSi = phiS
     sts   = []   #  will include one dummy spike
     itvs  = []
     rpsth = []
 
-
-    print "M is %d" % M
-    print dat.shape
     for tr in xrange(M):
         itvs.append([])
         lst = _N.where(dat[:, dCols*tr + 2] == 1)[0].tolist()
         if lst[0] != 0:   #  if not spike at time 0, add a dummy spike
-            lst.insert(0, int(-1 - 30*_N.random.rand()))    #  one dummy spike
+            #lst.insert(0, int(-1 - 30*_N.random.rand()))    #  one dummy spike
+            lst.insert(0, int(-ranFromPercentile(pctl, lst[0]+1)))    #  one dummy spike
         sts.append(_N.array(lst))
         rpsth.extend(lst)
         Lm  = len(lst) - 1    #  number of spikes this trial
@@ -110,3 +112,4 @@ def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
     L1  = h_L_func(sol.x[0:nbs1], sol.x[nbs1:nbs1+nbs2], M, B, Gm, sts, itvs, TM, dt, mL=mL)
 
     return sol, L0, L1
+

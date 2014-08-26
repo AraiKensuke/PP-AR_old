@@ -1,7 +1,7 @@
-#import kfpp as _kfpp
+from kassdirs import resFN
 import numpy as _N
 from ARcfSmplFuncs import ampAngRep, dcmpcff, betterProposal
-
+import matplotlib.pyplot as _plt
 
 def createDataAR(N, B, err, obsnz, trim=0):
     #  a[1]^2 + 4a[0]
@@ -72,36 +72,39 @@ def createDataPP(N, B, beta, u, stNz, p=1, trim=0, x=None, absrefr=0):
 
     return x[trim:N], spks[trim:N], prbs[trim:N], fs[trim:N]
 
-def createDataPPl2(N, B, u, stNz, lambda2, nRhythms=1, p=1, trim=0, x=None, offset=None):
+def createDataPPl2(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offset=None):
     beta = _N.array([1., 0.])
     #  a[1]^2 + 4a[0]
     #  B[0] = -0.45
     #  B[1] =  0.9
     if type(u) != _N.ndarray:
         u = _N.ones(N) * u
+
     if x == None:
-        xc   = _N.empty((nRhythms, N))
+        buf  = 100
+        xc   = _N.empty((nRhythms, N+buf))   #  components
         for nr in xrange(nRhythms):
             k = len(B[nr])
             sstNz = _N.sqrt(stNz[nr])
 
-            rands = _N.random.randn(N)
+            rands = _N.random.randn(N+buf)
 
             for i in xrange(k+1):
                 xc[nr, i] = sstNz*rands[i]
-            for i in xrange(k+1, N):
+            for i in xrange(k+1, N+buf):
                 #  for k = 2, x[i] = B[0]*x[i-2], B[1]*x[i - 1]
                 #  B[0]   is the weight of oldest time point
                 #  B[k-1] is weight of most recent time point
                 #        x[i] = _N.dot(B, x[i-k:i]) + err*_N.random.randn()
                 xc[nr, i] = _N.dot(B[nr], xc[nr, i-1:i-k-1:-1]) + sstNz*rands[i]
     else:
-        k = 0
+        buf  = 0
+        xc   = x
 
     if nRhythms > 1:
-        x = _N.sum(xc, axis=0)
+        x = _N.sum(xc, axis=0)     #  collapse
     else:
-        x = xc.reshape(N, )
+        x = xc.reshape(N+buf, )
         
     spks = _N.zeros(N)
     prbs = _N.zeros(N)
@@ -113,11 +116,8 @@ def createDataPPl2(N, B, u, stNz, lambda2, nRhythms=1, p=1, trim=0, x=None, offs
     lh    = len(lambda2)
     hst  = []    #  spikes whose history is still felt
 
-    for i in xrange(k, N):
-        if offset != None:
-            e = _N.exp(u[i] + offset[i] + beta0* x[i]) * dt
-        else:
-            e = _N.exp(u[i] + beta0* x[i]) * dt
+    for i in xrange(N):
+        e = _N.exp(u[i] + beta0* x[i+buf]) * dt
         prbs[i]  = (p*e) / (1 + e)
 
         L  = len(hst)
@@ -138,10 +138,7 @@ def createDataPPl2(N, B, u, stNz, lambda2, nRhythms=1, p=1, trim=0, x=None, offs
             hst.append(i)
 
     fs[:] = prbs / dt
-
-    if offset != None:
-        return x[:, trim:N], offset[trim:N], spks[trim:N], prbs[trim:N], fs[trim:N]
-    return xc[:, trim:N], spks[trim:N], prbs[trim:N], fs[trim:N]
+    return xc[:, buf:], spks, prbs, fs
 
 #def plottableSpkTms(dN, ymin, ymax):
 def plottableSpkTms(dN, y):
@@ -182,10 +179,8 @@ def saveset(name, noparam=False):
         fp.write("absrefr=%d\n" % absrefr)
         fp.close()
 
-def savesetMT(model, name, psth=False):
+def savesetMT(TR, alldat, model, name):
     #  u, B, singleFreqAR, dt, stNz, x, dN, prbs
-    fp = open(resFN("params.py", dir=name, create=True), "w")
-
     bfn = "cnt_data"
     fmt = ""    
     if model != "bernoulli":
@@ -199,30 +194,6 @@ def savesetMT(model, name, psth=False):
         fmt *= TR
 
     _N.savetxt(resFN("%s.dat" % bfn, dir=name, create=True), alldat, fmt=fmt)
-    fp.write("ARcoeff=_N.array(%s)\n" % str(ARcoeff))
-    fp.write("alfa=_N.array(%s)\n" % str(alfa))
-    for nr in xrange(nRhythms):
-        fp.write("#  ampAngRep=%s\n" % ampAngRep(alfa[nr]))
-    if not psth:
-        fp.write("us=[")
-        for tr in xrange(TR):
-            fp.write("% .3e, " % us[tr])
-    fp.write("]\n")
-    fp.write("stNzs=[")
-    for tr in xrange(TR):
-        fp.write("%s, " % str(stNzs[tr]))
-        fp.write("]\n")
-
-    fp.write("TR=%d\n" % TR)
-    fp.write("N=%d\n" % N)
-
-    if model != "bernoulli":
-        fp.write("ps   = _N.array(%s)\n" % str(ps).replace("  ", ", "))
-    else:
-        fp.write("dt=%.2e\n" % dt)
-        fp.write("lowQs=%s\n" % str(lowQs))
-
-    fp.close()
 
 def savesetARpn(name):
     #  u, B, singleFreqAR, dt, stNz, x, dN, prbs

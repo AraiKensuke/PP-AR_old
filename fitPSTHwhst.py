@@ -7,27 +7,43 @@ import matplotlib.pyplot as _plt
 from utildirs import setFN
 from shutil import copyfile
 
-from fitPSTHhistlib import h_dL, h_d2L, h_L
+from fitPSTHhistlib import h_dL, h_d2L, h_L, h_L_func, mkBounds
 
 nbs1  = None;  knts1 = None
 nbs2  = None;  knts2 = None
-TM    = None
+TM    = None;  M0    = None;    M1    = None
 Gm    = None;  B     = None    #  spline basis
 doPh  = True;  doAl  = True
-dat   = None
+_dat  = None;  dat   = None
 dt    = 0.001
 dCols = 3
 N     = None;  M     = None    #  number of data points per trial, # trials
 aSi   = None;  phiSi = None
+mL    = -1;
 
 ######  INITIALIZE
 def init(ebf):
     copyfile("%s.py" % ebf, "%(s)s/%(s)s.py" % {"s" : ebf, "to" : setFN("%s.py" % ebf, dir=ebf, create=True)})
-    global nbs1, knts1, nbs2, knts2, TM, Gm, B, N, M, dat, aSi, phiSi
-    dat   = _N.loadtxt("xprbsdN.dat")
+    global nbs1, knts1, nbs2, knts2, TM, Gm, B, N, M, _dat, dat, aSi, phiSi, M0, M1
+    _dat   = _N.loadtxt("xprbsdN.dat")
 
-    N     = dat.shape[0]            #  how many bins per trial
-    M     = dat.shape[1] / dCols    #  TRIALS
+    N     = _dat.shape[0]            #  how many bins per trial
+    M     = _dat.shape[1] / dCols    #  TRIALS
+    if (M0 != None) and (M0 < 0):
+        raise Exception("M0 if set needs to be >= 0")
+    if (M1 != None) and ((M1 > M) or (M1 < 0)):
+        raise Exception("M1 if set needs to be <= M and >= 0")
+    if (M0 != None) or (M1 != None):
+        if (M0 == None):
+            M0 = 0
+        if (M1 == None):
+            M1 = M
+        dat = _dat[:, M0*dCols:M1*dCols]
+        M   = M1 - M0
+    else:
+        dat = _dat
+        M0  = 0
+        M1  = M
 
     B     = patsy.bs(_N.linspace(0., dt*(N-1), N), df=nbs1, knots=knts1, include_intercept=True)
     nbs1  = B.shape[1]
@@ -42,13 +58,16 @@ def init(ebf):
 
 ######  fitPSTH routine    
 def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
-    global aSi, phiSi
+    global aSi, phiSi, M
     aSi   = aS
     phiSi = phiS
     sts   = []   #  will include one dummy spike
     itvs  = []
     rpsth = []
 
+
+    print "M is %d" % M
+    print dat.shape
     for tr in xrange(M):
         itvs.append([])
         lst = _N.where(dat[:, dCols*tr + 2] == 1)[0].tolist()
@@ -80,6 +99,14 @@ def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
     x     = _N.array(aSi.tolist() + phiSi.tolist())
 
     #  If we estimate the the Jacobian, then even if h_dL 
-    sol = _sco.root(h_dL, x, jac=h_d2L, args=(nbs1, nbs2, M, B, Gm, sts, itvs, doAl, doPh, TM, dt))
+    L0  = h_L_func(aSi, phiSi, M, B, Gm, sts, itvs, TM, dt, mL=mL)
+    #sol = _sco.root(h_dL, x, jac=h_d2L, args=(nbs1, nbs2, M, B, Gm, sts, itvs, doAl, doPh, TM, dt))
+    bds = mkBounds(x, nbs1, nbs2)
+    #sol = _sco.minimize(h_L, x, jac=h_dL, hess=h_d2L, args=(nbs1, nbs2, M, B, Gm, sts, itvs, doAl, doPh, TM, dt, mL), bounds=bds, method="L-BFGS-B")
+    sol = _sco.minimize(h_L, x, args=(nbs1, nbs2, M, B, Gm, sts, itvs, doAl, doPh, TM, dt, mL), bounds=bds, method="L-BFGS-B")
+    #sol = _sco.minimize(h_L, x, jac=h_dL, hess=h_d2L, args=(nbs1, nbs2, M, B, Gm, sts, itvs, doAl, doPh, TM, dt, mL),)
 
-    return sol
+    print sol.message
+    L1  = h_L_func(sol.x[0:nbs1], sol.x[nbs1:nbs1+nbs2], M, B, Gm, sts, itvs, TM, dt, mL=mL)
+
+    return sol, L0, L1

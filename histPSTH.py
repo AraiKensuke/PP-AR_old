@@ -1,5 +1,4 @@
 exf("kflib.py")
-
 from kassdirs import resFN, datFN
 
 import pickle as _pk
@@ -8,11 +7,11 @@ import numpy.polynomial.polynomial as _Npp
 import utilities as _U
 import patsy
 
-TR = 100
+TR = 200
 dt = 0.001
-setname="nohistPSTH2"   #  params_XXX.py   Results/XXX/params.py
+setname="histPSTH10"   #  params_XXX.py   Results/XXX/params.py
 
-N     = 1000
+N     = 2000
 
 #  x, prbs, spks    3 columns
 alldat= _N.empty((N, TR*3))
@@ -24,11 +23,11 @@ x     = _N.linspace(0, 1*2, 2*N)
 l2    = _N.ones(2*N + 50)
 #l2[0:20] = _N.linspace(0., 1, 20)**2
 #  SMOOTH shoulder
-a = 20.
-b = 4.5
+a = 30.
+b = 6.
 ms = _N.arange(0, 2*N+50)
-#l2 = _N.exp((ms-a)/b) / (1 + _N.exp((ms-a)/b))
-ps    = (45 + 25*_N.sin(2*_N.pi*x))*dt# +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
+l2 = _N.exp((ms-a)/b) / (1 + _N.exp((ms-a)/b))
+ps    = (60 + 20*_N.sin(2*_N.pi*x))*dt# +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
 #ps    = 50*_N.ones(N)*dt# + 15*_N.sin(2*_N.pi*x) +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
 #ps    = _N.ones(N)*50*dt# + 15*_N.sin(2*_N.pi*x))*dt
 dN    = _N.empty(2*N)
@@ -57,13 +56,11 @@ _N.savetxt(resFN("xprbsdN.dat", dir=setname, create=True), alldat, fmt=fmt)
 
 relspks = quickPSTH(alldat, TR, 3)
 
-
 #  For fit onto naive PSTH
 x = _N.linspace(0., dt*(N-1), N)
-nbs1 = 8
+nbs1 = 4
 B = patsy.bs(x, df=nbs1, include_intercept=True)
 B  = B.T
-
 
 #####  Fit of Poisson PSTH
 bnsz   = 50

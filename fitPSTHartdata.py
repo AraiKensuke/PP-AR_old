@@ -3,7 +3,7 @@ import matplotlib.pyplot as _plt
 import numpy as _N
 from utildirs import setFN
 
-def display(ebf, solx, nbs1, nbs2, TM, B, Gm, aSi, phiSi, psthgen, l2gen, fitpsthgen, fitl2gen, L0=None, L1=None, mPSTH=1.3, mHist=1.3):
+def display(ebf, solx, nbs1, nbs2, nbs2v, B, Gm, aSi, phiSi, psthgen, l2gen, fitpsthgen, fitl2gen, L0=None, L1=None, mPSTH=1.3, mHist=1.3, T0=None):
     #LTR= h_L(aST, phiST, M, B, Gm, sts, itvs, TM, dt, frstSpk)   #  TRUE
     #L0 = h_L(aS, phiS, M, B, Gm, sts, itvs, TM, dt, frstSpk)
     #L1 = h_L(sol.x[0:nbs1], sol.x[nbs1:nbs1+nbs2], M, B, Gm, sts, itvs, TM, dt, frstSpk)
@@ -29,16 +29,20 @@ def display(ebf, solx, nbs1, nbs2, TM, B, Gm, aSi, phiSi, psthgen, l2gen, fitpst
     fig.add_subplot(2, 1, 2)
 
     # l2 used to generate data    
-    _plt.plot(range(1, TM+1), l2gen[0:TM], lw="2", color="red")
-    _plt.plot(range(1, TM+1), fitl2gen[0:TM], lw="2", color="red", ls="--")
+    _plt.plot(l2gen, lw="2", color="red")
+    _plt.plot(fitl2gen, lw="2", color="red", ls="--")
     # calculated fit
-    _plt.plot(range(1, TM+1), _N.exp(_N.dot(Gm.T[0:TM], solx[nbs1:])), color="black", lw=2)
+    _plt.plot(_N.exp(_N.dot(Gm.T, solx[nbs1:])), color="black", lw=2)
     # initial guess
-    _plt.plot(range(1, TM+1), _N.exp(_N.dot(Gm.T[0:TM], phiSi)), lw="2", color="blue")
+    _plt.plot(_N.exp(_N.dot(Gm.T, phiSi)), lw="2", color="blue")
 
     _plt.grid()
-    _plt.xlim(0, TM)
+    if T0 == None:
+        _plt.xlim(0, 200)
+    else:
+        _plt.xlim(0, T0)
     _plt.ylim(0, mHist)
-    fig.suptitle("init L %(i).1f   final L %(f).1f" % {"i" : L0, "f" : L1})
+    if (L0 != None) and (L1 != None):
+        fig.suptitle("init L %(i).1f   final L %(f).1f" % {"i" : L0, "f" : L1})
     _plt.savefig(setFN("FIT.png", dir=ebf, create=True), background="transparent")
     _plt.close()

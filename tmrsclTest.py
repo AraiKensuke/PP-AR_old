@@ -5,19 +5,28 @@ def timeRescaleTest(fr, spkts, dt):
     """
     t in units of 1.
     """
-    N  = len(spkts)
-    rt = _N.empty(N)
+    if len(fr.shape) == 1:
+        T  = fr.shape[0]
+        M = 1
+        fr.reshape(T, 1)
+    else:
+        M = fr.shape[0]
+        T  = fr.shape[1]
 
-    for i in xrange(N):
-#        rt[i] = _N.trapz(fr[0:spkts[i]]+1)*dt
-        rt[i] = _N.trapz(fr[0:spkts[i]]+1)*dt
+    zs = []
+    Nm1 = 0
+    for tr in xrange(M):
+        N  = len(spkts[tr])
+        rt = _N.empty(N)    #  rescaled time
+        for i in xrange(N):
+            rt[i] = _N.trapz(fr[tr, 0:spkts[tr][i]]+1)*dt
 
-    #  this means that small ISIs are underrepresented
-    taus = _N.diff(rt)
-    zs   = 1 - _N.exp(-taus)
+        #  this means that small ISIs are underrepresented
+        taus = _N.diff(rt)
+        zs.extend((1 - _N.exp(-taus)).tolist())
+        Nm1 += N - 1
 
-    zss  = _N.sort(zs)
-    Nm1  = N - 1        #  same as length - 1
+    zss  = _N.sort(_N.array(zs))
     ks  = _N.arange(1, Nm1 + 1)
     bs  = (ks - 0.5) / Nm1         #  needs
     bsp = bs + 1.36 / _N.sqrt(Nm1)
@@ -31,20 +40,30 @@ def zoom(fr, spkts, m):
     sp = [   0,   1,  0]   spike occurs at last point fr is high
     m   multiply time by
     """
-    frm = _N.empty(len(fr)*m)
-    mspkts = _N.empty(len(spkts))
+    if len(fr.shape) == 1:
+        T  = fr.shape[0]
+        M = 1
+        fr.reshape(T, 1)
+    else:
+        M = fr.shape[0]
+        T  = fr.shape[1]
 
-    lt  = -1
-    
-    x   = _N.linspace(0, 1, len(fr)*m, endpoint=False)
+    frm = _N.empty((M, T*m))
+    x   = _N.linspace(0, 1, T*m, endpoint=False)
+    Lmspkts = []
 
-    for i in xrange(len(spkts)):
-        frm[(lt+1)*m:(spkts[i]+1)*m] = _N.interp(x[(lt+1)*m:(spkts[i]+1)*m],
-                                                 x[(lt+1)*m:(spkts[i]+1)*m:m],
-                                                 fr[lt+1:spkts[i]+1])
-        #  somewhere in [spkts[i]*m:(spkts[i]+1)*m]
-        mspkts[i] = spkts[i]*m + int(_N.random.rand()*m)
-        frm[mspkts[i]+1:(spkts[i]+1)*m] = 0.000001
-        lt = spkts[i]
+    for tr in xrange(M):
+        Lmspkts.append(_N.empty(len(spkts[tr])))
+
+        lt  = -1
+        for i in xrange(len(spkts[tr])):
+            sti = spkts[tr][i]
+            frm[tr, (lt+1)*m:(sti+1)*m] = _N.interp(x[(lt+1)*m:(sti+1)*m],
+                                                    x[(lt+1)*m:(sti+1)*m:m],
+                                                    fr[tr, lt+1:sti+1])
+            #  somewhere in [spkts[i]*m:(spkts[i]+1)*m]
+            Lmspkts[tr][i] = sti*m + int(_N.random.rand()*m)
+            frm[tr, Lmspkts[tr][i]+1:(sti+1)*m] = 0.000001
+            lt = sti
         
-    return frm, mspkts
+    return frm, Lmspkts

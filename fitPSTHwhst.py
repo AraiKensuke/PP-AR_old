@@ -22,6 +22,7 @@ N     = None;  M     = None    #  number of data points per trial, # trials
 aSi   = None;  phiSi = None
 mL    = -1;
 pctl  = None;
+sts   = None;  itvs  = None
 
 ######  INITIALIZE
 def init(ebf):
@@ -62,7 +63,7 @@ def init(ebf):
 
 ######  fitPSTH routine    
 def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
-    global aSi, phiSi, M, pctl
+    global aSi, phiSi, M, pctl, sts, itvs
     aSi   = aS
     phiSi = phiS
     sts   = []   #  will include one dummy spike
@@ -72,9 +73,7 @@ def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
     for tr in xrange(M):
         itvs.append([])
         lst = _N.where(dat[:, dCols*tr + 2] == 1)[0].tolist()
-        if lst[0] != 0:   #  if not spike at time 0, add a dummy spike
-            #lst.insert(0, int(-1 - 30*_N.random.rand()))    #  one dummy spike
-            lst.insert(0, int(-ranFromPercentile(pctl, lst[0]+1)))    #  one dummy spike
+        lst.insert(0, int(-ranFromPercentile(pctl, lst[0])))    #  one dummy spike
         sts.append(_N.array(lst))
         rpsth.extend(lst)
         Lm  = len(lst) - 1    #  number of spikes this trial

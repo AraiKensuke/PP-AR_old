@@ -3,24 +3,29 @@ import numpy as _N
 # Functions for the history term #
 ##################################
 
-def h_L_func(aS, phiS, M, B, Gm, sts, itvs, TM, dt, mL=1):
+def h_L_func(aS, phiS, M, B, Gm, sts, itvs, TM, dt, mL=1, offsetHaTM=0):
     L    = 0
+
     for m in xrange(M):
         ITVS = len(itvs[m])
 
         for it in xrange(ITVS):    #  
-            i0 = itvs[m][it][0]
+            i0 = itvs[m][it][0]    # spktime + 1
             i1 = itvs[m][it][1]
 
             gt0= 0      #  if first is a real spike
-            if i0 < 1:  #  reference to fake spike
-                gt0 = 0-i0
             gt1= i1-i0
             if i0 < 1:  #  reference to fake spike
+                gt0 = 0-i0  #  > 0
                 i0 = 0  #  if there was a spike, i0==1
+
             #  The time integral
 
-            expV = _N.exp(_N.dot(B.T[i0:i1], aS) + _N.dot(Gm.T[gt0:gt1], phiS))
+            offv = _N.zeros(gt1 - gt0)
+            if gt1 > TM:
+                offv[TM-gt0:] = offsetHaTM
+            expV = _N.exp(_N.dot(B.T[i0:i1], aS) + _N.dot(Gm.T[gt0:gt1], phiS) + offv)
+
             L += -dt*_N.sum(expV)  # integration
 
         i0 = itvs[m][0][0]
@@ -28,7 +33,7 @@ def h_L_func(aS, phiS, M, B, Gm, sts, itvs, TM, dt, mL=1):
         if i0 < 1:  #  not real spike
             iFR= 1      #  index of first real spike
 
-        L += _N.sum(_N.dot(B.T[sts[m][iFR:]], aS))   #  First spk is fake
+        L += _N.sum(_N.dot(B.T[sts[m][iFR:]], aS)) #  spk tms form psth, only real ones
         allISIs = sts[m][1:] - sts[m][0:-1]
         L += _N.sum(_N.dot(Gm.T[allISIs], phiS))
 
@@ -114,10 +119,9 @@ def h_dL(a_phi, *args):
             i1 = itvs[m][it][1]
 
             gt0= 0      #  if first is a real spike
-            if i0 < 1:  #  reference to fake spike
-                gt0 = 0-i0
             gt1= i1-i0
             if i0 < 1:  #  reference to fake spike
+                gt0 = 0-i0
                 i0 = 0  #  if there was a spike, i0==1
             #  The time integral
 
@@ -203,15 +207,20 @@ def h_d2L(a_phi, *args):
 
     return d2L*mL
 
-def mkBounds(x, nbs1, nbs2):
+def mkBounds(x, nbs1, nbs2, nCnst):
     bds = _N.empty((nbs1+nbs2, 2))
 
     bds[0:nbs1, 0] = x[0:nbs1] - 2
     bds[0:nbs1, 1] = x[0:nbs1] + 2
     bds[nbs1:nbs1+3, 0] = -5
-    bds[nbs1:nbs1+3, 1] = 0
-    bds[nbs1+3:nbs1+nbs2, 0] = -5
-    bds[nbs1+3:nbs1+nbs2, 1] = 3
+    bds[nbs1:nbs1+3, 1] = 1.
+    bds[nbs1+3:nbs1+nbs2-1, 0] = -2
+    bds[nbs1+3:nbs1+nbs2-1, 1] = 1
+    bds[nbs1+nbs2-1, 0] = -0.01
+    bds[nbs1+nbs2-1, 1] = 0.01
+    bds[nbs1+nbs2-1, 0] = -0.01
+    bds[nbs1+nbs2-1, 1] = 0.01
+
     return bds
 
     # bds = []

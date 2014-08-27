@@ -8,9 +8,9 @@ import utilities as _U
 import patsy
 from kstat import percentile
 
-TR = 200
+TR = 500
 dt = 0.001
-setname="histPSTH11"   #  params_XXX.py   Results/XXX/params.py
+setname="histPSTH17"   #  params_XXX.py   Results/XXX/params.py
 
 N     = 1000
 
@@ -24,13 +24,13 @@ x     = _N.linspace(0, 1*2, 2*N)
 l2    = _N.ones(2*N + 50)
 #l2[0:20] = _N.linspace(0., 1, 20)**2
 #  SMOOTH shoulder
-a = 7.
-b = 1.5
-c = 18.
-d = 4.
+a = 20.
+b = 5.5
+c = 30.
+d = 8.
 ms = _N.arange(0, 2*N+50)
 l2 = (_N.exp((ms-a)/b) / (1 + _N.exp((ms-a)/b))) + 0.3*_N.exp(-0.5*(ms-c)*(ms-c) / (2*d*d))
-ps    = (20 + 10*_N.sin(2*_N.pi*x))*dt# +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
+ps    = (50 + 22*_N.sin(2*_N.pi*x))*dt# +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
 #ps    = 50*_N.ones(N)*dt# + 15*_N.sin(2*_N.pi*x) +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
 #ps    = _N.ones(N)*50*dt# + 15*_N.sin(2*_N.pi*x))*dt
 dN    = _N.empty(2*N)

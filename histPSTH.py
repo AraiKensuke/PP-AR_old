@@ -8,18 +8,18 @@ import utilities as _U
 import patsy
 from kstat import percentile
 
-TR = 50
+TR = 300
 dt = 0.001
-setname="histPSTH6"   #  params_XXX.py   Results/XXX/params.py
+setname="nohistPSTH1"   #  params_XXX.py   Results/XXX/params.py
 
-N     = 1000
+N     = 2000
 
 #  x, prbs, spks    3 columns
 alldat= _N.empty((N, TR*3))
 us    = _N.empty(TR)
 dNs   = _N.empty(TR)
 
-x     = _N.linspace(0, 1*2, 2*N)
+x     = _N.linspace(0, 3*2, 2*N)
 #  ABRUPT shoulder
 l2    = _N.ones(2*N + 50)
 #l2[0:20] = _N.linspace(0., 1, 20)**2
@@ -29,9 +29,10 @@ b = 1.5
 c = 14.
 d = 4.
 ms = _N.arange(0, N)
-l2 = (_N.exp((ms-a)/b) / (1 + _N.exp((ms-a)/b))) + 0.2*_N.exp(-0.5*(ms-c)*(ms-c) / (2*d*d))
-ps    = (10 + 3*_N.sin(2*_N.pi*x))*dt# +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
-#ps    = 50*_N.ones(N)*dt# + 15*_N.sin(2*_N.pi*x) +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
+#l2 = (_N.exp((ms-a)/b) / (1 + _N.exp((ms-a)/b))) + 0.2*_N.exp(-0.5*(ms-c)*(ms-c) / (2*d*d))
+l2 = _N.ones(N)
+ps    = (50 + 0*_N.sin(2*_N.pi*x))*dt# +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
+#ps    = 30*_N.ones(N)*dt# + 15*_N.sin(2*_N.pi*x) +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
 #ps    = _N.ones(N)*50*dt# + 15*_N.sin(2*_N.pi*x))*dt
 dN    = _N.empty(2*N)
 
@@ -60,7 +61,7 @@ for tr in xrange(TR):
 pctl = percentile(isis0)
 _N.savetxt(resFN("isis0pctl.dat", dir=setname, create=True), pctl, fmt="%d %.4f")
 
-fmt = "%.1e %.5f %d " * TR
+fmt = "%.2e %.5f %d " * TR
 
 _N.savetxt(resFN("xprbsdN.dat", dir=setname, create=True), alldat, fmt=fmt)
 

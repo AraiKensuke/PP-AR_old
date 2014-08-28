@@ -11,6 +11,7 @@ import pickle as _pk
 import warnings
 import numpy.polynomial.polynomial as _Npp
 import utilities as _U
+from kstat import percentile
 
 TR         = None;     N        = None;      dt       = 0.001
 trim       = 50;
@@ -41,7 +42,8 @@ def create(setname):
             stNzs[tr] = nzs[:, 0]
         else:
             stNzs[tr] = nzs[:, 1]    #  high
-    isis  = []
+    isis   = []
+    isis0  = []
 
     for tr in xrange(TR):
         x, dN, prbs, fs = createDataPPl2(TR, N, dt, ARcoeff, psth, stNzs[tr], lambda2=lambda2, p=1, nRhythms=nRhythms)
@@ -51,7 +53,10 @@ def create(setname):
         alldat[:, nColumns*tr+1] = prbs
         alldat[:, nColumns*tr+2] = dN
         isis.extend(_U.toISI([_N.where(dN == 1)[0].tolist()])[0])
+        isis0.extend(_U.toISI([_N.where(dN[0:100] == 1)[0].tolist()])[0])
     savesetMT(TR, alldat, model, setname)
+    pctl = percentile(isis0)
+    _N.savetxt(resFN("isis0pctl.dat", dir=setname, create=True), pctl, fmt="%d %.4f")
 
     arfs = ""
     xlst = []

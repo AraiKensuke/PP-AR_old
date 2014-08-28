@@ -5,8 +5,6 @@ from utildirs import setFN
 
 def display(ebf, solx, nbs1, nbs2, nbs2v, B, Gm, aSi, phiSi, psthgen, l2gen, fitpsthgen, fitl2gen, L0=None, L1=None, mPSTH=1.3, mHist=1.3, T0=None):
     #LTR= h_L(aST, phiST, M, B, Gm, sts, itvs, TM, dt, frstSpk)   #  TRUE
-    #L0 = h_L(aS, phiS, M, B, Gm, sts, itvs, TM, dt, frstSpk)
-    #L1 = h_L(sol.x[0:nbs1], sol.x[nbs1:nbs1+nbs2], M, B, Gm, sts, itvs, TM, dt, frstSpk)
     # print "%(TR).1f   %(0).1f   %(1).1f" % {"TR" : LTR, "0" : L0, "1" : L1}
 
     fig = _plt.figure(figsize=(5, 2*4))

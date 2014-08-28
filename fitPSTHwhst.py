@@ -24,6 +24,8 @@ aSi   = None;  phiSi = None
 mL    = -1;
 pctl  = None;
 sts   = None;  itvs  = None
+gt01  = None;  allISIs= None
+minmth= "L-BFGS-B"   # TNC, SLSQP
 
 ######  INITIALIZE
 def init(ebf):
@@ -69,18 +71,21 @@ def init(ebf):
 
 ######  fitPSTH routine    
 def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
-    global aSi, phiSi, M, pctl, sts, itvs
+    global aSi, phiSi, M, pctl, sts, itvs, minmth, allISIs, gt01
     aSi   = aS
     phiSi = phiS
     sts   = []   #  will include one dummy spike
     itvs  = []
+    allISIs = []
     rpsth = []
+    gt01  = []
 
     for tr in xrange(M):
         itvs.append([])
         lst = _N.where(dat[:, dCols*tr + 2] == 1)[0].tolist()
         lst.insert(0, int(-ranFromPercentile(pctl, lst[0])))    #  one dummy spike
         sts.append(_N.array(lst))
+        allISIs.append(sts[tr][1:] - sts[tr][0:-1])  #  do this after random inserted
         rpsth.extend(lst)
         Lm  = len(lst) - 1    #  number of spikes this trial
 
@@ -88,6 +93,17 @@ def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
         for i in xrange(Lm):
             itvs[tr].append([lst[i]+1, lst[i+1]+1]) 
         itvs[tr].append([lst[Lm]+1, N-1+1])
+
+        gt01.append([])
+        for it in xrange(len(itvs[tr])):    #  
+            i0, i1 = itvs[tr][it]    # spktime + 1
+
+            gt0= 0      #  if first is a real spike
+            gt1= i1-i0
+            if i0 < 1:  #  reference to fake spike
+                gt0 = 0-i0  #  > 0
+                i0 = 0  #  if there was a spike, i0==1
+            gt01[tr].append([gt0, gt1])  # gt01[tr][0][0], gt01[tr][0][1]
 
     if aS == None:
         #####  Initialize
@@ -106,12 +122,13 @@ def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
     x     = _N.array(aSi.tolist() + phiSi.tolist())
 
     #  If we estimate the the Jacobian, then even if h_dL 
-    #L0  = h_L_func(aSi, phiSi, M, B, Gm, sts, itvs, dt, mL=mL)
+    L0  = h_L_func(aSi, phiSi, M, B, Gm, sts, itvs, allISIs, gt01, dt, mL=mL)
     bds = mkBounds(x, nbs1, nbs2, nbs2v)
-    sol = _sco.minimize(h_L, x, args=(nbs1, nbs2, M, B, Gm, sts, itvs, doAl, doPh, dt, mL), bounds=bds, method="L-BFGS-B")
+
+    sol = _sco.minimize(h_L, x, args=(nbs1, nbs2, M, B, Gm, sts, itvs, allISIs, gt01, doAl, doPh, dt, mL), bounds=bds, method=minmth)
 
     print sol.message
-    #L1  = h_L_func(sol.x[0:nbs1], sol.x[nbs1:nbs1+nbs2], M, B, Gm, sts, itvs, TM, dt, mL=mL)
+    L1  = h_L_func(sol.x[0:nbs1], sol.x[nbs1:nbs1+nbs2], M, B, Gm, sts, itvs, allISIs, gt01, dt, mL=mL)
 
-    return sol#, L0, L1
+    return sol, L0, L1
 

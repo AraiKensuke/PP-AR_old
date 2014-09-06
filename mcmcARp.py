@@ -1,7 +1,3 @@
-#   lbd2 = _N.array([0.001, 0.08, 0.35, 1.2, 1.5, 1.1, 1.01, 1.])     #  use this for 080402,0,121
-#exf("kflib.py")
-#exf("restartPickle.py")
-
 from kflib import createDataAR
 import numpy as _N
 from mcmcARpFuncs import loadDat, initBernoulli
@@ -21,7 +17,7 @@ import numpy.polynomial.polynomial as _Npp
 import time as _tm
 import ARlib as _arl
 import LogitWrapper as lw
-from   gibbsMP import gibbsSampH, build_lrn, build_lrnLambda2
+from   gibbsMP import gibbsSampH, build_lrnLambda2
 
 import logerfc as _lfc
 import commdefs as _cd
@@ -35,11 +31,12 @@ import os
 #  Sampled 
 Bsmpx         = None
 smp_u         = None
-smp_al        = None
+smp_aS        = None
 smp_B         = None
 smp_q2        = None
 smp_x00       = None
 #  store samples of
+kntsPSTH      = None
 allalfas      = None
 uts           = None
 wts           = None
@@ -47,7 +44,9 @@ ranks         = None
 pgs           = None
 fs            = None
 amps          = None
+dt            = None
 #  
+histFN        = None
 setname       = None
 model         = None
 ARord         = _cd.__NF__
@@ -70,7 +69,7 @@ _d            = None
 
 fSigMax       = 500.
 freq_lims     = [[1 / .85, fSigMax]]
-ifs           = [(5. / fSigMax) * _N.pi]    #  initial values
+ifs           = [(30. / fSigMax) * _N.pi]    #  initial values
 
 #  u   --  Gaussian prior
 u_u          = 0;             s2_u         = 5
@@ -81,7 +80,8 @@ u_x00        = None;          s2_x00       = None
 
 def run(runDir=None, useTrials=None):
     #_lfc.init()
-    global setname  #  only these that we are setting inside
+    global setname, _t0, _t1, _d, Bsmpx, uts, wts  #  only these that we are setting inside
+    global allalfas, smp_B, smp_aS, smp_q2
     setname = os.getcwd().split("/")[-1]
 
     Cs          = len(freq_lims)
@@ -102,11 +102,10 @@ def run(runDir=None, useTrials=None):
         restarts = 0
 
     bGetFP = False
-    #TR, rn, _x, _y, _fx, _px, N, kp, _u, rmTrl, kpTrl = loadDat(setname, model, t0=_t0, t1=_t1, filtered=bGetFP, phase=bGetFP)  # u is set initialized
     TR, rn, _x, _y, N, kp, _u, rmTrl, kpTrl = loadDat(setname, model, t0=_t0, t1=_t1, filtered=bGetFP, phase=bGetFP)  # u is set initialized
 
     print setname
-    l2 = loadL2(setname)
+    l2 = loadL2(setname, fn=histFN)
     if (l2 != None) and (len(l2.shape) == 0):
         l2 = _N.array([l2])
 
@@ -126,9 +125,11 @@ def run(runDir=None, useTrials=None):
         fx    = _N.array(_fx[useTrialsFltrd])
         px    = _N.array(_px[useTrialsFltrd])
     u     = _N.array(_u[useTrialsFltrd])
+    TR    = len(useTrialsFltrd)
 
+    B    = None
     if bpsth:
-        B = patsy.bs(_N.linspace(0, (_t1 - _t0)*dt, (_t1-_t0)), df=nbs, include_intercept=True)    #  spline basis
+        B = patsy.bs(_N.linspace(0, (_t1 - _t0)*dt, (_t1-_t0)), df=dfPSTH, knots=kntsPSTH, include_intercept=True)    #  spline basis
         B = B.T    #  My convention for beta
         aS = _N.linalg.solve(_N.dot(B, B.T), _N.dot(B, _N.ones(_t1 - _t0)*_N.mean(u)))
 
@@ -139,6 +140,7 @@ def run(runDir=None, useTrials=None):
     # #generate initial values of parameters
     _d = _kfardat.KFARGauObsDat(TR, N, k)
     _d.copyData(y)
+
 
     sPR="cmpref"
     if use_prior==_cd.__FREQ_REF__:
@@ -202,6 +204,7 @@ def run(runDir=None, useTrials=None):
             ws   = ws.reshape(1, _d.N+1)
         for m in xrange(_d.TR):
             lw.rpg_devroye(rn, smpx[m, 2:, 0] + u[m], num=(N + 1), out=ws[m, :])
+
     ARo   = _N.empty((TR, _d.N+1))
     smp_u[:, 0] = u
     smp_q2[:, 0]= q2
@@ -209,14 +212,17 @@ def run(runDir=None, useTrials=None):
     t1    = _tm.time()
 
     # if model == "bernoulli":
-    F_alfa_rep = gibbsSampH(burn, NMC, AR2lims, F_alfa_rep, R, Cs, Cn, TR, rn, _d, u, q2, uts, wts, kp, ws, smpx, Bsmpx, smp_u, smp_q2, allalfas, fs, amps, ranks, priors, ARo, l2, prior=use_prior, aro=ARord)
+    F_alfa_rep = gibbsSampH(burn, NMC, AR2lims, F_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS, q2, uts, wts, kp, ws, smpx, Bsmpx, smp_u, smp_q2, allalfas, fs, amps, ranks, priors, ARo, l2, prior=use_prior, aro=ARord)
 
     t2    = _tm.time()
     print (t2-t1)
-
+    
+    """
     _plt.ioff()
     for m in xrange(TR):
         plotFigs(setdir, N, k, burn, NMC, x, y, Bsmpx, smp_u, smp_q2, _t0, _t1, Cs, Cn, C, baseFN, TR, m, ID_q2)
 
     plotARcomps(setdir, N, k, burn, NMC, fs, amps, _t0, _t1, Cs, Cn, C, baseFN, TR, m)
 
+
+    """

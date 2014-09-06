@@ -1,4 +1,14 @@
 import commdefs as _cd
+import numpy as _N
+import numpy.polynomial.polynomial as _Npp
+from multiprocessing import Pool
+import time as _tm
+import LogitWrapper as lw
+import kfARlibMP as _kfar
+import scipy.stats as _ss
+from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
+
+from ARcfSmpl import ARcfSmpl, FilteredTimeseries
 
 def gibbsSampH(burn, NMC, AR2lims, vF_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS, q2, uts, wts, kp, ws, smpx, Bsmpx, smp_u, smp_q2, allalfas, fs, amps, ranks, priors, ARo, lm2, prior=_cd.__COMP_REF__, aro=_cd.__NF__, ID_q2=True):  ##################################
     x00         = _N.array(smpx[:, 2])
@@ -43,6 +53,7 @@ def gibbsSampH(burn, NMC, AR2lims, vF_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS,
     while (it < NMC + burn - 1):
         t1 = _tm.time()
         it += 1
+        print it
         if (it % 10) == 0:
             print it
         #  generate latent AR state
@@ -56,15 +67,16 @@ def gibbsSampH(burn, NMC, AR2lims, vF_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS,
 
         if bConstPSTH:
             psthOffset[:] = u[:]
-        if bConstPSTH:
+        else:
             BaS = _N.dot(B.T, aS)
             for m in xrange(_d.TR):
                 psthOffset[m] = BaS
         ###  PG latent variable sample
+
         for m in xrange(_d.TR):
             _N.log(lrn[m] / (1 + (1 - lrn[m])*_N.exp(smpx[m, 2:, 0] + psthOffset[m])), out=ARo[m])
 
-            lw.rpg_devroye(rn, smpx[m, 2:, 0] + psthOffset[m] + ARo[m], num=(N + 1), out=ws[m, :])
+            lw.rpg_devroye(rn, smpx[m, 2:, 0] + psthOffset[m] + ARo[m], out=ws[m, :])
         if TR == 1:
             ws   = ws.reshape(1, _d.N+1)
 
@@ -103,6 +115,7 @@ def gibbsSampH(burn, NMC, AR2lims, vF_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS,
         tpl_args = zip(_d.y, _d.Rv, _d.Fs, q2, _d.Ns, _d.ks, _d.f_x[:, 0, :], _d.f_V[:, 0, :])
 
         sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
+
         for m in xrange(TR):
             smpx[m, 2:] = sxv[m][0]
             _d.f_x[m] = sxv[m][1]
@@ -167,14 +180,26 @@ def gibbsSampH(burn, NMC, AR2lims, vF_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS,
     pool.close()
     return _N.array(F_alfa_rep)
 
-def build_lrn(N, y, absRf):
+def build_lrnLambda2(N, y, lmbda2):
+    #  lmbda2 is short snippet of after-spike depression behavior
     lrn = _N.ones(N)
-    for n in xrange(N):
-        if y[n] == 1:
-            untl = (n + absRf + 1) if (n + absRf + 1 < N) else N   # untl
-            for m in xrange(n + 1, untl):
-                lrn[m] = 0.0001
+    lh    = len(lmbda2)
+
+    lt   = -int(50*_N.random.rand())
+    hst  = []    #  spikes whose history is still felt
+
+    for i in xrange(N):
+        L  = len(hst)
+        lmbd = 1
+
+        for j in xrange(L - 1, -1, -1):
+            lrn[i] *= lmbda2[i - lt - 1]
+
+        if y[i] == 1:
+            lt = i
+
     return lrn
+"""
 
 def build_lrnLambda2(N, y, lmbda2):
     #  lmbda2 is short snippet of after-spike depression behavior
@@ -202,3 +227,5 @@ def build_lrnLambda2(N, y, lmbda2):
 
         lrn[i] *= lmbd
     return lrn
+
+"""

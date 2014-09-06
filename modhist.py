@@ -5,7 +5,7 @@ from filter import lpFilt, bpFilt, base_q4atan
 import numpy as _N
 import matplotlib.pyplot as _plt
 
-def modhist(setname, shftPhase=0):
+def modhist(setname, shftPhase=0, fltPrms=[20, 26]):
     """
     shftPhase from 0 to 1.  
     """
@@ -31,8 +31,10 @@ def modhist(setname, shftPhase=0):
     for tr in xrange(TR):
         phst  = []
         x   = dat[:, tr*COLS]
-        fx = lpFilt(20, 26, 500, x)
-        #fx = bpFilt(20, 40, 10, 55, 500, x)  #(fpL, fpH, fsL, fsH, nyqf, y):
+        if len(fltPrms) == 2:
+            fx = lpFilt(fltPrms[0], fltPrms[1], 500, x)
+        else: # 20, 40, 10, 55    #(fpL, fpH, fsL, fsH, nyqf, y):
+            fx = bpFilt(fltPrms[0], fltPrms[1], fltPrms[2], fltPrms[3], 500, x)
         ht_x  = _ssig.hilbert(fx)
         #ph_x  = _N.empty(N)
         ph_x  = (_N.arctan2(ht_x.imag, ht_x.real) + _N.pi) / (2*_N.pi)

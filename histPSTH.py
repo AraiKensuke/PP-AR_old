@@ -8,30 +8,30 @@ import utilities as _U
 import patsy
 from kstat import percentile
 
-TR = 300
+TR = 200
 dt = 0.001
-setname="nohistPSTH1"   #  params_XXX.py   Results/XXX/params.py
+setname="hp13"   #  params_XXX.py   Results/XXX/params.py
 
-N     = 2000
+N     = 1000
 
 #  x, prbs, spks    3 columns
 alldat= _N.empty((N, TR*3))
 us    = _N.empty(TR)
 dNs   = _N.empty(TR)
 
-x     = _N.linspace(0, 3*2, 2*N)
+x     = _N.linspace(0, 1*2, 2*N)
 #  ABRUPT shoulder
 l2    = _N.ones(2*N + 50)
 #l2[0:20] = _N.linspace(0., 1, 20)**2
 #  SMOOTH shoulder
 a = 7.
 b = 1.5
-c = 14.
+c = 15.
 d = 4.
 ms = _N.arange(0, N)
-#l2 = (_N.exp((ms-a)/b) / (1 + _N.exp((ms-a)/b))) + 0.2*_N.exp(-0.5*(ms-c)*(ms-c) / (2*d*d))
-l2 = _N.ones(N)
-ps    = (50 + 0*_N.sin(2*_N.pi*x))*dt# +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
+l2 = (_N.exp((ms-a)/b) / (1 + _N.exp((ms-a)/b))) + 0.4*_N.exp(-0.5*(ms-c)*(ms-c) / (2*d*d))
+#l2 = _N.ones(N)
+ps    = (10 + 5.*_N.sin(2*_N.pi*x))*dt# +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
 #ps    = 30*_N.ones(N)*dt# + 15*_N.sin(2*_N.pi*x) +  5*_N.sin(2*3.1*_N.pi*x - 1))*dt
 #ps    = _N.ones(N)*50*dt# + 15*_N.sin(2*_N.pi*x))*dt
 dN    = _N.empty(2*N)
@@ -82,16 +82,25 @@ apsth = _N.repeat(fs, bnsz)    #    piecewise boxy approximate PSTH
 aS     = _N.linalg.solve(_N.dot(B, B.T), _N.dot(B, _N.log(apsth)))
 #####  
 
+pctl = percentile(isis)
+tscl = pctl[_N.where(pctl[:, 1] > 0.85)[0][0], 0]
+
 bnsz = 10
-fig = _plt.figure(figsize=(6, 2*5))
-fig.add_subplot(2, 1, 1)
+fig = _plt.figure(figsize=(6, 3*5))
+fig.add_subplot(3, 1, 1)
 _plt.plot(apsth, color="black")
 _plt.plot(_N.exp(_N.dot(B.T, aS)), lw=2, color="blue")
 _plt.ylim(0, max(apsth)*1.1)
 _plt.grid()
 #_plt.hist(relspks, bins=_N.linspace(0, 1000, 101), normed=True, color="black")
-fig.add_subplot(2, 1, 2)
+fig.add_subplot(3, 1, 2)
 _plt.hist(isis, bins=_N.linspace(0, N/bnsz, N/bnsz+1), color="black")
+fig.add_subplot(3, 1, 3)
+_plt.plot(pctl[:, 0], pctl[:, 1], lw=2)
+_plt.axvline(x=tscl, color="red")
+_plt.xlim(0, 200)
+_plt.grid()
+_plt.suptitle("tscl  %d" % tscl)
 _plt.savefig(resFN("psth_isi.png", dir=setname))
 _plt.close()
 
@@ -107,7 +116,7 @@ fig.add_subplot(3, 1, 3)
 _plt.plot(range(1, N+1), l2)
 _plt.grid()
 _plt.ylim(0, 1.2)
-_plt.xlim(0, 200)
+_plt.xlim(0, 300)
 _plt.savefig(resFN("PSTHandHIST.png", dir=setname))
 _plt.close()
 

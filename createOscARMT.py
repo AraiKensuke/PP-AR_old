@@ -4,7 +4,7 @@ from utildirs import setFN
 from mcmcARpPlot import plotWFandSpks
 import matplotlib.pyplot as _plt
 
-from kflib import createDataPPl2, savesetMT
+from kflib import createDataPPl2Simp, savesetMT
 from kassdirs import resFN, datFN
 import numpy as _N
 import pickle as _pk
@@ -19,11 +19,12 @@ nzs        = None;     nRhythms = None;
 rs         = None;     ths      = None;      alfa     = None;
 lambda2    = None;     psth     = None
 lowQpc     = 0;        lowQs    = []
+isis       = None;     rpsth    = None
 
 def create(setname):
     # _plt.ioff()
     copyfile("%s.py" % setname, "%(s)s/%(s)s.py" % {"s" : setname, "to" : setFN("%s.py" % setname, dir=setname, create=True)})
-    global dt, lambda2
+    global dt, lambda2, rpsth, isis
     ARcoeff = _N.empty((nRhythms, 2))
     for n in xrange(nRhythms):
         ARcoeff[n]          = (-1*_Npp.polyfromroots(alfa[n])[::-1][1:]).real
@@ -43,20 +44,19 @@ def create(setname):
         else:
             stNzs[tr] = nzs[:, 1]    #  high
     isis   = []
-    isis0  = []
+    rpsth  = []
 
     for tr in xrange(TR):
-        x, dN, prbs, fs = createDataPPl2(TR, N, dt, ARcoeff, psth, stNzs[tr], lambda2=lambda2, p=1, nRhythms=nRhythms)
+        x, dN, prbs, fs = createDataPPl2Simp(TR, N, dt, ARcoeff, psth, stNzs[tr], lambda2=lambda2, p=1, nRhythms=nRhythms)
 
         spksPT[tr] = _N.sum(dN)
+        rpsth.extend(_N.where(dN == 1)[0])
         alldat[:, nColumns*tr] = _N.sum(x, axis=0).T
         alldat[:, nColumns*tr+1] = prbs
         alldat[:, nColumns*tr+2] = dN
         isis.extend(_U.toISI([_N.where(dN == 1)[0].tolist()])[0])
-        isis0.extend(_U.toISI([_N.where(dN[0:100] == 1)[0].tolist()])[0])
+
     savesetMT(TR, alldat, model, setname)
-    pctl = percentile(isis0)
-    _N.savetxt(resFN("isis0pctl.dat", dir=setname, create=True), pctl, fmt="%d %.4f")
 
     arfs = ""
     xlst = []

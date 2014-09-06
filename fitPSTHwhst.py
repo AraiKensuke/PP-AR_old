@@ -22,7 +22,7 @@ dCols = 3
 N     = None;  M     = None    #  number of data points per trial, # trials
 aSi   = None;  phiSi = None
 mL    = -1;
-pctl  = None;
+#pctl  = None;
 sts   = None;  itvs  = None
 gt01  = None;  allISIs= None
 minmth= "L-BFGS-B"   # TNC, SLSQP
@@ -55,7 +55,7 @@ def init(ebf):
     nbs1  = B.shape[1]
     B     = B.T
 
-    Gm   = patsy.bs(_N.linspace(0, dt*(N - 1), N), knots=knts2, df=nbs2, include_intercept=True)
+    Gm   = patsy.bs(_N.linspace(0, dt*(N - 1), N), knots=knts2, include_intercept=True)
     nbs2 = Gm.shape[1]       #  in case used knts2
     if (nbs2c == None) and (nbs2v == None):
         nbs2v = 4
@@ -67,11 +67,9 @@ def init(ebf):
 
     Gm = Gm.T
 
-    pctl  = _N.loadtxt("isis0pctl.dat")
-
 ######  fitPSTH routine    
-def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
-    global aSi, phiSi, M, pctl, sts, itvs, minmth, allISIs, gt01
+def fitPSTH(aS=None, phiS=None, bnsz=50):   #  ebf  __exec_base_fn__
+    global aSi, phiSi, M, sts, itvs, minmth, allISIs, gt01
     aSi   = aS
     phiSi = phiS
     sts   = []   #  will include one dummy spike
@@ -83,7 +81,8 @@ def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
     for tr in xrange(M):
         itvs.append([])
         lst = _N.where(dat[:, dCols*tr + 2] == 1)[0].tolist()
-        lst.insert(0, int(-ranFromPercentile(pctl, lst[0])))    #  one dummy spike
+        #lst.insert(0, int(-ranFromPercentile(pctl, lst[0])))    #  one dummy spike
+        lst.insert(0, int(-30*_N.random.rand() - 1))    #  one dummy spike
         sts.append(_N.array(lst))
         allISIs.append(sts[tr][1:] - sts[tr][0:-1])  #  do this after random inserted
         rpsth.extend(lst)
@@ -107,12 +106,10 @@ def fitPSTH(aS=None, phiS=None):   #  ebf  __exec_base_fn__
 
     if aS == None:
         #####  Initialize
-        bnsz   = 50
         h, bs = _N.histogram(rpsth, bins=_N.linspace(0, N, (N/bnsz)+1))
         
         fs     = (h / (M * bnsz * dt))
         apsth = _N.repeat(fs, bnsz)    #    piecewise boxy approximate PSTH
-        fsbnsz = _N.mean(fs) * _N.ones(N)
 
         aSi    = _N.linalg.solve(_N.dot(B, B.T), _N.dot(B, _N.log(apsth)))
     if phiS == None:

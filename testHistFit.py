@@ -4,14 +4,18 @@ import patsy
 #  fit history function likely to be encountered
 
 N = 1000
-a = 7
+a = 7.
 b = 1.5
-c = 14.
+c = 15.
 d = 4.
 ms = _N.arange(0, N)
 l2 = (_N.exp((ms-a)/b) / (1 + _N.exp((ms-a)/b))) + 0.2*_N.exp(-0.5*(ms-c)*(ms-c) / (2*d*d))
+#l2 = _N.ones(N)
 
-knts= _N.array([0.006, 0.012, 0.02, 0.05, 0.08, 0.1, 0.15, 0.3, 0.5, 0.9])
+tscl=0.065
+#vv = _N.array([1, 2, 2.5, 4.5, 7, 10])
+vv = _N.array([0.25, 0.5, 0.625, 1.125, 2, 3])
+knts= vv*tscl
 
 Gm   = patsy.bs(_N.linspace(0, 1, 1000, endpoint=False), knots=knts, include_intercept=True)
 Gm   = Gm.T

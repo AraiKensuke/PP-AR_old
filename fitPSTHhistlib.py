@@ -8,7 +8,7 @@ def h_L_func(aS, phiS, M, B, Gm, sts, itvs, allISIs, gt01, dt, mL=1):
     for m in xrange(M):
         ITVS = len(itvs[m])
 
-        for it in xrange(ITVS):    #  
+        for it in xrange(1, ITVS):    #  
             i0 = itvs[m][it][0]    # spktime + 1
             i1 = itvs[m][it][1]
 
@@ -28,8 +28,9 @@ def h_L_func(aS, phiS, M, B, Gm, sts, itvs, allISIs, gt01, dt, mL=1):
         if i0 < 1:  #  not real spike
             iFR= 1      #  index of first real spike
 
-        L += _N.sum(_N.dot(B.T[sts[m][iFR:]], aS)) #  spk tms form psth, only real ones
-        L += _N.sum(_N.dot(Gm.T[allISIs[m]], phiS))
+        #L += _N.sum(_N.dot(B.T[sts[m][iFR:]], aS)) #  spk tms form psth, only real ones
+        L += _N.sum(_N.dot(B.T[sts[m][1:]], aS)) #  spk tms form psth, only real ones
+        L += _N.sum(_N.dot(Gm.T[allISIs[m][1:]], phiS))
 
     print L*mL
     return L*mL

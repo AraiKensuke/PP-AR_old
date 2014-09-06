@@ -52,8 +52,6 @@ def loadDat(setname, model, t0=0, t1=None, filtered=False, phase=False):  ######
     else:
         x   = x_st_cnts[t0:t1, ::dch].T
         y   = x_st_cnts[t0:t1, y_ch::dch].T
-        x   = x_st_cnts[t0:t1, ::dch].T
-        y   = x_st_cnts[t0:t1, y_ch::dch].T
         if filtered:
             fx  = x_st_cnts[t0:t1, flt_ch::dch].T
         if phase:
@@ -160,8 +158,8 @@ def plot_cmptSpksAndX(N, z, x, y):  #  a component
     _plt.yticks(fontsize=20)
     _plt.grid()
 
-def loadL2(setname):
-    fn = resFN("lambda2.dat", dir=setname)
+def loadL2(setname, fn="lambda2.dat"):
+    fn = resFN(fn, dir=setname)
 
     if os.access(fn, os.F_OK):
         return _N.loadtxt(fn)

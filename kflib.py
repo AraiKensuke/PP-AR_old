@@ -80,31 +80,35 @@ def createDataPPl2(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offs
     if type(u) != _N.ndarray:
         u = _N.ones(N) * u
 
-    if x == None:
-        buf  = 100
-        xc   = _N.empty((nRhythms, N+buf))   #  components
-        for nr in xrange(nRhythms):
-            k = len(B[nr])
-            sstNz = _N.sqrt(stNz[nr])
-
-            rands = _N.random.randn(N+buf)
-
-            for i in xrange(k+1):
-                xc[nr, i] = sstNz*rands[i]
-            for i in xrange(k+1, N+buf):
-                #  for k = 2, x[i] = B[0]*x[i-2], B[1]*x[i - 1]
-                #  B[0]   is the weight of oldest time point
-                #  B[k-1] is weight of most recent time point
-                #        x[i] = _N.dot(B, x[i-k:i]) + err*_N.random.randn()
-                xc[nr, i] = _N.dot(B[nr], xc[nr, i-1:i-k-1:-1]) + sstNz*rands[i]
+    buf  = 100
+    if _N.sum(stNz) == 0:
+        xc   = _N.zeros((nRhythms, N+buf))   #  components
+        x = _N.zeros(N+buf)
     else:
-        buf  = 0
-        xc   = x
+        if x == None:
+            xc   = _N.empty((nRhythms, N+buf))   #  components
+            for nr in xrange(nRhythms):
+                k = len(B[nr])
+                sstNz = _N.sqrt(stNz[nr])
 
-    if nRhythms > 1:
-        x = _N.sum(xc, axis=0)     #  collapse
-    else:
-        x = xc.reshape(N+buf, )
+                rands = _N.random.randn(N+buf)
+
+                for i in xrange(k+1):
+                    xc[nr, i] = sstNz*rands[i]
+                for i in xrange(k+1, N+buf):
+                    #  for k = 2, x[i] = B[0]*x[i-2], B[1]*x[i - 1]
+                    #  B[0]   is the weight of oldest time point
+                    #  B[k-1] is weight of most recent time point
+                    #        x[i] = _N.dot(B, x[i-k:i]) + err*_N.random.randn()
+                    xc[nr, i] = _N.dot(B[nr], xc[nr, i-1:i-k-1:-1]) + sstNz*rands[i]
+        else:
+            buf  = 0
+            xc   = x
+
+        if nRhythms > 1:
+            x = _N.sum(xc, axis=0)     #  collapse
+        else:
+            x = xc.reshape(N+buf, )
         
     spks = _N.zeros(N)
     prbs = _N.zeros(N)
@@ -113,7 +117,8 @@ def createDataPPl2(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offs
     #  initial few
 
     beta0 = beta[0]
-    lh    = len(lambda2)
+    #lh    = len(lambda2)
+    lh    = 300   #  at most 2000
     hst  = []    #  spikes whose history is still felt
 
     for i in xrange(N):
@@ -136,6 +141,67 @@ def createDataPPl2(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offs
         spks[i] = _N.random.binomial(1, prbs[i])
         if spks[i] == 1:
             hst.append(i)
+
+    fs[:] = prbs / dt
+    return xc[:, buf:], spks, prbs, fs
+
+def createDataPPl2Simp(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offset=None):
+    beta = _N.array([1., 0.])
+    #  a[1]^2 + 4a[0]
+    #  B[0] = -0.45
+    #  B[1] =  0.9
+    if type(u) != _N.ndarray:
+        u = _N.ones(N) * u
+
+    buf  = 100
+    if _N.sum(stNz) == 0:
+        xc   = _N.zeros((nRhythms, N+buf))   #  components
+        x = _N.zeros(N+buf)
+    else:
+        if x == None:
+            xc   = _N.empty((nRhythms, N+buf))   #  components
+            for nr in xrange(nRhythms):
+                k = len(B[nr])
+                sstNz = _N.sqrt(stNz[nr])
+
+                rands = _N.random.randn(N+buf)
+
+                for i in xrange(k+1):
+                    xc[nr, i] = sstNz*rands[i]
+                for i in xrange(k+1, N+buf):
+                    #  for k = 2, x[i] = B[0]*x[i-2], B[1]*x[i - 1]
+                    #  B[0]   is the weight of oldest time point
+                    #  B[k-1] is weight of most recent time point
+                    #        x[i] = _N.dot(B, x[i-k:i]) + err*_N.random.randn()
+                    xc[nr, i] = _N.dot(B[nr], xc[nr, i-1:i-k-1:-1]) + sstNz*rands[i]
+        else:
+            buf  = 0
+            xc   = x
+
+        if nRhythms > 1:
+            x = _N.sum(xc, axis=0)     #  collapse
+        else:
+            x = xc.reshape(N+buf, )
+        
+    spks = _N.zeros(N)
+    prbs = _N.zeros(N)
+    fs   = _N.zeros(N)
+
+    #  initial few
+
+    beta0 = beta[0]
+    #lh    = len(lambda2)
+    lh    = 300   #  at most 2000
+    hst  = []    #  spikes whose history is still felt
+
+    ls     = -int(_N.random.rand()*200)
+    for i in xrange(N):
+        e = _N.exp(u[i] + beta0* x[i+buf]) * dt
+        prbs[i]  = (p*e) / (1 + e)
+
+        spks[i] = _N.random.binomial(1, prbs[i]*lambda2[i-ls-1])
+        if spks[i] == 1:
+            ls = i
 
     fs[:] = prbs / dt
     return xc[:, buf:], spks, prbs, fs

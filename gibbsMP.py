@@ -7,6 +7,7 @@ import LogitWrapper as lw
 import kfARlibMP as _kfar
 import scipy.stats as _ss
 from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
+import logerfc_ as _lfc
 
 from ARcfSmpl import ARcfSmpl, FilteredTimeseries
 
@@ -29,6 +30,7 @@ def gibbsSampH(burn, NMC, AR2lims, vF_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS,
     N            = _d.N
     k            = _d.k
     F0          = (-1*_Npp.polyfromroots(F_alfa_rep)[::-1].real)[1:]
+    lfc         = _lfc.logerfc()
 
     if u == None:
         psthOffset = _N.empty((TR, _d.N+1))
@@ -131,7 +133,7 @@ def gibbsSampH(burn, NMC, AR2lims, vF_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS,
         #  wt.shape = (TR, C, _d.N+1+2, 1)
         #  wts.shape = (TR, burn+NMC, C, _d.N+1+2, 1)
         #  ut.shape = (TR, C, _d.N+1+1, 1)
-        ARcfSmpl(N+1, k, AR2lims, smpx[:, 1:, 0:k], smpx[:, :, 0:k-1], q2, R, Cs, Cn, alpR, alpC, _d, prior=prior, accepts=10, aro=aro)
+        ARcfSmpl(lfc, N+1, k, AR2lims, smpx[:, 1:, 0:k], smpx[:, :, 0:k-1], q2, R, Cs, Cn, alpR, alpC, _d, prior=prior, accepts=10, aro=aro)
         F_alfa_rep = alpR + alpC   #  new constructed
         prt, rank, f, amp = ampAngRep(F_alfa_rep, f_order=True)
         ut, wt = FilteredTimeseries(N+1, k, smpx[:, 1:, 0:k], smpx[:, :, 0:k-1], q2, R, Cs, Cn, alpR, alpC, _d)

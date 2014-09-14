@@ -3,7 +3,7 @@ import scipy.stats as _ss
 import kdist as _kd
 import ARlib as _arl
 import warnings
-import logerfc as _lfc
+#import logerfc as _lfc
 import commdefs as _cd
 import numpy as _N
 #from ARcfSmplFuncs import ampAngRep, randomF, dcmpcff, betterProposal
@@ -27,7 +27,7 @@ def ARcfSimple(N, k, smpx, q2):
     print ampAngRep(vals)
     return F0
 
-def ARcfSmpl(N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, accepts=1, prior=_cd.__COMP_REF__, aro=_cd.__NF__):
+def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, accepts=1, prior=_cd.__COMP_REF__, aro=_cd.__NF__):
     C = Cs + Cn
 
     #  I return F and Eigvals
@@ -188,8 +188,8 @@ def ARcfSmpl(N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, accepts
 
                 F1[0] = ph1j1; F1[1] = ph1j2
 
-                lNC2 = _lfc.trncNrmNrmlz(ph0L, ph0H, mu1prp, svPr2)
-                lNC1 = _lfc.trncNrmNrmlz(p1a*r1, p1b*r1, mj0, svPr1)
+                lNC2 = lfc.trncNrmNrmlz(ph0L, ph0H, mu1prp, svPr2)
+                lNC1 = lfc.trncNrmNrmlz(p1a*r1, p1b*r1, mj0, svPr1)
                 Apd_ph1j2    = -(ph1j2 - mu1prp)**2 / (2*vPr2) - lNC2
                 Apd_ph1j1    = -(ph1j1 - mj0)**2 / (2*vPr1) - lNC1
 
@@ -202,8 +202,8 @@ def ARcfSmpl(N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, accepts
                 r0    = _N.sqrt(-1*ph0j2)
                 mj1= mu0prp + (J[0, 1] * (ph0j2 - mu1prp)) / J[1, 1]
 
-                lNC2 = _lfc.trncNrmNrmlz(ph0L, ph0H, mu1prp, svPr2) # same value
-                lNC1 = _lfc.trncNrmNrmlz(p1a*r0, p1b*r0, mj1, svPr1)
+                lNC2 = lfc.trncNrmNrmlz(ph0L, ph0H, mu1prp, svPr2) # same value
+                lNC1 = lfc.trncNrmNrmlz(p1a*r0, p1b*r0, mj1, svPr1)
                 Apd_ph0j2    = -(ph0j2 - mu1prp)**2 / (2*vPr2) - lNC2
                 Apd_ph0j1    = -(ph0j1 - mj1)**2 / (2*vPr1) - lNC1
                 PrpRArg  = Apd_ph0j2 + Apd_ph0j1 - (Apd_ph1j2 + Apd_ph1j1)

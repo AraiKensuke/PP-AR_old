@@ -64,6 +64,7 @@ k             = None
 Cn            = 6
 Cs            = None
 C             = None
+x             = None   #  True
 
 _d            = None
 
@@ -82,6 +83,7 @@ def run(runDir=None, useTrials=None):
     #_lfc.init()
     global setname, _t0, _t1, _d, Bsmpx, uts, wts  #  only these that we are setting inside
     global allalfas, smp_B, smp_aS, smp_q2
+    global x
     setname = os.getcwd().split("/")[-1]
 
     Cs          = len(freq_lims)
@@ -140,7 +142,6 @@ def run(runDir=None, useTrials=None):
     # #generate initial values of parameters
     _d = _kfardat.KFARGauObsDat(TR, N, k)
     _d.copyData(y)
-
 
     sPR="cmpref"
     if use_prior==_cd.__FREQ_REF__:

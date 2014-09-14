@@ -194,12 +194,15 @@ def createDataPPl2Simp(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, 
     lh    = 300   #  at most 2000
     hst  = []    #  spikes whose history is still felt
 
-    ls     = -int(_N.random.rand()*200)
+    ls     = -int(_N.random.rand()*20)
     for i in xrange(N):
         e = _N.exp(u[i] + beta0* x[i+buf]) * dt
         prbs[i]  = (p*e) / (1 + e)
 
-        spks[i] = _N.random.binomial(1, prbs[i]*lambda2[i-ls-1])
+        try:
+            spks[i] = _N.random.binomial(1, prbs[i]*lambda2[i-ls-1])
+        except IndexError:
+            print "i  %(i)d   ls  %(ls)d     i-ls-1  %(ils1)d" % {"i" : i, "ls" : ls, "ils1" : (i-ls-1)}
         if spks[i] == 1:
             ls = i
 

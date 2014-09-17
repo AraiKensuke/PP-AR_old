@@ -26,6 +26,8 @@ def ccW12(y, N, blks):
 
     return pcs
 
+##  # of cols is 1 + (nStates - 1)                       + 1 + (nWins)
+##  data is    x     mH (0.3, 0.6 - ex. of 3 states)   state  counts in win
 def create(setname):
     global mH, upx, ctsL, ctsH, data
     copyfile("%s.py" % setname, "%(s)s/%(s)s.py" % {"s" : setname, "to" : setFN("%s.py" % setname, dir=setname, create=True)})
@@ -47,7 +49,7 @@ def create(setname):
 
     phi          = (-1*_Npp.polyfromroots(alfa)[::-1][1:]).real
 
-    data= _N.empty((TRIALS, 3 + nWins))   #  x, mH, state, spkct x 
+    data= _N.empty((TRIALS, 2 + nWins))   #  x, state, spkct x 
 
     x,y   = _kfl.createDataAR(TRIALS + trim, phi, e, e, trim=trim)
     if upx == None:
@@ -67,8 +69,8 @@ def create(setname):
             else:
                 cts[tr, nw] = _N.random.negative_binomial(rn[nw], ex / (1 + ex))
         stcts[st].append(cts[tr, :])
-        data[tr, 0:3] = (x[tr] + upx[tr], mH[tr], st)
-        data[tr, 3:]  = cts[tr, :]
+        data[tr, 0:2] = (x[tr] + upx[tr], st)
+        data[tr, 2:]  = cts[tr, :]
 
 
     ctsL = _N.array(stcts[0])
@@ -97,4 +99,5 @@ def create(setname):
     _plt.savefig(resFN("true_hists", dir=setname, create=True))
     _plt.close()
 
-    _N.savetxt(resFN("cnt_data.dat", dir=setname, create=True), data, fmt="%.5f %.5f %.0f %.0f %.0f")
+    _N.savetxt(resFN("cnt_data.dat", dir=setname, create=True), data, fmt="%.5f %d %d %d")
+    _N.savetxt(resFN("mH.dat", dir=setname, create=True), data, fmt="%.3f")

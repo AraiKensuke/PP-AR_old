@@ -1,190 +1,403 @@
+import numpy as _N
+import LogitWrapper as lw
 import kflib
 import scipy.stats as _ss
 import kfardat as _kfardat
-from kassdirs import resFN, datFN
+from   kassdirs import resFN, datFN
 import kstat as _ks
+import kfARlibPY as _kfar
 import os
-import numpy as _N
+import warnings
 
+from   utildirs import setFN, rename_self_vars
 import pickle as _pkl
-import LogitWrapper as lw
-
-from mcmcMixAR1vFuncs import loadDat
 
 mvnrml    = _N.random.multivariate_normal
 
-#  Simulation params
-setname       = None
-rs            = -1
-burn          = None
-NMC           = None
-_t0           = None
-_t1           = None
-#  Description of model
-model         = None
-nWins         = None
-rn            = None
-nStates       = 2
-k             = None
-#  Sampled parameters
-Bsmpx         = None
-smp_u         = None
-smp_q2        = None
-smp_x00       = None
-#  store samples of
-allalfas      = None
-pgs           = None
-fs            = None
-amps          = None
+# m, z   (samples kept)
+# u
+class mcmcMixAr1v:
+    #  Simulation params
+    setname       = None
+    rs            = -1
+    burn          = None
+    NMC           = None
+    t0           = None
+    t1           = None
+    #  Description of model
+    model         = None
+    nWins         = None   #  set automatically
+    oWin          = None   #  if data > 1 window, which win to use?  or sum
+    nStates       = None;    states     = None    # we set nStates
+    rn            = None   #  Also length (nStates)
+    k             = None
+    #  Sampled parameters
+    Bsmpx         = None
+    smp_u         = None
+    smp_q2        = None
+    smp_x00       = None
+    #  Current values of parameters
+    m             = None;     z = None
+    smpx          = None
+    u             = None; us_w1 = None; us_w2 = None
+    ws            = None; ws_w1 = None; ws_w2 = None
+    F0            = None; q2    = None
+    #  store samples of
+    allalfas      = None
+    pgs           = None
+    fs            = None
+    amps          = None
+    ##  
 
-_d            = None
+    _d            = None
 
-####  These priors need to be set after nWins specified
-#  u   --  Gaussian prior
-u_u          = None;             s2_u         = None
-#  Dirichlet priors
-alp          = None
-
-#  q2  --  Inverse Gamma prior
-pr_mn_q2     = 0.05;    a_q2         = 2;  B_q2         = (a_q2 + 1) * pr_mn_q2
-#  initial state
-u_x00        = 0;             s2_x00       = 0.4
-pr_mn_V00    = 1;   a_V00        = 2;    B_V00        = (a_V00 + 1)*pr_mn_V00
-
-x           = None   #  Hidden latent trend 
-y           = None   #  spike count observation 
-kp          = None;  kp_w1       = None; kp_w2     = None
-
-def run(runDir=None):
-    global setname, _t0, _t1, _d, Bsmpx, uts, wts  #  only these that we are setting inside
-    global allalfas, smp_B, smp_aS, smp_q2
-    global x, y, kp, kp_w1, kp_w2
-    global nWins
-
-    setname = os.getcwd().split("/")[-1]
-
-    nWins    = len(rn)   #  we don't set nWins manually
-
-    if runDir == None:
-        runDir="%(sn)s/AR%(k)d_[%(t0)d-%(t1)d]" % {"sn" : setname, "ar" : k, "t0" : _t0, "t1" : _t1}
-
-    if rs >= 0:
-        unpickle(runDir, rs)
-    else:   #  First run
-        restarts = 0
-
-    if nWins == 1:
-        N, x, y, kp, u0 = loadDat(setname, model, nStates, nWins, rn, t0=_t0, t1=_t1)  # u is set initialized
-    else:
-        N, x, y, kp_w1, kp_w2, u0_w1, u0_w2 = loadDat(setname, model, nStates, nWins, rn, t0=_t0, t1=_t1)  # u is set initialized
-
-    #######  PRIOR parameters
-    #  F0  --  flat prior
-    #a_F0         = -1
-    #  I think a prior assumption of relatively narrow and high F0 range
-    #  is warranted.  Small F0 is close to white noise, and as such can
-    #  be confused with the independent trial-to-trial count noise.Force
-    #  it to search for longer timescale correlations by setting F0 to be
-    #  fairly large.
-    a_F0         = -0.3             #  prior assumption: slow fluctuation
-    b_F0         =  1
+    ####  These priors need to be set after nWins specified
     #  u   --  Gaussian prior
-    u_u        = _N.empty(nStates * nWins)
-    s2_u       = _N.zeros((nStates * nWins, nStates * nWins))
-    # (win1 s1)    (win1 s2)    (win2 s1)    (win2 s2)
-    if nWins == 1:
-        if nStates == 2:
-            u_u[:]     = (u0*1.2, u0*0.8)
-            _N.fill_diagonal(s2_u, [0.5, 0.5])
+    u_u          = None;             s2_u         = None
+    #  Dirichlet priors
+    alp          = None
+
+    #  q2  --  Inverse Gamma prior
+    pr_mn_q2     = 0.05;    a_q2         = 2;  B_q2         = (a_q2 + 1) * pr_mn_q2
+    #  initial state
+    u_x00        = 0;             s2_x00       = 0.4
+    pr_mn_V00    = 1;   a_V00        = 2;    B_V00        = (a_V00 + 1)*pr_mn_V00
+
+    xT          = None;   zT     = None; #  Hidden trend, states
+    y           = None   #  spike count observation 
+    kp          = None;  kp_w1       = None; kp_w2     = None
+
+    ###################################   RUN   #########
+    def loadDat(self):
+        oo     = self    #  call self oo.  takes up less room on line
+        #  READ parameters of generative model from file
+        #  contains N, k, singleFreqAR, u, beta, dt, stNz
+        x_st_cnts = _N.loadtxt(resFN("cnt_data.dat", dir=oo.setname))
+
+        oo.N   = x_st_cnts.shape[0] - 1
+        if oo.t1 == None:
+            oo.t1 = oo.N + 1
+        cols= x_st_cnts.shape[1]
+        nWinsInData = cols - 2   #  latent x, true state, win 1, win 2, ...
+        oo.xT  = x_st_cnts[oo.t0:oo.t1, 0]
+        #######  Initialize z
+        mH  = x_st_cnts[oo.t0:oo.t1, 1]
+        stCol= 1   #  column containing state number
+        ctCol = 2   #  column containing counts
+        oo.zT  = x_st_cnts[oo.t0:oo.t1, stCol]
+
+        if nWinsInData == 1:
+            oo.nWins = 1
+            oo.y   = x_st_cnts[oo.t0:oo.t1, ctCol]   
         else:
-            u_u[:] = u0 + _N.random.randn(nStates)
-            _N.fill_diagonal(s2_u, _N.ones(nStates)*0.5)
-    else:
-        if nStates == 2:
-            u_u[:]     = (u0_w1*1.2, u0_w1*0.8, u0_w2*1.2, u0_w2*0.8)
-            _N.fill_diagonal(s2_u, [0.5, 0.5, 0.5, 0.5])
+            if len(oo.rn) == 2:  #  use both windows
+                oo.y   = x_st_cnts[oo.t0:oo.t1, ctCol:] 
+                oo.nWins = 2
+            else:   #  use one of the windows, or a sum of the counts
+                if oo.oWin == "sum":
+                    oo.y   = _N.sum(x_st_cnts[oo.t0:oo.t1, ctCol:], axis=1)
+                else:
+                    oo.y   = x_st_cnts[oo.t0:oo.t1, oo.oWin + ctCol]
+                oo.nWins = 1
+        oo.xT   = x_st_cnts[oo.t0:oo.t1, 0]
+
+    ###################################   RUN   #########
+    def run(self, runDir=None):
+        """
+        RUN
+        """
+        oo     = self    #  call self oo.  takes up less room on line
+        oo.setname = os.getcwd().split("/")[-1]
+
+        oo.nWins    = len(oo.rn)   #  we don't set nWins manually
+
+        if runDir == None:
+            runDir="%(sn)s/AR%(k)d_[%(t0)d-%(t1)d]" % {"sn" : oo.setname, "ar" : k, "t0" : oo.t0, "t1" : oo.t1}
+
+        if oo.rs >= 0:
+            unpickle(runDir, oo.rs)
+        else:   #  First run
+            restarts = 0
+
+        oo.loadDat()  # u is set initialized
+        oo.initGibbs()
+        oo.gibbsSamp()
+
+    def initGibbs(self):
+        oo     = self    #  call self oo.  takes up less room on line
+        #  INITIAL samples
+        if oo.nStates == 2:
+            oo.states = _N.array([[1, 0], [0, 1]])
         else:
-            u_u[:]     = 0.5*(u0_w1 + u0_w1) + _N.random.randn(2*nStates)
-            _N.fill_diagonal(s2_u, _N.ones(nStates*2)*0.5)
+            oo.states = _N.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
-    #  m1, m2 --  Dirichlet prior   ##  PRIORS
-    alp          = _N.ones(nStates)
-    priors = {"u_u" : u_u, "s2_u" : s2_u, "alp" : alp,
-              "u_x00" : u_x00, "s2_x00" : s2_x00}
+        if oo.nWins == 1:
+            mnCt= _N.mean(oo.y)
+        else:
+            mnCt_w1= _N.mean(oo.y[oo.t0:oo.t1, 0])
+            mnCt_w2= _N.mean(oo.y[oo.t0:oo.t1, 1])
 
-    ################# #generate initial values of parameters, time series
-    _d = _kfardat.KFARGauObsDat(1, N, 1)
-    _d.copyData(_N.empty(N+1), _N.empty(N+1))   #  dummy data copied
+        if oo.model=="negative binomial":
+            if oo.nWins == 1:
+                oo.kp   = (oo.y - oo.rn) *0.5
+                p0   = mnCt / (mnCt + oo.rn)       #  matches 1 - p of genearted
+            else:
+                oo.kp_w1   = (y[oo.t0:oo.t1, 0] - oo.rn[0]) *0.5
+                oo.kp_w2   = (y[oo.t0:oo.t1, 1] - oo.rn[1]) *0.5
+                p0_w1   = mnCt_w1 / (mnCt_w1 + oo.rn[0])
+                p0_w2   = mnCt_w2 / (mnCt_w2 + oo.rn[0])
+        else:
+            if oo.nWins == 1:
+                oo.kp  = oo.y - oo.rn*0.5
+                p0   = mnCt / float(oo.rn)       #  matches 1 - p of genearted
+            else:
+                oo.kp_w1  = oo.y[oo.t0:oo.t1, 0] - oo.rn[0]*0.5
+                oo.kp_w2  = oo.y[oo.t0:oo.t1, 1] - oo.rn[1]*0.5
+                p0_w1  = mnCt_w1 / float(oo.rn[0])       #  matches 1 - p of genearted
+                p0_w2  = mnCt_w2 / float(oo.rn[1])       #  matches 1 - p of genearted
+        #  gnerate approximate offset
+        if oo.nWins == 1:
+            u0  = _N.log(p0 / (1 - p0))    #  -1*u generated
+        else:
+            u0_w1  = _N.log(p0_w1 / (1 - p0_w1))    #  -1*u generated
+            u0_w2  = _N.log(p0_w2 / (1 - p0_w2))    #  -1*u generated
 
-    F0  = 0.9
-    q2  = 0.015
-    x00 = u_x00 + _N.sqrt(s2_x00)*_N.random.rand()
-    V00 = B_V00*_ss.invgamma.rvs(a_V00)
+        #######  PRIOR parameters
+        #  F0  --  flat prior
+        #a_F0         = -1
+        #  I think a prior assumption of relatively narrow and high F0 range
+        #  is warranted.  Small F0 is close to white noise, and as such can
+        #  be confused with the independent trial-to-trial count noise.Force
+        #  it to search for longer timescale correlations by setting F0 to be
+        #  fairly large.
+        oo.a_F0         = -1             #  prior assumption: slow fluctuation
+        oo.b_F0         =  1
+        #  u   --  Gaussian prior
+        oo.u_u        = _N.empty(oo.nStates * oo.nWins)
+        oo.s2_u       = _N.zeros((oo.nStates * oo.nWins, oo.nStates * oo.nWins))
+        # (win1 s1)    (win1 s2)    (win2 s1)    (win2 s2)
+        if oo.nWins == 1:
+            if oo.nStates == 2:
+                oo.u_u[:]     = (u0*1.2, u0*0.8)  #  mean of prior for u
+                _N.fill_diagonal(oo.s2_u, [0.5, 0.5])
+            else:
+                oo.u_u[:] = u0 + _N.random.randn(oo.nStates)
+                _N.fill_diagonal(oo.s2_u, _N.ones(oo.nStates)*0.5)
+        else:
+            if oo.nStates == 2:
+                oo.u_u[:]     = (u0_w1*1.2, u0_w1*0.8, u0_w2*1.2, u0_w2*0.8)
+                _N.fill_diagonal(oo.s2_u, [0.5, 0.5, 0.5, 0.5])
+            else:
+                oo.u_u[:]     = 0.5*(u0_w1 + u0_w1) + _N.random.randn(2*oo.nStates)
+                _N.fill_diagonal(oo.s2_u, _N.ones(oo.nStates*2)*0.5)
 
-    smp_F        = _N.zeros(NMC + burn)
-    smp_q2       = _N.zeros(NMC + burn)
-    if nWins == 1:
-        smp_u        = _N.zeros((NMC + burn, nStates))   
-    else:
-        #  uL_w1, uH_w1, uL_w2, uH_w2, ....
-        smp_u        = _N.zeros((NMC + burn, nWins, nStates))   
-    smp_m        = _N.zeros((NMC + burn, nStates))
+        #  m1, m2 --  Dirichlet prior   ##  PRIORS
+        oo.alp          = _N.ones(oo.nStates)
+        oo.priors = {"u_u" : oo.u_u, "s2_u" : oo.s2_u, "alp" : oo.alp,
+                     "u_x00" : oo.u_x00, "s2_x00" : oo.s2_x00}
 
-    smpx = _N.zeros(N + 1)   #  start at 0 + u
-    Bsmpx= _N.zeros((NMC, N + 1))
-    smpld_params = _N.empty((NMC + burn, 4 + 2*nStates))  #m1, m2, u1, u2
-    z   = _N.empty((NMC+burn, N+1, nStates), dtype=_N.int16)   #  augmented data
+        ################# #generate initial values of parameters, time series
+        oo._d = _kfardat.KFARGauObsDat(1, oo.N, 1, onetrial=True)
+        oo._d.copyData(_N.empty(oo.N+1), _N.empty(oo.N+1), onetrial=True)   #  dummy data copied
+
+        oo.F0  = 0.9
+        oo.q2  = 0.015
+        oo.x00 = oo.u_x00 + _N.sqrt(oo.s2_x00)*_N.random.rand()
+        oo.V00 = oo.B_V00*_ss.invgamma.rvs(oo.a_V00)
+
+        oo.smp_F        = _N.zeros(oo.NMC + oo.burn)
+        oo.smp_q2       = _N.zeros(oo.NMC + oo.burn)
+        if oo.nWins == 1:
+            oo.smp_u        = _N.zeros((oo.NMC + oo.burn, oo.nStates))   
+        else:
+            #  uL_w1, uH_w1, uL_w2, uH_w2, ....
+            oo.smp_u        = _N.zeros((oo.NMC + oo.burn, oo.nWins, oo.nStates))   
+        oo.smp_m        = _N.zeros((oo.NMC + oo.burn, oo.nStates))
+
+        oo.smpx = _N.zeros(oo.N + 1)   #  start at 0 + u
+        oo.Bsmpx= _N.zeros((oo.NMC, oo.N + 1))
+        oo.smpld_params = _N.empty((oo.NMC + oo.burn, 4 + 2*oo.nStates))  #m1, m2, u1, u2
+        oo.z   = _N.empty((oo.NMC+oo.burn, oo.N+1, oo.nStates), dtype=_N.int16)   #  augmented data
+
+        if oo.nWins == 1:
+            meanO = _N.mean(oo.y)
+        else:
+            meanO = _N.mean(oo.y[:, 0] + oo.y[:, 1])
+
+        oo.m     = _N.empty(oo.nStates)
+        #   m[0] is low state, m[1] is high state, z = (1, 0) indicates low state
+        if oo.nStates == 2:
+            for n in xrange(oo.N+1):
+                #oo.z[0, n, :] = int(oo.nStates * _N.random.rand())
+                oo.z[0, n, :] = oo.states[1]  #  low state
+                if ((oo.nWins == 1) and (oo.y[n] < meanO)) or \
+                   ((oo.nWins == 2) and (oo.y[n, 0] + oo.y[n, 1] < meanO)):
+                    oo.z[0, n, :] = oo.states[0]  #  low state
+        else:
+            for n in xrange(oo.N+1):
+                oo.z[0, n, :] = oo.states[int(_N.random.rand()*oo.nStates)]  #  
+
+        for ns in xrange(oo.nStates):
+            oo.m[ns]   = _N.sum(oo.z[0, :, ns]) / float(oo.N+1)
+
+        if oo.nWins == 1:
+            oo.u   = mvnrml(oo.u_u, oo.s2_u)
+
+            trm  = _N.empty(oo.nStates)
+
+            oo.us   = _N.dot(oo.z[0, :, :], oo.u)
+            oo.ws = lw.rpg_devroye(oo.rn, oo.smpx + oo.us, num=(oo.N + 1))
+        else:
+            oo.u_w1   = mvnrml(oo.u_u[0:oo.nStates], oo.s2_u[0:oo.nStates, 0:oo.nStates])
+            oo.u_w2   = mvnrml(oo.u_u[oo.nStates:2*oo.nStates], 
+                            oo.s2_u[oo.nStates:oo.nStates*2, oo.nStates:oo.nStates*2])
+
+            #  generate PG latents.  Depends on Xs and us, zs.  us1 us2 
+            oo.us_w1 = _N.dot(oo.z[0, :, :], oo.u_w1)  #  us now correct level for given state
+            oo.us_w2 = _N.dot(oo.z[0, :, :], oo.u_w2)
+            oo.ws_w1 = lw.rpg_devroye(oo.rn[0], oo.smpx + oo.us_w1, num=(oo.N + 1))
+            oo.ws_w2 = lw.rpg_devroye(oo.rn[1], oo.smpx + oo.us_w2, num=(oo.N + 1))
+
+            trm_w1  = _N.empty(oo.nStates)
+            trm_w2  = _N.empty(oo.nStates)
+
+    def gibbsSamp(self):  #########  GIBBS SAMPLER  ############
+        #####  MCMC start
+        oo   = self
+        trms = _N.empty(oo.nStates)
+        thr  = _N.empty(oo.nStates)
+
+        for it in xrange(1, oo.NMC+oo.burn):
+            if (it % 10) == 0:
+                print it
+
+            if oo.nWins == 1:
+                kw  = oo.kp / oo.ws            # convenience variables
+            else:
+                kw_w1  = oo.kp_w1 / oo.ws_w1
+                kw_w2  = oo.kp_w2 / oo.ws_w2
+
+            rnds =_N.random.rand(oo.N+1)
 
 
-    #######  Initialize z
-    if nStates == 2:
-        states = _N.array([[1, 0], [0, 1]])
-    elif nStates == 3:
-        states = _N.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+            #  generate latent zs.  Depends on Xs and PG latents
+            for n in xrange(oo.N+1):
+                thr[:] = 0
+                if oo.nWins == 1:
+                    #  for oo.nStates, there are oo.nStates - 1 thresholds
+                    for i in xrange(oo.nStates):
+                        trms[i] = -0.5*oo.ws[n]*((oo.u[i] + oo.smpx[n]) - kw[n]) * ((oo.u[i] + oo.smpx[n]) - kw[n])
+                else:
+                    for i in xrange(oo.nStates):
+                        #  rsd_w1 is 2-component vector (if oo.nStates == 2)
+                        trms[i] = -0.5*oo.ws_w1[n] * ((oo.u_w1[i] + oo.smpx[n] - kw_w1[n]) * (oo.u_w1[i] + oo.smpx[n] - kw_w1[n]) - (kw_w1[n]*kw_w1[n])) \
+                                  -0.5*oo.ws_w2[n] * ((oo.u_w2[i] + oo.smpx[n] - kw_w2[n]) * (oo.u_w2[i] + oo.smpx[n] - kw_w2[n]) - (kw_w2[n]*kw_w2[n]))
+                        # trm    = trm_w1 * trm_w2  #  trm is 2-component vector
+                for tp in xrange(oo.nStates):
+                    for bt in xrange(oo.nStates):
+                        #  we are calculating the denominators here
+                        #  if denominator -> inf, the thr for this term is 0
+                        #  practically no difference limiting denom to exp(700)
+                        expArg  = 700 if (trms[bt] - trms[tp] > 700) else (trms[bt] - trms[tp])
+                        thr[tp] += (oo.m[bt]/oo.m[tp])*_N.exp(expArg)
+                thr = 1 / thr
 
-    if nWins == 1:
-        meanO = _N.mean(y)
-    else:
-        meanO = _N.mean(y[:, 0] + y[:, 1])
+                oo.z[it, n, :] = oo.states[oo.nStates - 1]   #
+                thrC = 0
+                s = 0
+                while s < oo.nStates - 1:
+                    thrC += thr[s]
+                    if rnds[n] < thrC:
+                        oo.z[it, n, :] = oo.states[s]
+                        break
+                    s += 1
 
-    m     = _N.empty(nStates)
-    #   m[0] is low state, m[1] is high state, z = (1, 0) indicates low state
-    if nStates == 2:
-        for n in xrange(N+1):
-            z[0, n, :] = states[1]  #  low state
-            if ((nWins == 1) and (y[n] < meanO)) or \
-               ((nWins == 2) and (y[n, 0] + y[n, 1] < meanO)):
-                z[0, n, :] = states[0]  #  low state
-    else:
-        for n in xrange(N+1):
-            z[0, n, :] = states[int(_N.random.rand()*nStates)]  #  
-
-    for ns in xrange(nStates):
-        m[ns]   = _N.sum(z[0, :, ns]) / float(N+1)
-    
-    if nWins == 1:
-        u   = mvnrml(u_u, s2_u)
-
-        trm  = _N.empty(nStates)
-
-        us   = _N.dot(z[0, :, :], u)
-        ws = lw.rpg_devroye(rn, smpx + us, num=(N + 1))
-    else:
-        u_w1   = mvnrml(u_u[0:nStates], s2_u[0:nStates, 0:nStates])
-        u_w2   = mvnrml(u_u[nStates:2*nStates], 
-                        s2_u[nStates:nStates*2, nStates:nStates*2])
-
-        #  generate PG latents.  Depends on Xs and us, zs.  us1 us2 
-        us_w1 = _N.dot(z[0, :, :], u_w1)   #  either low or high u
-        us_w2 = _N.dot(z[0, :, :], u_w2)
-        ws_w1 = lw.rpg_devroye(rn[0], smpx + us_w1, num=(N + 1))
-        ws_w2 = lw.rpg_devroye(rn[1], smpx + us_w2, num=(N + 1))
-
-        trm_w1  = _N.empty(nStates)
-        trm_w2  = _N.empty(nStates)
+            if oo.nWins == 1:
+                oo.us   = _N.dot(oo.z[it, :, :], oo.u)
+                oo.ws = lw.rpg_devroye(oo.rn, oo.smpx + oo.us, num=(oo.N + 1))
+            else:
+                #  generate PG latents.  Depends on Xs and us, zs.  us1 us2 
+                oo.us_w1 = _N.dot(oo.z[it, :, :], oo.u_w1)   #  either low or high u
+                oo.us_w2 = _N.dot(oo.z[it, :, :], oo.u_w2)
+                oo.ws_w1 = lw.rpg_devroye(oo.rn[0], oo.smpx + oo.us_w1, num=(oo.N + 1))
+                oo.ws_w2 = lw.rpg_devroye(oo.rn[1], oo.smpx + oo.us_w2, num=(oo.N + 1))
 
 
+            oo._d.copyParams(_N.array([oo.F0]), oo.q2, onetrial=True)
+            #  generate latent AR state
+            oo._d.f_x[0, 0, 0]     = oo.x00
+            oo._d.f_V[0, 0, 0]     = oo.V00
+            if oo.nWins == 1:
+                _d.y[:]             = kp/ws - us
+                _d.Rv[:] =1 / ws   #  time dependent noise
+            else:
+                btm      = 1 / oo.ws_w1 + 1 / oo.ws_w2   #  size N
+                top = (oo.kp_w1/oo.ws_w1 - oo.us_w1) / oo.ws_w2 + (oo.kp_w2/oo.ws_w2 - oo.us_w2) / oo.ws_w1
+                oo._d.y[:] = top/btm
+                oo._d.Rv[:] =1 / (oo.ws_w1 + oo.ws_w2)   #  time dependent noise
 
-    
-#    Bsmpx, smp_F, smp_q2, smp_u, smp_m, z  = _ml.mcmcMixAR1(burn, NMC, y, nStates=nStates, nWins=nWins, n=rn, r=rn, model=model)
+            oo.smpx = _kfar.armdl_FFBS_1itr(oo._d)
+
+            #  p3 --  samp u here
+
+            dirArgs = _N.empty(oo.nStates)
+
+            for i in xrange(oo.nStates):
+                dirArgs[i] = oo.alp[i] + _N.sum(oo.z[it, :, i])
+            oo.m[:] = _N.random.dirichlet(dirArgs)
+
+            # # sample u
+            if oo.nWins == 1:
+                for st in xrange(oo.nStates):
+                    A = 0.5*(1/oo.s2_u[st,st] + _N.dot(oo.ws, oo.z[it, :, st]))
+                    B = oo.u_u[st]/oo.s2_u[st,st] + _N.dot(oo.kp - oo.ws*oo.smpx, oo.z[it, :, st])
+                    oo.u[st] = B/(2*A) + _N.sqrt(1/(2*A))*_N.random.randn()
+            else:
+                for st in xrange(oo.nStates):
+                    #  win1 for this state
+                    iw = st + 0 * oo.nStates
+
+                    A = 0.5*(1/oo.s2_u[iw,iw] + _N.dot(oo.ws_w1, oo.z[it, :, st]))
+                    B = oo.u_u[iw]/oo.s2_u[iw,iw] + _N.dot(oo.kp_w1-oo.ws_w1*oo.smpx, oo.z[it, :, st])
+                    oo.u_w1[st] = B/(2*A) + _N.sqrt(1/(2*A))*_N.random.randn()
+                    iw = st + 1 * oo.nStates
+
+                    A = 0.5*(1/oo.s2_u[iw,iw] + _N.dot(oo.ws_w2, oo.z[it, :, st]))
+                    B = oo.u_u[iw]/oo.s2_u[iw,iw] + _N.dot(oo.kp_w2-oo.ws_w2*oo.smpx, oo.z[it, :, st])
+                    oo.u_w2[st] = B/(2*A) + _N.sqrt(1/(2*A))*_N.random.randn()
+
+            # sample F0
+            F0AA = _N.dot(oo.smpx[0:-1], oo.smpx[0:-1])
+            F0BB = _N.dot(oo.smpx[0:-1], oo.smpx[1:])
+
+            F0std= _N.sqrt(oo.q2/F0AA)
+            F0a, F0b  = (oo.a_F0 - F0BB/F0AA) / F0std, (oo.b_F0 - F0BB/F0AA) / F0std
+            oo.F0=F0BB/F0AA+F0std*_ss.truncnorm.rvs(F0a, F0b)
+
+            #####################    sample q2
+            a = oo.a_q2 + 0.5*(oo.N+1)  #  N + 1 - 1
+            rsd_stp = oo.smpx[1:] - oo.F0*oo.smpx[0:-1]
+            BB = oo.B_q2 + 0.5 * _N.dot(rsd_stp, rsd_stp)
+            oo.q2 = _ss.invgamma.rvs(a, scale=BB)
+            # #####################    sample x00
+            mn  = (oo.u_x00*oo.V00 + oo.s2_x00*oo.x00) / (oo.V00 + oo.s2_x00)
+            vr = (oo.V00*oo.s2_x00) / (oo.V00 + oo.s2_x00)
+            oo.x00 = mn + _N.sqrt(vr)*_N.random.randn()
+            #####################    sample V00
+            aa = oo.a_V00 + 0.5
+            BB = oo.B_V00 + 0.5*(oo.smpx[0] - oo.x00)*(oo.smpx[0] - oo.x00)
+            oo.V00 = _ss.invgamma.rvs(aa, scale=BB)
+
+            oo.smp_F[it]       = oo.F0
+            oo.smp_q2[it]      = oo.q2
+            if oo.nWins == 1:
+                oo.smp_u[it, :] = oo.u
+            else:
+                oo.smp_u[it, 0, :] = oo.u_w1
+                oo.smp_u[it, 1, :] = oo.u_w2
+            oo.smp_m[it, :]    = oo.m
+
+            if it >= oo.burn:
+                oo.Bsmpx[it-oo.burn, :] = oo.smpx
+
 

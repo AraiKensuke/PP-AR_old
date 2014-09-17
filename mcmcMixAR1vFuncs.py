@@ -8,7 +8,7 @@ import re as _re
 import os
 
 
-def loadDat(setname, model, nStates, nWins, rn, t0=0, t1=None):  ##################################
+def loadDat(setname, model, nStates, nWins, rn, t0=0, t1=None):  ##########
     #  READ parameters of generative model from file
     #  contains N, k, singleFreqAR, u, beta, dt, stNz
     x_st_cnts = _N.loadtxt(resFN("cnt_data.dat", dir=setname))

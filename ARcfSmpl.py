@@ -126,7 +126,7 @@ def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, ac
 
         U   = _N.dot(J, _N.einsum("tij,tjk->ik", iH, mu))
 
-        bBdd, iBdd, mags, vals = _arl.ARevals(U[:, 0])
+        #bBdd, iBdd, mags, vals = _arl.ARevals(U[:, 0])
         #print "U"
         #print U[:, 0]
         #print ":::::: *****"

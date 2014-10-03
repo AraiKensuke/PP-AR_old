@@ -380,23 +380,19 @@ class mcmcMixAr1v:
                     
                     xim[i] = _N.mean(oo.smpx[indsL[i]])  #  mean latent state in state i
                     yim[i] = _N.mean(oo.y[indsL[i]])  #  mean cts for state i
+                    ui[i]  = xim[i] - _N.log(oo.rn[0] / yim[i] - 1) # mean of proposal density
                     #pu[i]   = Mk[i] / oo.rn  # don't need this, but used in derivation
                 #### MCMC
-                for ii in xrange(30):
+                for ii in xrange(100):
                     #  sample new ui
                     for i in xrange(oo.nStates):
-                        p0[i] = 1 / (1 + _N.exp(-oo.u[i] - xim[i]))
-
-                    lam = _N.sum(occi*(Mk/p0))
-                    print lam
-                    rv = _ss.poisson(lam)
-                    n1[0] = oo.trPoi(lam, a=nmin, b=max(iMk100))   #  mean is p0/Mk
-
-                    for i in xrange(oo.nStates):
-                        ui[i]  = xim[i] - _N.log(n1[0] / yim[i] - 1) # mean of proposal density
                         u1[i] = ui[i] + stdu * _N.random.randn() # sample ui
                         p1[i] = 1 / (1 + _N.exp(-u1[i] - xim[i]))
+                        p0[i] = 1 / (1 + _N.exp(-oo.u[i] - xim[i]))
+                    lam = _N.sum(occi*(Mk/p1))
+                    rv = _ss.poisson(lam)
 
+                    n1[0] = oo.trPoi(lam, a=nmin, b=max(iMk100))   #  mean is p0/Mk
                     oo.Llklhds(indsL, oo.y, n1, p1, oo.rn, p0, lFlB)
                     #dp[0]   = (p1 - pu)**2;  dp[1]   = (p0 - pu)**2  # p1, pu multi-dim
                     du[0]   = (u1 - ui)**2;  du[1]   = (oo.u - ui)**2  # p1, pu multi-dim

@@ -32,11 +32,11 @@ import os
 Bsmpx         = None
 smp_u         = None
 smp_aS        = None
-smp_B         = None
 smp_q2        = None
 smp_x00       = None
 #  store samples of
 kntsPSTH      = None
+dfPSTH        = None
 allalfas      = None
 uts           = None
 wts           = None
@@ -70,7 +70,7 @@ _d            = None
 
 fSigMax       = 500.
 freq_lims     = [[1 / .85, fSigMax]]
-ifs           = [(30. / fSigMax) * _N.pi]    #  initial values
+ifs           = [(20. / fSigMax) * _N.pi]    #  initial values
 
 #  u   --  Gaussian prior
 u_u          = 0;             s2_u         = 5
@@ -82,7 +82,7 @@ u_x00        = None;          s2_x00       = None
 def run(runDir=None, useTrials=None):
     #_lfc.init()
     global setname, _t0, _t1, _d, Bsmpx, uts, wts  #  only these that we are setting inside
-    global allalfas, smp_B, smp_aS, smp_q2
+    global allalfas, smp_aS, smp_q2, smp_u, B, aS, dfPSTH
     global x
     setname = os.getcwd().split("/")[-1]
 
@@ -108,11 +108,11 @@ def run(runDir=None, useTrials=None):
 
     print setname
     l2 = loadL2(setname, fn=histFN)
-    if (l2 != None) and (len(l2.shape) == 0):
+    if (l2 is not None) and (len(l2.shape) == 0):
         l2 = _N.array([l2])
 
     #  if a trial requested in useTrials is not in kpTrl, warn user
-    if useTrials == None:
+    if useTrials is None:
         useTrials = range(TR)
     useTrialsFltrd = []
     for utrl in useTrials:
@@ -130,8 +130,11 @@ def run(runDir=None, useTrials=None):
     TR    = len(useTrialsFltrd)
 
     B    = None
+    aS   = None
     if bpsth:
         B = patsy.bs(_N.linspace(0, (_t1 - _t0)*dt, (_t1-_t0)), df=dfPSTH, knots=kntsPSTH, include_intercept=True)    #  spline basis
+        if dfPSTH is None:
+            dfPSTH = B.shape[1] 
         B = B.T    #  My convention for beta
         aS = _N.linalg.solve(_N.dot(B, B.T), _N.dot(B, _N.ones(_t1 - _t0)*_N.mean(u)))
 
@@ -174,6 +177,8 @@ def run(runDir=None, useTrials=None):
     pgs          = _N.empty((TR, burn + NMC, N+1))
     fs           = _N.empty((burn + NMC, C))
     amps         = _N.empty((burn + NMC, C))
+    if bpsth:
+        smp_aS        = _N.zeros((burn + NMC, dfPSTH))
 
     radians      = buildLims(Cn, freq_lims, nzLimL=1.)
     AR2lims      = 2*_N.cos(radians)
@@ -213,7 +218,7 @@ def run(runDir=None, useTrials=None):
     t1    = _tm.time()
 
     # if model == "bernoulli":
-    F_alfa_rep = gibbsSampH(burn, NMC, AR2lims, F_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS, q2, uts, wts, kp, ws, smpx, Bsmpx, smp_u, smp_q2, allalfas, fs, amps, ranks, priors, ARo, l2, prior=use_prior, aro=ARord)
+    F_alfa_rep = gibbsSampH(burn, NMC, AR2lims, F_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS, q2, uts, wts, kp, ws, smpx, Bsmpx, smp_u, smp_q2, smp_aS, allalfas, fs, amps, ranks, priors, ARo, l2, prior=use_prior, aro=ARord)
 
     t2    = _tm.time()
     print (t2-t1)

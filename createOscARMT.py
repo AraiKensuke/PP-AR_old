@@ -81,9 +81,9 @@ def create(setname):
     _plt.savefig(resFN("spksPT", dir=setname))
     _plt.close()
 
-    if (lambda2 == None) and (absrefr > 0):
+    if (lambda2 is None) and (absrefr > 0):
         lambda2 = _N.array([0.0001] * absrefr)
-    if lambda2 != None:
+    if lambda2 is not None:
         _N.savetxt(resFN("lambda2.dat", dir=setname), lambda2, fmt="%.7f")
 
     #  if we want to double bin size

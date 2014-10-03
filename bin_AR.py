@@ -52,6 +52,7 @@ def create(setname):
     data= _N.empty((TRIALS, 2 + nWins))   #  x, state, spkct x 
 
     x,y   = _kfl.createDataAR(TRIALS + trim, phi, e, e, trim=trim)
+
     if upx == None:
         upx   = _N.zeros(TRIALS)
 
@@ -99,5 +100,9 @@ def create(setname):
     _plt.savefig(resFN("true_hists", dir=setname, create=True))
     _plt.close()
 
-    _N.savetxt(resFN("cnt_data.dat", dir=setname, create=True), data, fmt="%.5f %d %d %d")
+    txtfmt = "%.5f %d "
+    for nw in xrange(nWins):
+        txtfmt += "%d "
+
+    _N.savetxt(resFN("cnt_data.dat", dir=setname, create=True), data, fmt=txtfmt)
     _N.savetxt(resFN("mH.dat", dir=setname, create=True), data, fmt="%.3f")

@@ -10,7 +10,6 @@ from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
 import logerfc_ as _lfc
 
 from ARcfSmpl import ARcfSmpl, FilteredTimeseries
-import matplotlib.pyplot as _plt
 
 def gibbsSampH(burn, NMC, AR2lims, vF_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS, q2, uts, wts, kp, ws, smpx, Bsmpx, smp_u, smp_q2, smp_aS, allalfas, fs, amps, ranks, priors, ARo, lm2, prior=_cd.__COMP_REF__, aro=_cd.__NF__, ID_q2=True):  ##################################
     x00         = _N.array(smpx[:, 2])
@@ -46,7 +45,7 @@ def gibbsSampH(burn, NMC, AR2lims, vF_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS,
     it    = 0
 
     lrn   = _N.empty((TR, _d.N+1))
-    if lm2 is None:
+    if lm2 == None:
         lrn[:] = 1
     else:
         for tr in xrange(_d.TR):
@@ -184,7 +183,6 @@ def gibbsSampH(burn, NMC, AR2lims, vF_alfa_rep, R, Cs, Cn, TR, rn, _d, u, B, aS,
     pool.close()
     return _N.array(F_alfa_rep)
 
-"""
 def build_lrnLambda2(N, y, lmbda2):
     #  lmbda2 is short snippet of after-spike depression behavior
     lrn = _N.ones(N)
@@ -233,4 +231,4 @@ def build_lrnLambda2(N, y, lmbda2):
         lrn[i] *= lmbd
     return lrn
 
-
+"""

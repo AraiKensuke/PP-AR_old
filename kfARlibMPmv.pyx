@@ -1,8 +1,8 @@
 import numpy as _N
 cimport numpy as _N
-import kfcomMP as _kfcom
+import kfcomMPmv as _kfcom
 import time as _tm
-import cython
+cimport cython
 
 import warnings
 warnings.filterwarnings("error")
@@ -27,11 +27,10 @@ f1
 zr       amp. at band stop
 """
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
-
 ########################   FFBS
 #def armdl_FFBS_1itrMP(y, Rv, F, q2, N, k, fx00, fV00):   #  approximation
+@cython.boundscheck(False)
+@cython.wraparound(False)
 def armdl_FFBS_1itrMP(args):   #  approximation
     """
     for Multiprocessor, aguments need to be put into a list.
@@ -41,7 +40,7 @@ def armdl_FFBS_1itrMP(args):   #  approximation
     F  = args[2]
     q2 = args[3]
     N  = args[4] 
-    k  = args[5]
+    cdef _N.intp_t k  = args[5]
     fx00 = args[6]
     fV00 = args[7]
 
@@ -79,14 +78,30 @@ def FFdv(y, Rv, N, k, F, GQGT, fx, fV):   #  approximate KF    #  k==1,dynamic v
     """
     temporary storage
     """
-    #Hpx   = _N.empty((1, 1))
-    KH    = _N.empty((k, k))
-    IKH   = _N.empty((k, k))
+    IKH   = _N.eye(k)        #  only contents of first column modified
     VFT   = _N.empty((k, k))
     FVFT  = _N.empty((k, k))
 
+    #  need memory views for these
+    #  F, fx, px need memory views
+    #  K, KH
+    #  IKH
+    
+    cdef double[:, ::1] Fmv       = F
+    cdef double[:, :, ::1] fxmv   = fx
+    cdef double[:, :, ::1] pxmv   = px
+    cdef double[:, :, ::1] Kmv    = K
+    cdef double[:, ::1] IKHmv     = IKH
+    cdef _N.intp_t n, i
+
+    cdef double dd = 0
     for n from 1 <= n < N + 1:
-        _N.dot(F, fx[n - 1], out=px[n])
+        dd = 0
+        for i in xrange(1, k):#  use same loop to copy and do dot product
+            dd += Fmv[0, i]*fxmv[n-1, i, 0]
+            pxmv[n, i, 0] = fxmv[n-1, i-1, 0]
+        pxmv[n, 0, 0] = dd + Fmv[0, 0]*fxmv[n-1, 0, 0]
+
         _N.dot(fV[n - 1], F.T, out=VFT)
         _N.dot(F, VFT, out=FVFT)
         _N.add(FVFT, GQGT, out=pV[n])
@@ -94,14 +109,14 @@ def FFdv(y, Rv, N, k, F, GQGT, fx, fV):   #  approximate KF    #  k==1,dynamic v
         _N.dot(pV[n], mat*H.T, out=K[n])   #  vector
 
         # px + K(y - o - Hpx)  K column vec, (y-o-Hpx) is scalar
-        #_N.dot(H, px[n], out=Hpx)
-        #KyHpx = K[n]* (y[n] - Hpx[0, 0])
-        KyHpx = K[n]* (y[n] - px[n, 0, 0])
+        KyHpx = K[n]* (y[n] - pxmv[n, 0, 0])
         _N.add(px[n], KyHpx, out=fx[n])
 
-        # (I - KH)pV
-        _N.dot(K[n], H, out=KH)
-        _N.subtract(Ik, KH, out=IKH)
+        # (I - KH), KH is zeros except first column
+        IKHmv[0, 0] = 1 - Kmv[n, 0, 0]
+        for i in xrange(1, k):
+            IKHmv[i, 0] = -Kmv[n, i, 0]
+        # (I - KH)
         _N.dot(IKH, pV[n], out=fV[n])
 
 def FF1dv(_d, offset=0):   #  approximate KF    #  k==1,dynamic variance

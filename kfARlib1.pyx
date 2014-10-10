@@ -12,13 +12,17 @@ f0       bandpass
 f1
 zr       amp. at band stop
 """
+cdef extern from "math.h":
+    double exp(double)
+    double sqrt(double)
+    double log(double)
+    double abs(double)
 
 ########################   FFBS
 def armdl_FFBS_1itr(_d):   #  approximation
     ##########  FF
     FF1dv(_d)
-    smpls = BS1(_d)
-    return smpls
+    return BS1(_d)
 
 def FF1dv(_d):   #  approximate KF    #  k==1,dynamic variance
     GQGT    = _d.G[0,0]*_d.G[0, 0] * _d.Q
@@ -32,8 +36,7 @@ def FF1dv(_d):   #  approximate KF    #  k==1,dynamic variance
 
     #  do this until p_V has settled into stable values
 
-    #for n from 1 <= n < _d.N + 1:
-    for n in xrange(1, _d.N + 1):
+    for n from 1 <= n < _d.N + 1:
         px[n,0,0] = _d.F[0,0] * fx[n - 1,0,0]
         pV[n,0,0] = _d.F[0,0] * fV[n - 1,0,0] * _d.F[0,0] + GQGT
 
@@ -58,7 +61,8 @@ def BS1(_d):
     iGQGT= 1./GQGT
 
     FTiGQGTF = iGQGT*F02
-    for n in xrange(_d.N - 1, -1, -1):
+    #for n in xrange(_d.N - 1, -1, -1):
+    for n from _d.N - 1 >= n > -1:
         Sig  = 1/(FTiGQGTF + 1/(fV[n,0,0]))
         p1   = fV[n,0,0]* F0
         p2   = 1/(F02*fV[n,0,0] +GQGT)

@@ -160,8 +160,10 @@ def plot_cmptSpksAndX(N, z, x, y):  #  a component
 
 def loadL2(setname, fn="lambda2.dat"):
     fn = resFN(fn, dir=setname)
+    print fn
 
     if os.access(fn, os.F_OK):
+        print "i am here"
         return _N.loadtxt(fn)
     return None
 

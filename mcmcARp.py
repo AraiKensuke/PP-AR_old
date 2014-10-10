@@ -1,9 +1,20 @@
+"""
+timing
+1  0.00005
+2  0.00733
+2a 0.08150
+2b 0.03315
+3  0.11470
+FFBS  1.02443
+5  0.03322
+"""
 from kflib import createDataAR
 import numpy as _N
 import patsy
 import re as _re
 from filter import bpFilt, lpFilt, gauKer
 
+import scipy.sparse.linalg as _ssl
 import scipy.stats as _ss
 from kassdirs import resFN, datFN
 
@@ -16,7 +27,8 @@ import utilities as _U
 import numpy.polynomial.polynomial as _Npp
 import time as _tm
 import ARlib as _arl
-import kfARlibMP as _kfar
+import kfARlibMPmv as _kfar
+#import kfARlibMP as _kfar
 import LogitWrapper as lw
 from   gibbsMP import gibbsSampH, build_lrnLambda2
 from ARcfSmpl import ARcfSmpl, FilteredTimeseries
@@ -33,6 +45,7 @@ import os
 
 class mcmcARp:
     #  Simulation params
+    processes     = 1
     setname       = None
     rs            = -1
     burn          = None;    NMC           = None
@@ -354,38 +367,44 @@ class mcmcARp:
 
     def gibbsSamp(self):  ###########################  GIBBSSAMPH
         oo          = self
+        ooTR        = oo.TR
+        ook         = oo.k
+        ooNMC       = oo.NMC
+        ooN         = oo.N
         oo.x00         = _N.array(oo.smpx[:, 2])
-        oo.V00         = _N.zeros((oo.TR, oo._d.k, oo._d.k))
+        oo.V00         = _N.zeros((ooTR, ook, ook))
 
-        ARo   = _N.empty((oo.TR, oo._d.N+1))
-
+        ARo   = _N.empty((ooTR, oo._d.N+1))
+        
+        kpOws = _N.empty((ooTR, ooN+1))
         alpR   = oo.F_alfa_rep[0:oo.R]
         alpC   = oo.F_alfa_rep[oo.R:]
+        Bii    = _N.zeros((ooN+1, ooN+1))
+        
         #alpC.reverse()
         #  F_alfa_rep = alpR + alpC  already in right order, no?
 
         if oo.B is not None:
-            psthOffset = _N.empty((oo.TR, oo.N+1))
-            Wims         = _N.empty((oo.TR, oo.N+1, oo.N+1))
-            Oms          = _N.empty((oo.TR, oo.N+1))
-            smWimOm      = _N.zeros(oo.N + 1)
+            psthOffset = _N.empty((ooTR, ooN+1))
+            Wims         = _N.empty((ooTR, ooN+1, ooN+1))
+            Oms          = _N.empty((ooTR, ooN+1))
+            smWimOm      = _N.zeros(ooN + 1)
             bConstPSTH = False
         else:
             bConstPSTH  = True
-            psthOffset = _N.empty(oo.TR)
+            psthOffset = _N.empty(ooTR)
 
         it    = 0
 
-        oo.lrn   = _N.empty((oo.TR, oo.N+1))
+        oo.lrn   = _N.empty((ooTR, ooN+1))
         if oo.l2 is None:
             oo.lrn[:] = 1
         else:
-            for tr in xrange(oo.TR):
-                oo.lrn[tr] = build_lrnLambda2(oo.N+1, oo._d.dN[tr], oo.l2)
+            for tr in xrange(ooTR):
+                oo.lrn[tr] = build_lrnLambda2(ooN+1, oo._d.dN[tr], oo.l2)
 
-
-        pool = Pool()
-        while (it < oo.NMC + oo.burn - 1):
+        pool = Pool(processes=oo.processes)
+        while (it < ooNMC + oo.burn - 1):
             t1 = _tm.time()
             it += 1
             print it
@@ -394,7 +413,7 @@ class mcmcARp:
             #  generate latent AR state
             oo._d.f_x[:, 0, :, 0]     = oo.x00
             if it == 1:
-                for m in xrange(oo.TR):
+                for m in xrange(ooTR):
                     oo._d.f_V[m, 0]     = oo.s2_x00
             else:
                 oo._d.f_V[:, 0]     = oo._d.f_V[:, 1]
@@ -403,66 +422,76 @@ class mcmcARp:
                 psthOffset[:] = oo.u[:]
             else:
                 BaS = _N.dot(oo.B.T, oo.aS)
-                for m in xrange(oo.TR):
+                for m in xrange(ooTR):
                     psthOffset[m] = BaS
             ###  PG latent variable sample
 
-            tPG1 = _tm.time()
-            for m in xrange(oo.TR):
+            #tPG1 = _tm.time()
+            for m in xrange(ooTR):
                 _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(oo.smpx[m, 2:, 0] + psthOffset[m])), out=ARo[m])   #  history Offset
 
-                lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + psthOffset[m] + ARo[m], out=oo.ws[m])
-            if oo.TR == 1:
-                oo.ws   = oo.ws.reshape(1, oo.N+1)
+                lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + psthOffset[m] + ARo[m], out=oo.ws[m])  ######  devryoe
+            if ooTR == 1:
+                oo.ws   = oo.ws.reshape(1, ooN+1)
+            kpOws = oo.kp / oo.ws
 
             #  Now that we have PG variables, construct Gaussian timeseries
             #  ws(it+1)    using u(it), F0(it), smpx(it)
-            for m in xrange(oo.TR):
-                oo._d.y[m]             = oo.kp[m]/oo.ws[m] - psthOffset[m] - ARo[m]
+            #for m in xrange(ooTR):
+                #oo._d.y[m]             = oo.kp[m]/oo.ws[m] - psthOffset[m] - ARo[m]
+            #    oo._d.y[m]             = kpOws[m] - psthOffset[m] - ARo[m]
+            oo._d.y = kpOws - psthOffset - ARo
             oo._d.copyParams(oo.F0, oo.q2)
             oo._d.Rv[:, :] =1 / oo.ws[:, :]   #  time dependent noise
 
-            tPG2 = _tm.time()
+            #tPG2 = _tm.time()
             if bConstPSTH:
-                for m in xrange(oo.TR):
+                for m in xrange(ooTR):
                     A    = 0.5*(1./oo.s2_u + _N.sum(oo.ws[m]))
                     B    = oo.u_u/oo.s2_u + _N.sum(oo.kp[m] - oo.ws[m]*(oo.smpx[m, 2:, 0] + ARo[m]))
                     oo.u[m] = B/(2*A) + _N.sqrt(1/(2*A))*_N.random.randn()
                     oo.smp_u[m, it] = oo.u[m]
             else:
+                #tPSTH1 = _tm.time()
                 smWimOm[:] = 0
                 #  cov matrix, prior of aS 
                 iD = _N.diag(_N.ones(oo.B.shape[0])*0.2)
-                for m in xrange(oo.TR):
+                for m in xrange(ooTR):
                     Wims[m] = _N.diag(oo.ws[m])
-                    Oms[m]  = oo.kp[m] / oo.ws[m] - oo.smpx[m, 2:, 0] - ARo[m]
-                    smWimOm[:] += _N.dot(Wims[m], Oms[m])
-                #Bi = _N.sum(Wims[:, :], axis=0)
-                Bi = _N.sum(Wims, axis=0)
-                A  = _N.dot(_N.linalg.inv(Bi), smWimOm)
-                #  now sample 
+                    Oms[m]  = kpOws[m] - oo.smpx[m, 2:, 0] - ARo[m]
+                    smWimOm += _N.dot(Wims[m], Oms[m])
+                #tPSTH2 = _tm.time()
+                Bi = _N.sum(Wims, axis=0)   #  Bi is diagonal
+                #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
+                _N.fill_diagonal(Bii, 1./_N.diagonal(Bi))
+                A  = _N.dot(Bii, smWimOm)  #  nondiag of 1./Bi are inf
+                #A  = _N.dot(_N.linalg.inv(Bi), smWimOm)  #  nondiag of 1./Bi are inf
+
+                #  now sample
                 iVAR = _N.dot(oo.B, _N.dot(Bi, oo.B.T)) + iD
                 VAR  = _N.linalg.inv(iVAR)
                 Mn   = _N.dot(VAR, _N.dot(oo.B, _N.dot(Bi, A.T)))# + 0)
                 #  multivar_normal returns a row vector
+
                 aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
 
                 oo.smp_aS[it, :] = aS
+                #tPSTH3 = _tm.time()
 
             #  _d.F, _d.N, _d.ks, 
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
 
 
-            tkf1  = _tm.time()
+            #tkf1  = _tm.time()
             sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
-            tkf2  = _tm.time()
+            #tkf2  = _tm.time()
 
-            for m in xrange(oo.TR):
+            for m in xrange(ooTR):
                 oo.smpx[m, 2:] = sxv[m][0]
                 oo._d.f_x[m] = sxv[m][1]
                 oo._d.f_V[m] = sxv[m][2]
-                oo.smpx[m, 1, 0:oo.k-1]   = oo.smpx[m, 2, 1:]
-                oo.smpx[m, 0, 0:oo.k-2]   = oo.smpx[m, 2, 2:]
+                oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                 oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
 
             # sample F0
@@ -473,14 +502,14 @@ class mcmcARp:
             #  wts.shape = (TR, burn+NMC, C, _d.N+1+2, 1)
             #  ut.shape = (TR, C, _d.N+1+1, 1)
 
-            ARcfSmpl(oo.lfc, oo.N+1, oo.k, oo.AR2lims, oo.smpx[:, 1:, 0:oo.k], oo.smpx[:, :, 0:oo.k-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)  
+            ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)  
             oo.F_alfa_rep = alpR + alpC   #  new constructed
             prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
-            ut, wt = FilteredTimeseries(oo.N+1, oo.k, oo.smpx[:, 1:, 0:oo.k], oo.smpx[:, :, 0:oo.k-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d)
+            ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d)
             #ranks[it]    = rank
             oo.allalfas[it] = oo.F_alfa_rep
 
-            for m in xrange(oo.TR):
+            for m in xrange(ooTR):
                 oo.wts[m, it, :, :]   = wt[m, :, :, 0]
                 oo.uts[m, it, :, :]   = ut[m, :, :, 0]
                 oo.amps[it, :]  = amp
@@ -493,18 +522,18 @@ class mcmcARp:
             #  u(it+1)    using ws(it+1), F0(it), smpx(it+1), ws(it+1)
 
             if oo.ID_q2:
-                for m in xrange(oo.TR):
+                for m in xrange(ooTR):
                     #####################    sample q2
-                    a = oo.a_q2 + 0.5*(oo.N+1)  #  N + 1 - 1
+                    a = oo.a_q2 + 0.5*(ooN+1)  #  N + 1 - 1
                     rsd_stp = oo.smpx[m, 3:,0] - _N.dot(oo.smpx[m, 2:-1], oo.F0).T
                     BB = oo.B_q2 + 0.5 * _N.dot(rsd_stp, rsd_stp.T)
                     oo.q2[m] = _ss.invgamma.rvs(a, scale=BB)
                     oo.x00[m]      = oo.smpx[m, 2]*0.1
                     oo.smp_q2[m, it]= oo.q2[m]
             else:
-                oo.a2 = oo.a_q2 + 0.5*(oo.TR*oo.N + 2)  #  N + 1 - 1
+                oo.a2 = oo.a_q2 + 0.5*(ooTR*ooN + 2)  #  N + 1 - 1
                 BB2 = oo.B_q2
-                for m in xrange(oo.TR):
+                for m in xrange(ooTR):
                     #   set x00 
                     oo.x00[m]      = oo.smpx[m, 2]*0.1
 
@@ -516,11 +545,13 @@ class mcmcARp:
             oo.smp_u[:, it] = oo.u
             oo.smp_q2[:, it]= oo.q2
             t2 = _tm.time()
-            print "1  %.5f" % (tPG1 - t1)
-            print "2  %.5f" % (tPG2 - tPG1)
-            print "3  %.5f" % (tkf1 - tPG2)
-            print "4  %.5f" % (tkf2 - tkf1)
-            print "5  %.5f" % (t2 - tkf2)
+            # print "1  %.5f" % (tPG1 - t1)
+            # print "2  %.5f" % (tPG2 - tPG1)
+            # print "2a %.5f" % (tPSTH2 - tPSTH1)
+            # print "2b %.5f" % (tPSTH3 - tPSTH2)
+            # print "3  %.5f" % (tkf1 - tPG2)
+            # print "4  %.5f" % (tkf2 - tkf1)
+            # print "5  %.5f" % (t2 - tkf2)
             print "----------------    %.5f" % (t2-t1)
 
         pool.close()

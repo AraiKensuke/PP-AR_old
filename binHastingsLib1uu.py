@@ -69,10 +69,8 @@ def MCMC(burn, NMC, cts, ns, us, order, pcdlog):
             lnPR = 0  #  n0 == n1
         else:
             if n0 > n1: # range(n1+1, n0+1)
-                #lnPR = (n1-n0) * _N.log(lmd) + _N.sum(pcdlog[range(n1+1, n0+1)])
                 lnPR = (n1-n0) * _N.log(lmd) + _N.sum(pcdlog[rngs[n1+1:n0+1]])
             else:
-                #lnPR = (n1-n0) * _N.log(lmd) - _N.sum(pcdlog[range(n0+1, n1+1)])
                 lnPR = (n1-n0) * _N.log(lmd) - _N.sum(pcdlog[rngs[n0+1:n1+1]])
         lPR = lnPR + lpPR
         if lPR > 50:

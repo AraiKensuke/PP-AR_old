@@ -9,23 +9,6 @@ import numpy as _N
 #from ARcfSmplFuncs import ampAngRep, randomF, dcmpcff, betterProposal
 from ARcfSmplFuncs import ampAngRep, dcmpcff, betterProposal
 
-def ARcfSimple(N, k, smpx, q2):
-    Y    = smpx[1:N, 0].reshape(N-1, 1)    #  a column vector
-    X    = smpx[0:N-1, :]                  #  a column vector
-
-    XTX  = _N.dot(X.T, X)
-    iXTX = _N.linalg.inv(XTX)
-    XTY  = _N.dot(X.T, Y)
-    Fm   = _N.dot(iXTX, XTY)
-
-    Sg   = q2 * iXTX
-    bBdd = False
-    while not bBdd:
-        F0   = _N.random.multivariate_normal(Fm[:, 0], Sg, size=1)[0, :]
-        bBdd, iBdd, mags, vals = _arl.ARevals(F0)
-
-    print ampAngRep(vals)
-    return F0
 
 def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, accepts=1, prior=_cd.__COMP_REF__, aro=_cd.__NF__):
     C = Cs + Cn
@@ -148,6 +131,8 @@ def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, ac
                 bSimpOK = True
 
         if not bSimpOK:
+            ###  This case is still fairly inexpensive.  
+            print "!!  not bSimpOK"
             iAcc = 0
 
             vPr1  = J[0, 0] - (J[0, 1]*J[0, 1])   / J[1, 1]   # known as Mj

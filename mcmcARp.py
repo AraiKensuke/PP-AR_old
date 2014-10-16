@@ -30,7 +30,6 @@ import ARlib as _arl
 import kfARlibMPmv as _kfar
 #import kfARlibMP as _kfar
 import LogitWrapper as lw
-from   gibbsMP import gibbsSampH, build_lrnLambda2
 from ARcfSmpl import ARcfSmpl, FilteredTimeseries
 
 import logerfc as _lfc
@@ -78,6 +77,10 @@ class mcmcARp:
     #  LFC
     lfc           = None
 
+    ####  TEMPORARY
+    Bi            = None
+    psthOffset    = None
+
     #  input data
     histFN        = None
     y             = None
@@ -112,6 +115,8 @@ class mcmcARp:
     a_q2         = 1e-1;          B_q2         = 1e-6
     #  initial states
     u_x00        = None;          s2_x00       = None
+    #  initial states
+    u_a          = 0;             s2_a         = None
 
     def __init__(self):
         self.lfc         = _lfc.logerfc()
@@ -216,7 +221,6 @@ class mcmcARp:
         oo.TR    = len(oo.useTrials)
 
         ####  
-        print "here"
         oo.l2 = loadL2(oo.setname, fn=oo.histFN)
 
         """
@@ -332,6 +336,9 @@ class mcmcARp:
         oo.smp_u[:, 0] = oo.u
         oo.smp_q2[:, 0]= oo.q2
 
+        if oo.bpsth:
+            oo.u_a            = _N.ones(oo.dfPSTH)*_N.mean(oo.u)
+
         """
         _plt.ioff()
         for m in xrange(oo.TR):
@@ -392,7 +399,7 @@ class mcmcARp:
             bConstPSTH = False
         else:
             bConstPSTH  = True
-            psthOffset = _N.empty(ooTR)
+            psthOffset = _N.empty((ooTR, ooN+1))
 
         it    = 0
 
@@ -401,7 +408,7 @@ class mcmcARp:
             oo.lrn[:] = 1
         else:
             for tr in xrange(ooTR):
-                oo.lrn[tr] = build_lrnLambda2(ooN+1, oo._d.dN[tr], oo.l2)
+                oo.lrn[tr] = oo.build_lrnLambda2(tr)
 
         pool = Pool(processes=oo.processes)
         while (it < ooNMC + oo.burn - 1):
@@ -419,7 +426,8 @@ class mcmcARp:
                 oo._d.f_V[:, 0]     = oo._d.f_V[:, 1]
 
             if bConstPSTH:
-                psthOffset[:] = oo.u[:]
+                for m in xrange(ooTR):
+                    psthOffset[m, :] = oo.u[m]
             else:
                 BaS = _N.dot(oo.B.T, oo.aS)
                 for m in xrange(ooTR):
@@ -431,6 +439,25 @@ class mcmcARp:
                 _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(oo.smpx[m, 2:, 0] + psthOffset[m])), out=ARo[m])   #  history Offset
 
                 lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + psthOffset[m] + ARo[m], out=oo.ws[m])  ######  devryoe
+                """
+                lst = _N.where(_N.isnan(oo.ws[m]) == True)
+                if len(lst[0]) > 0:
+                    oo.psthOffset = psthOffset
+                    print "!!!!  rpg_devroye giving me a Nan"
+                    print lst[0]
+                    ind = lst[0]
+                    print "lrn has nan?"
+                    print oo.lrn[m, ind]
+                    print "smpx has nan?"
+                    print oo.smpx[m, (2+ind), 0]
+                    print "ARo has nan?"
+                    print ARo[m, ind]
+                    print "psthOffset has nan?"
+                    print psthOffset[m, ind]
+                    print "oo.ws has nan?"
+                    print oo.ws[m, ind]
+                """
+                    
             if ooTR == 1:
                 oo.ws   = oo.ws.reshape(1, ooN+1)
             kpOws = oo.kp / oo.ws
@@ -440,6 +467,7 @@ class mcmcARp:
             #for m in xrange(ooTR):
                 #oo._d.y[m]             = oo.kp[m]/oo.ws[m] - psthOffset[m] - ARo[m]
             #    oo._d.y[m]             = kpOws[m] - psthOffset[m] - ARo[m]
+
             oo._d.y = kpOws - psthOffset - ARo
             oo._d.copyParams(oo.F0, oo.q2)
             oo._d.Rv[:, :] =1 / oo.ws[:, :]   #  time dependent noise
@@ -455,7 +483,7 @@ class mcmcARp:
                 #tPSTH1 = _tm.time()
                 smWimOm[:] = 0
                 #  cov matrix, prior of aS 
-                iD = _N.diag(_N.ones(oo.B.shape[0])*0.2)
+                iD = _N.diag(_N.ones(oo.B.shape[0])*5.)
                 for m in xrange(ooTR):
                     Wims[m] = _N.diag(oo.ws[m])
                     Oms[m]  = kpOws[m] - oo.smpx[m, 2:, 0] - ARo[m]
@@ -469,18 +497,34 @@ class mcmcARp:
 
                 #  now sample
                 iVAR = _N.dot(oo.B, _N.dot(Bi, oo.B.T)) + iD
-                VAR  = _N.linalg.inv(iVAR)
-                Mn   = _N.dot(VAR, _N.dot(oo.B, _N.dot(Bi, A.T)))# + 0)
+                VAR  = _N.linalg.inv(iVAR)  #  Diagnoal, #knots x #knots
+                Mn   = _N.dot(VAR, _N.dot(oo.B, _N.dot(Bi, A.T)) + _N.dot(iD, oo.u_a))# + 0)
+                #Mn   = _N.dot(VAR, _N.dot(oo.B, _N.dot(Bi, A)))# + 0)
                 #  multivar_normal returns a row vector
-
                 aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
+                """
+                try:
+                except ValueError:
+                    print "ValueError"
+                    print iVAR
+                    print "------------"
+                    oo.Bi = Bi
+                    print _N.dot(Bi, oo.B.T)   #  I found a nan is _N.dot(Bi, oo.B.T)
+                    print "------------"
+                    print _N.dot(oo.B, _N.dot(Bi, oo.B.T))
+                    print "------------"
+                    print Wims
+                    print "------------"
+                    print Mn
+                    print VAR
+                    raise
+                """
 
                 oo.smp_aS[it, :] = aS
                 #tPSTH3 = _tm.time()
 
             #  _d.F, _d.N, _d.ks, 
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
-
 
             #tkf1  = _tm.time()
             sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
@@ -555,4 +599,33 @@ class mcmcARp:
             print "----------------    %.5f" % (t2-t1)
 
         pool.close()
+
+    def build_lrnLambda2(self, tr):
+        oo = self
+        #  lmbda2 is short snippet of after-spike depression behavior
+        lrn = _N.ones(oo.N + 1)
+        lh    = len(oo.l2)
+
+        hst  = []    #  spikes whose history is still felt
+
+        for i in xrange(oo.N + 1):
+            L  = len(hst)
+            lmbd = 1
+
+            for j in xrange(L - 1, -1, -1):
+                th = hst[j]
+                #  if i == 10, th == 9, lh == 1
+                #  10 - 9 -1 == 0  < 1.   Still efective
+                #  11 - 9 -1 == 1         No longer effective
+                if i - th - 1 < lh:
+                    lmbd *= oo.l2[i - th - 1]
+                else:
+                    hst.pop(j)
+
+            if oo.y[tr, i] == 1:
+                hst.append(i)
+
+            lrn[i] *= lmbd
+        return lrn
+
 

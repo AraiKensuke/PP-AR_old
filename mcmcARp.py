@@ -363,7 +363,8 @@ class mcmcARp:
                 fgk[m] = bpFilt(15, 100, 1, 135, 500, gk[m])   #  we want
                 fgk[m, :] /= 2*_N.std(fgk[m, :])
 
-                oo.smpx[m, 2:, 0] = fgk[m, :]
+                #oo.smpx[m, 2:, 0] = fgk[m, :]
+                oo.smpx[m, 2:, 0] = 0
                 for n in xrange(2+oo.k-1, oo.N+1+2):  # CREATE square smpx
                     oo.smpx[m, n, 1:] = oo.smpx[m, n-oo.k+1:n, 0][::-1]
                 for n in xrange(2+oo.k-2, -1, -1):  # CREATE square smpx
@@ -384,6 +385,7 @@ class mcmcARp:
         ARo   = _N.empty((ooTR, oo._d.N+1))
         
         kpOws = _N.empty((ooTR, ooN+1))
+        lv_u     = _N.zeros((ooN+1, ooN+1))
         alpR   = oo.F_alfa_rep[0:oo.R]
         alpC   = oo.F_alfa_rep[oo.R:]
         Bii    = _N.zeros((ooN+1, ooN+1))
@@ -397,6 +399,12 @@ class mcmcARp:
             Oms          = _N.empty((ooTR, ooN+1))
             smWimOm      = _N.zeros(ooN + 1)
             bConstPSTH = False
+            D  = _N.diag(_N.ones(oo.B.shape[0])*.5)
+            iD = _N.linalg.inv(D)
+
+            BDB  = _N.dot(oo.B.T, _N.dot(D, oo.B))
+            DB   = _N.dot(D, oo.B)
+            BTua = _N.dot(oo.B.T, oo.u_a)
         else:
             bConstPSTH  = True
             psthOffset = _N.empty((ooTR, ooN+1))
@@ -410,7 +418,7 @@ class mcmcARp:
             for tr in xrange(ooTR):
                 oo.lrn[tr] = oo.build_lrnLambda2(tr)
 
-        pool = Pool(processes=oo.processes)
+        #pool = Pool(processes=oo.processes)
         while (it < ooNMC + oo.burn - 1):
             t1 = _tm.time()
             it += 1
@@ -439,28 +447,10 @@ class mcmcARp:
                 _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(oo.smpx[m, 2:, 0] + psthOffset[m])), out=ARo[m])   #  history Offset
 
                 lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + psthOffset[m] + ARo[m], out=oo.ws[m])  ######  devryoe
-                """
-                lst = _N.where(_N.isnan(oo.ws[m]) == True)
-                if len(lst[0]) > 0:
-                    oo.psthOffset = psthOffset
-                    print "!!!!  rpg_devroye giving me a Nan"
-                    print lst[0]
-                    ind = lst[0]
-                    print "lrn has nan?"
-                    print oo.lrn[m, ind]
-                    print "smpx has nan?"
-                    print oo.smpx[m, (2+ind), 0]
-                    print "ARo has nan?"
-                    print ARo[m, ind]
-                    print "psthOffset has nan?"
-                    print psthOffset[m, ind]
-                    print "oo.ws has nan?"
-                    print oo.ws[m, ind]
-                """
                     
             if ooTR == 1:
                 oo.ws   = oo.ws.reshape(1, ooN+1)
-            kpOws = oo.kp / oo.ws
+            _N.divide(oo.kp, oo.ws, out=kpOws)
 
             #  Now that we have PG variables, construct Gaussian timeseries
             #  ws(it+1)    using u(it), F0(it), smpx(it)
@@ -481,53 +471,46 @@ class mcmcARp:
                     oo.smp_u[m, it] = oo.u[m]
             else:
                 #tPSTH1 = _tm.time()
-                smWimOm[:] = 0
+
                 #  cov matrix, prior of aS 
-                iD = _N.diag(_N.ones(oo.B.shape[0])*5.)
+                
+                """  #  SLOW
+                smWimOm[:] = 0
                 for m in xrange(ooTR):
                     Wims[m] = _N.diag(oo.ws[m])
                     Oms[m]  = kpOws[m] - oo.smpx[m, 2:, 0] - ARo[m]
                     smWimOm += _N.dot(Wims[m], Oms[m])
+                ilv_u = _N.sum(Wims, axis=0)   #  Bi is diagonal
+                """
+                #if it < 2:   #  freeze PSTH
+                Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo
+                _N.einsum("tj,tj->j", oo.ws, Oms, out=smWimOm)
+                ilv_u  = _N.diag(_N.sum(oo.ws, axis=0))
                 #tPSTH2 = _tm.time()
-                Bi = _N.sum(Wims, axis=0)   #  Bi is diagonal
+
                 #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
-                _N.fill_diagonal(Bii, 1./_N.diagonal(Bi))
-                A  = _N.dot(Bii, smWimOm)  #  nondiag of 1./Bi are inf
+                _N.fill_diagonal(lv_u, 1./_N.diagonal(ilv_u))
+                lm_u  = _N.dot(lv_u, smWimOm)  #  nondiag of 1./Bi are inf
                 #A  = _N.dot(_N.linalg.inv(Bi), smWimOm)  #  nondiag of 1./Bi are inf
 
                 #  now sample
-                iVAR = _N.dot(oo.B, _N.dot(Bi, oo.B.T)) + iD
-                VAR  = _N.linalg.inv(iVAR)  #  Diagnoal, #knots x #knots
-                Mn   = _N.dot(VAR, _N.dot(oo.B, _N.dot(Bi, A.T)) + _N.dot(iD, oo.u_a))# + 0)
-                #Mn   = _N.dot(VAR, _N.dot(oo.B, _N.dot(Bi, A)))# + 0)
-                #  multivar_normal returns a row vector
-                aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
-                """
-                try:
-                except ValueError:
-                    print "ValueError"
-                    print iVAR
-                    print "------------"
-                    oo.Bi = Bi
-                    print _N.dot(Bi, oo.B.T)   #  I found a nan is _N.dot(Bi, oo.B.T)
-                    print "------------"
-                    print _N.dot(oo.B, _N.dot(Bi, oo.B.T))
-                    print "------------"
-                    print Wims
-                    print "------------"
-                    print Mn
-                    print VAR
-                    raise
-                """
+                iVAR = _N.dot(oo.B, _N.dot(ilv_u, oo.B.T)) + iD
+                VAR  = _N.linalg.inv(iVAR)  #  knots x knots
+                iBDBW = _N.linalg.inv(BDB + lv_u)   # BDB not diag
+                #Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_u - _N.dot(oo.B.T, oo.u_a))))
+                Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_u - BTua))
 
-                oo.smp_aS[it, :] = aS
+                oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
+
+                oo.smp_aS[it, :] = oo.aS
                 #tPSTH3 = _tm.time()
 
             #  _d.F, _d.N, _d.ks, 
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
 
+            """
             #tkf1  = _tm.time()
-            sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
+            #sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
             #tkf2  = _tm.time()
 
             for m in xrange(ooTR):
@@ -537,6 +520,14 @@ class mcmcARp:
                 oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                 oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                 oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+            """
+            for m in xrange(ooTR):
+                oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[tr])
+                oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
+                oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+
+
 
             # sample F0
             # for mh in xrange(50):
@@ -598,7 +589,7 @@ class mcmcARp:
             # print "5  %.5f" % (t2 - tkf2)
             print "----------------    %.5f" % (t2-t1)
 
-        pool.close()
+        #pool.close()
 
     def build_lrnLambda2(self, tr):
         oo = self

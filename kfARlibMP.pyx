@@ -85,12 +85,12 @@ def FFdv(y, Rv, N, k, F, GQGT, fx, fV):   #  approximate KF    #  k==1,dynamic v
     VFT   = _N.empty((k, k))
     FVFT  = _N.empty((k, k))
 
-    for n from 1 <= n < N + 1:
+    for n from 1 <= n < N + 1:   #  n is not a trial
         _N.dot(F, fx[n - 1], out=px[n])
         _N.dot(fV[n - 1], F.T, out=VFT)
         _N.dot(F, VFT, out=FVFT)
         _N.add(FVFT, GQGT, out=pV[n])
-        mat  = 1 / (pV[n, 0, 0] + Rv[n])
+        mat  = 1 / (pVmv[n, 0, 0] + Rv[n])   #  mat is a scalar
         _N.dot(pV[n], mat*H.T, out=K[n])   #  vector
 
         # px + K(y - o - Hpx)  K column vec, (y-o-Hpx) is scalar

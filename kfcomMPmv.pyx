@@ -9,6 +9,7 @@ cdef extern from "math.h":
     double sqrt(double)
 
 
+###  Most expensive operation here is the SVD
 @cython.boundscheck(False)
 @cython.wraparound(False)
 def BSvec(F, N, _N.intp_t k, GQGT, fx, fV, smXN):
@@ -51,6 +52,7 @@ def BSvec(F, N, _N.intp_t k, GQGT, fx, fV, smXN):
         smXmv[n, k-1] = zrmnmv[n, k-1] + Asxmv[k-1] + INAFfxmv[n]
         for i from 0 <= i < k-1:
             smXmv[n, i] = zrmnmv[n, i] + Asxmv[i]
+
 
     return smX
 

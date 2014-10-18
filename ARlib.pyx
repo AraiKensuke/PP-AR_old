@@ -299,3 +299,70 @@ def MetrSampF(N, k, smpx, q2, pr_uF, pr_cvF, trCv, burn=100, Fini=None):
     return F[:,0]
 
 
+def MetrSampF_egv(N, k, smpx, q2, sae, burn=100, Fini=None):
+    """
+    sample F from full conditional given sample of latent and parameters
+    N        size of latent state data
+    smpx     sampled latent state
+    sae      sampAReig object
+    q2       transition noise
+    From paper Wolfgang Polasek, Song Jin   "From Data to Knowledge"
+    minacc   minimum number of new points accepted.  to make sure sampler
+             is well-mixed.  burn alone may not be an acceptable way to
+             ensure this
+    """
+    y   = smpx[1:N, 0].reshape(N-1, 1)    #  a column vector
+    xnm = smpx[0:N-1, :]                  #  a column vector
+
+    ### conditional posterior moments
+    iCov   = _N.dot(xnm.T, xnm)/q2     # inv conditional posterior cov.
+    Cov    = _N.linalg.inv(iCov) 
+    M      = _N.dot(Cov, _N.dot(xnm.T, y))/q2 # conditional posterior mean
+    # print M
+    # print iCov
+
+    #   initial value of F
+    if Fini == None:
+#        F = generateValidAR(k)   #  returns a column vector
+        F = sae.draw()   #  returns a column vector
+    else:
+        Fini = Fini.reshape((k, 1))
+        F  = Fini
+
+    FM  = F - M
+
+    #  The Fn's being generated are not uniform in AR space
+    #  This non-uniformity acts as a prior?
+    aO  = -0.5*_N.dot(FM.T, _N.dot(iCov, FM))    #  arguments to exp
+
+
+    rands = _N.random.rand(burn)
+
+    for n in xrange(burn):
+#        Fn  = generateValidAR(k)
+        Fn  = sae.draw()
+        FnM  = Fn - M
+
+        aC  = -0.5*_N.dot(FnM.T, _N.dot(iCov, FnM))
+        r   = _N.exp(aO - aC)    #  or compare aO - aC with 0
+        if rands[n] < min(r, 1):
+            F = Fn
+            aO = aC
+
+#     lrands = _N.log(_N.random.rand(burn))
+
+#     for n in xrange(burn):
+#         Fn  = generateValidAR(k)
+#         FnM  = Fn - M
+
+#         aC  = -0.5*_N.dot(FnM.T, _N.dot(iCov, FnM))
+# #        r   = _N.exp(aO - aC)    #  or compare aO - aC with 0
+#         lr   = aC - aO    #  or compare aO - aC with 0
+# #        print "---    %(aC).3e   %(aO).3e    %(diff).3e" % {"aC" : aC, "aO" : aO, "diff" : (aO-aC)}
+#         if lrands[n] < min(lr, 0):
+#             F = Fn
+#             aO = aC
+
+
+    return F[:,0]
+

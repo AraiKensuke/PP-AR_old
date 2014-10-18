@@ -67,6 +67,7 @@ def FFdv(y, Rv, N, k, F, GQGT, fx, fV):   #  approximate KF    #  k==1,dynamic v
     #  do this until p_V has settled into stable values
     H       = _N.zeros((1, k))          #  row vector
     H[0, 0] = 1
+    cdef double q2 = GQGT[0, 0]
 
     Ik      = _N.identity(k)
     px = _N.empty((N + 1, k, 1))
@@ -81,6 +82,7 @@ def FFdv(y, Rv, N, k, F, GQGT, fx, fV):   #  approximate KF    #  k==1,dynamic v
     IKH   = _N.eye(k)        #  only contents of first column modified
     VFT   = _N.empty((k, k))
     FVFT  = _N.empty((k, k))
+    KyHpx = _N.empty((k, 1))
 
     #  need memory views for these
     #  F, fx, px need memory views
@@ -90,8 +92,11 @@ def FFdv(y, Rv, N, k, F, GQGT, fx, fV):   #  approximate KF    #  k==1,dynamic v
     cdef double[:, ::1] Fmv       = F
     cdef double[:, :, ::1] fxmv   = fx
     cdef double[:, :, ::1] pxmv   = px
+    cdef double[:, :, ::1] pVmv   = pV
+    cdef double[::1] Rvmv   = Rv
     cdef double[:, :, ::1] Kmv    = K
     cdef double[:, ::1] IKHmv     = IKH
+
     cdef _N.intp_t n, i
 
     cdef double dd = 0
@@ -103,13 +108,17 @@ def FFdv(y, Rv, N, k, F, GQGT, fx, fV):   #  approximate KF    #  k==1,dynamic v
         pxmv[n, 0, 0] = dd + Fmv[0, 0]*fxmv[n-1, 0, 0]
 
         _N.dot(fV[n - 1], F.T, out=VFT)
-        _N.dot(F, VFT, out=FVFT)
-        _N.add(FVFT, GQGT, out=pV[n])
-        mat  = 1 / (pV[n, 0, 0] + Rv[n])
-        _N.dot(pV[n], mat*H.T, out=K[n])   #  vector
+        _N.dot(F, VFT, out=pV[n])
+        pVmv[n, 0, 0]    += q2
+        #_N.add(FVFT, GQGT, out=pV[n])
+
+        mat  = 1 / (pVmv[n, 0, 0] + Rvmv[n])  #  scalar
+        #_N.dot(pV[n], mat*H.T, out=K[n])   #  vector
+        K[n, :, 0] = pV[n, :, 0] * mat
 
         # px + K(y - o - Hpx)  K column vec, (y-o-Hpx) is scalar
-        KyHpx = K[n]* (y[n] - pxmv[n, 0, 0])
+        #KyHpx = K[n]* (y[n] - pxmv[n, 0, 0])
+        _N.multiply(K[n], y[n] - pxmv[n, 0, 0], out=KyHpx)
         _N.add(px[n], KyHpx, out=fx[n])
 
         # (I - KH), KH is zeros except first column

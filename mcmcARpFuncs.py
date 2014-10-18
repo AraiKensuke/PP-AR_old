@@ -160,11 +160,13 @@ def plot_cmptSpksAndX(N, z, x, y):  #  a component
 
 def loadL2(setname, fn="lambda2.dat"):
     fn = resFN(fn, dir=setname)
-    print fn
-
     if os.access(fn, os.F_OK):
-        print "i am here"
+        print "***  loaded spike history file \"%s\" ***" % fn
         return _N.loadtxt(fn)
+    print "!!!  NO history file loaded !!!"
+    if fn is not None:
+        print "!!!  Couldn't find \"%s\" !!!" % fn
+        
     return None
 
 def runNotes(setname, ID_q2, TR0, TR1):

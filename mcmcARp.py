@@ -219,6 +219,7 @@ class mcmcARp:
                 u   = _N.array([_N.log(_N.sum(oo.y) / ((N+1 - _N.sum(oo.y))*oo.dt)) + logdt])
         oo.u     = _N.array(u[oo.useTrials])
         oo.TR    = len(oo.useTrials)
+        oo.N     = N
 
         ####  
         oo.l2 = loadL2(oo.setname, fn=oo.histFN)
@@ -439,7 +440,7 @@ class mcmcARp:
             else:
                 BaS = _N.dot(oo.B.T, oo.aS)
                 for m in xrange(ooTR):
-                    psthOffset[m] = BaS
+                   psthOffset[m] = BaS
             ###  PG latent variable sample
 
             #tPG1 = _tm.time()
@@ -475,6 +476,7 @@ class mcmcARp:
                 #  cov matrix, prior of aS 
                 
                 """  #  SLOW
+                """
                 smWimOm[:] = 0
                 for m in xrange(ooTR):
                     Wims[m] = _N.diag(oo.ws[m])
@@ -487,7 +489,7 @@ class mcmcARp:
                 _N.einsum("tj,tj->j", oo.ws, Oms, out=smWimOm)
                 ilv_u  = _N.diag(_N.sum(oo.ws, axis=0))
                 #tPSTH2 = _tm.time()
-
+                """
                 #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
                 _N.fill_diagonal(lv_u, 1./_N.diagonal(ilv_u))
                 lm_u  = _N.dot(lv_u, smWimOm)  #  nondiag of 1./Bi are inf
@@ -508,9 +510,10 @@ class mcmcARp:
             #  _d.F, _d.N, _d.ks, 
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
 
+
             """
             #tkf1  = _tm.time()
-            #sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
+            sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
             #tkf2  = _tm.time()
 
             for m in xrange(ooTR):
@@ -522,11 +525,10 @@ class mcmcARp:
                 oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
             """
             for m in xrange(ooTR):
-                oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[tr])
+                oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
                 oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                 oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                 oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
-
 
 
             # sample F0

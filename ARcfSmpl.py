@@ -122,7 +122,13 @@ def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, ac
         # #  If posterior valid Gaussian    q2 x H - oNZ * prH00
 
         if rprior == _cd.__COMP_REF__:
-            ph1j1, ph1j2 = _N.random.multivariate_normal(U[:, 0], J, size=1)[0, :]
+            try:
+                ph1j1, ph1j2 = _N.random.multivariate_normal(U[:, 0], J, size=1)[0, :]
+            except ValueError:
+                print "Nans, infs"
+                print U
+                print J
+                raise
 
             #  sampled points lie in stationary region
             if ((ph1j2 < ph0H) and (ph1j2 > ph0L)) and \

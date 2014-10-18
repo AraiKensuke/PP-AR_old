@@ -331,10 +331,18 @@ def quickPSTH(alldat, TR, COLS, plot=False, fn=None):
     for tr in xrange(TR):
         spks.extend(_N.where(alldat[:, COLS-1+tr*COLS] == 1)[0])
 
+    mult = 0.01 * TR
     if plot and (fn != None):
-        fig = _plt.figure()
+        fig = _plt.figure(figsize=(9, 4))
         _plt.hist(spks, bins=_N.linspace(0, N, 100), color="black")
         _plt.xlim(0, N)
+#        _plt.xticks(_N.arange(0, 1001, 200), _N.arange(0, 1.01, 0.2), fontsize=26)
+
+#        _plt.yticks(_N.arange(40, 161, 40), _N.arange(0, 161/mult, 40/mult), fontsize=26)
+        #  N counts in bin 1 bin of 10msxTR  
+        _plt.xlabel("seconds", fontsize=30)
+        _plt.ylabel("Hz", fontsize=30)
+        fig.subplots_adjust(bottom=0.2, top=0.85, left=0.15, right=0.9)
         _plt.savefig(fn)
         _plt.close()
 

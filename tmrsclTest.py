@@ -53,7 +53,7 @@ def zoom(fr, spkts, m):
     Lmspkts = []
 
     for tr in xrange(M):
-        Lmspkts.append(_N.empty(len(spkts[tr])))
+        Lmspkts.append(_N.empty(len(spkts[tr]), dtype=_N.int))
 
         lt  = -1
         for i in xrange(len(spkts[tr])):

@@ -1,11 +1,11 @@
 from kassdirs import resFN, datFN
 
-setname="080402-0-121-c2"
+setname="080402-0-121"
 
 dat = _N.loadtxt(resFN("xprbsdN.dat", dir=setname))
 
-tr0 = 0
-tr1 = None
+tr0 = 1000
+tr1 = 1600
 
 
 COLS= 4
@@ -14,7 +14,7 @@ if tr1 is None:
     tr1 = dat.shape[1]/4
 
 
-T   = 500
+T   = 1000
 trPpg = 25
 pg   = 0
 trOnPg = 0

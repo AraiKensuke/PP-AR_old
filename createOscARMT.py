@@ -18,7 +18,7 @@ trim       = 50;
 nzs        = None;     nRhythms = None;
 rs         = None;     ths      = None;      alfa     = None;
 lambda2    = None;     psth     = None
-lowQpc     = 0;        lowQs    = []
+lowQpc     = 0;        lowQs    = None
 isis       = None;     rpsth    = None
 
 def create(setname):
@@ -37,6 +37,7 @@ def create(setname):
     spksPT  = _N.empty(TR)
     stNzs   = _N.empty((TR, nRhythms))
 
+    lowQs   = []
     for tr in xrange(TR):
         if _N.random.rand() < lowQpc:
             lowQs.append(tr)
@@ -90,3 +91,6 @@ def create(setname):
     lambda2db = 0.5*(lambda2[1::2] + lambda2[::2])
     _N.savetxt(resFN("lambda2db.dat", dir=setname), lambda2db, fmt="%.7f")
     #_plt.ion()
+
+    if lowQpc > 0:
+        _N.savetxt(resFN("lowQtrials", dir=setname), lowQs, fmt="%d")

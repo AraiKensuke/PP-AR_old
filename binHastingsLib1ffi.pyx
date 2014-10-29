@@ -12,20 +12,6 @@ ctypedef _N.int_t iDTYPE_t
 cdef extern from "math.h":
     double exp(double)
     double log(double)
-"""
-cdef extern from "gsl/gsl_rng.h":
-   ctypedef struct gsl_rng_type:
-       pass
-   ctypedef struct gsl_rng:
-       pass
-   gsl_rng_type *gsl_rng_mt19937
-   gsl_rng *gsl_rng_alloc(gsl_rng_type * T)
-  
-cdef gsl_rng *rng = gsl_rng_alloc(gsl_rng_mt19937)
-
-cdef extern from "gsl/gsl_randist.h":
-   double poisson "gsl_ran_poisson"(gsl_rng * r,double)
-"""
 
 cdef double Llklhds(ks, int n1, double p1):
     return _N.sum(_N.log(_sm.comb(n1, ks)) + ks*log(p1) + (n1-ks)*log(1. - p1))

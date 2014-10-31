@@ -329,7 +329,7 @@ def quickPSTH(alldat, TR, COLS, plot=False, fn=None):
     spks = []
     N    = alldat.shape[0]
     for tr in xrange(TR):
-        spks.extend(_N.where(alldat[:, COLS-1+tr*COLS] == 1)[0])
+        spks.extend(_N.where(alldat[:, COLS-2+tr*COLS] == 1)[0])
 
     mult = 0.01 * TR
     if plot and (fn != None):

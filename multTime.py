@@ -5,7 +5,7 @@ exf("filter.py")
 
 
 #  modulation histogram.  phase @ spike
-setname="080402-0-121-c3"
+setname="080305-0-127-theta"
 p = _re.compile("^\d{6}")   # starts like "exptDate-....."
 m = p.match(setname)
 

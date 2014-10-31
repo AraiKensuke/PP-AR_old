@@ -5,23 +5,31 @@ from filter import lpFilt, bpFilt, base_q4atan
 import numpy as _N
 import matplotlib.pyplot as _plt
 
-def modhist(setname, shftPhase=0, fltPrms=[20, 26]):
+def modhist(setname, shftPhase=0, fltPrms=[20, 26], t0=None, t1=None):
     """
     shftPhase from 0 to 1.  
     """
-    dat     = _N.loadtxt(resFN("xprbsdN.dat", dir=setname))
+    _dat     = _N.loadtxt(resFN("xprbsdN.dat", dir=setname))
     #  modulation histogram.  phase @ spike
-    N, cols = dat.shape
+    Na, cols = _dat.shape
+    if t0 is None:
+        t0 = 0
+    if t1 is None:
+        t1 = Na
+    dat = _dat[t0:t1, :]
+    N   = t1-t0
 
     p = _re.compile("^\d{6}")   # starts like "exptDate-....."
     m = p.match(setname)
 
     bRealDat = True
     COLS = 4
+    sub  = 2
 
     if m == None:
         bRealDat = False
         COLS = 3
+        sub  = 1
 
     TR   = cols / COLS
 
@@ -44,7 +52,7 @@ def modhist(setname, shftPhase=0, fltPrms=[20, 26]):
         #        ph_x[n] = base_q4atan(ht_x[n].real, ht_x[n].imag) / (2*_N.pi)
 
         for i in xrange(50, N - 50):
-            if dat[i, tr*COLS+(COLS-1)] == 1:
+            if dat[i, tr*COLS+(COLS-sub)] == 1:
                 wfs.append(ph_x[i-50:i+50])
                 phs.append(ph_x[i])
                 phst.append(ph_x[i])

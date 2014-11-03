@@ -79,7 +79,6 @@ class mcmcARp:
 
     ####  TEMPORARY
     Bi            = None
-    psthOffset    = None
 
     #  input data
     histFN        = None
@@ -97,7 +96,7 @@ class mcmcARp:
     #  Current values of params and state
     bpsth         = False
     q2            = None
-    B             = None;    aS            = None; u             = None;    
+    B             = None;    aS            = None; us             = None;    
     smpx          = None
     ws            = None
     x00           = None
@@ -110,13 +109,13 @@ class mcmcARp:
     freq_lims     = [[1 / .85, fSigMax]]
 
     #  u   --  Gaussian prior
-    u_u          = 0;             s2_u         = 5
+    u_u          = 0;             s2_u         = 1.5
     #  q2  --  Inverse Gamma prior
     a_q2         = 1e-1;          B_q2         = 1e-6
     #  initial states
     u_x00        = None;          s2_x00       = None
-    #  initial states
-    u_a          = 0;             s2_a         = None
+    # psth spline coefficient priors
+    u_a          = 0;             s2_a         = 0.5
 
     def __init__(self):
         self.lfc         = _lfc.logerfc()
@@ -217,9 +216,10 @@ class mcmcARp:
                 u   = _N.log(ysm / ((N+1 - ysm)*oo.dt)) + logdt
             else:   #  u is a vector here
                 u   = _N.array([_N.log(_N.sum(oo.y) / ((N+1 - _N.sum(oo.y))*oo.dt)) + logdt])
-        oo.u     = _N.array(u[oo.useTrials])
+
         oo.TR    = len(oo.useTrials)
         oo.N     = N
+        oo.us    = _N.array(u)
 
         ####  
         oo.l2 = loadL2(oo.setname, fn=oo.histFN)
@@ -266,7 +266,7 @@ class mcmcARp:
             if oo.dfPSTH is None:
                 oo.dfPSTH = oo.B.shape[1] 
             oo.B = oo.B.T    #  My convention for beta
-            oo.aS = _N.linalg.solve(_N.dot(oo.B, oo.B.T), _N.dot(oo.B, _N.ones(oo.t1 - oo.t0)*_N.mean(oo.u)))
+            oo.aS = _N.linalg.solve(_N.dot(oo.B, oo.B.T), _N.dot(oo.B, _N.ones(oo.t1 - oo.t0)*0.01))   #  small amplitude psth at first
 
         # #generate initial values of parameters
         oo._d = _kfardat.KFARGauObsDat(oo.TR, oo.N, oo.k)
@@ -332,13 +332,13 @@ class mcmcARp:
             if oo.TR == 1:
                 oo.ws   = oo.ws.reshape(1, oo._d.N+1)
             for m in xrange(oo._d.TR):
-                lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + oo.u[m], num=(oo.N + 1), out=oo.ws[m, :])
+                lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + oo.us[m], num=(oo.N + 1), out=oo.ws[m, :])
 
-        oo.smp_u[:, 0] = oo.u
+        oo.smp_u[:, 0] = oo.us
         oo.smp_q2[:, 0]= oo.q2
 
         if oo.bpsth:
-            oo.u_a            = _N.ones(oo.dfPSTH)*_N.mean(oo.u)
+            oo.u_a            = _N.ones(oo.dfPSTH)*_N.mean(oo.us)
 
         """
         _plt.ioff()
@@ -386,7 +386,8 @@ class mcmcARp:
         ARo   = _N.empty((ooTR, oo._d.N+1))
         
         kpOws = _N.empty((ooTR, ooN+1))
-        lv_u     = _N.zeros((ooN+1, ooN+1))
+        lv_f     = _N.zeros((ooN+1, ooN+1))
+        lv_u     = _N.zeros((ooTR, ooTR))
         alpR   = oo.F_alfa_rep[0:oo.R]
         alpC   = oo.F_alfa_rep[oo.R:]
         Bii    = _N.zeros((ooN+1, ooN+1))
@@ -394,21 +395,19 @@ class mcmcARp:
         #alpC.reverse()
         #  F_alfa_rep = alpR + alpC  already in right order, no?
 
-        if oo.B is not None:
-            psthOffset = _N.empty((ooTR, ooN+1))
-            Wims         = _N.empty((ooTR, ooN+1, ooN+1))
-            Oms          = _N.empty((ooTR, ooN+1))
-            smWimOm      = _N.zeros(ooN + 1)
-            bConstPSTH = False
-            D  = _N.diag(_N.ones(oo.B.shape[0])*.5)
-            iD = _N.linalg.inv(D)
-
-            BDB  = _N.dot(oo.B.T, _N.dot(D, oo.B))
-            DB   = _N.dot(D, oo.B)
-            BTua = _N.dot(oo.B.T, oo.u_a)
-        else:
-            bConstPSTH  = True
-            psthOffset = _N.empty((ooTR, ooN+1))
+        Wims         = _N.empty((ooTR, ooN+1, ooN+1))
+        Oms          = _N.empty((ooTR, ooN+1))
+        smWimOm      = _N.zeros(ooN + 1)
+        smWinOn      = _N.zeros(ooTR)
+        bConstPSTH = False
+        D_f          = _N.diag(_N.ones(oo.B.shape[0])*oo.s2_a)   #  spline
+        iD_f = _N.linalg.inv(D_f)
+        D_u  = _N.diag(_N.ones(oo.TR)*oo.s2_u)   #  This should 
+        iD_u = _N.linalg.inv(D_u)
+        iD_u_u_u = _N.dot(iD_u, _N.ones(oo.TR)*oo.u_u)
+        BDB  = _N.dot(oo.B.T, _N.dot(D_f, oo.B))
+        DB   = _N.dot(D_f, oo.B)
+        BTua = _N.dot(oo.B.T, oo.u_a)
 
         it    = 0
 
@@ -420,6 +419,9 @@ class mcmcARp:
                 oo.lrn[tr] = oo.build_lrnLambda2(tr)
 
         #pool = Pool(processes=oo.processes)
+        ###############################  MCMC LOOP
+        ###  need pointer to oo.us, but reshaped for broadcasting to work
+        oous_rs = oo.us.reshape((ooTR, 1))
         while (it < ooNMC + oo.burn - 1):
             t1 = _tm.time()
             it += 1
@@ -434,20 +436,13 @@ class mcmcARp:
             else:
                 oo._d.f_V[:, 0]     = oo._d.f_V[:, 1]
 
-            if bConstPSTH:
-                for m in xrange(ooTR):
-                    psthOffset[m, :] = oo.u[m]
-            else:
-                BaS = _N.dot(oo.B.T, oo.aS)
-                for m in xrange(ooTR):
-                   psthOffset[m] = BaS
+            BaS = _N.dot(oo.B.T, oo.aS)
             ###  PG latent variable sample
 
             #tPG1 = _tm.time()
             for m in xrange(ooTR):
-                _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(oo.smpx[m, 2:, 0] + psthOffset[m])), out=ARo[m])   #  history Offset
-
-                lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + psthOffset[m] + ARo[m], out=oo.ws[m])  ######  devryoe
+                _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(oo.smpx[m, 2:, 0] + BaS + oo.us[m])), out=ARo[m])   #  history Offset
+                lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe
                     
             if ooTR == 1:
                 oo.ws   = oo.ws.reshape(1, ooN+1)
@@ -455,61 +450,45 @@ class mcmcARp:
 
             #  Now that we have PG variables, construct Gaussian timeseries
             #  ws(it+1)    using u(it), F0(it), smpx(it)
-            #for m in xrange(ooTR):
-                #oo._d.y[m]             = oo.kp[m]/oo.ws[m] - psthOffset[m] - ARo[m]
-            #    oo._d.y[m]             = kpOws[m] - psthOffset[m] - ARo[m]
 
-            oo._d.y = kpOws - psthOffset - ARo
+            oo._d.y = kpOws - BaS - ARo - oous_rs
             oo._d.copyParams(oo.F0, oo.q2)
             oo._d.Rv[:, :] =1 / oo.ws[:, :]   #  time dependent noise
 
-            #tPG2 = _tm.time()
-            if bConstPSTH:
-                for m in xrange(ooTR):
-                    A    = 0.5*(1./oo.s2_u + _N.sum(oo.ws[m]))
-                    B    = oo.u_u/oo.s2_u + _N.sum(oo.kp[m] - oo.ws[m]*(oo.smpx[m, 2:, 0] + ARo[m]))
-                    oo.u[m] = B/(2*A) + _N.sqrt(1/(2*A))*_N.random.randn()
-                    oo.smp_u[m, it] = oo.u[m]
-            else:
-                #tPSTH1 = _tm.time()
+            #  cov matrix, prior of aS 
 
-                #  cov matrix, prior of aS 
-                
-                """  #  SLOW
-                """
-                smWimOm[:] = 0
-                for m in xrange(ooTR):
-                    Wims[m] = _N.diag(oo.ws[m])
-                    Oms[m]  = kpOws[m] - oo.smpx[m, 2:, 0] - ARo[m]
-                    smWimOm += _N.dot(Wims[m], Oms[m])
-                ilv_u = _N.sum(Wims, axis=0)   #  Bi is diagonal
-                """
-                #if it < 2:   #  freeze PSTH
-                Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo
-                _N.einsum("tj,tj->j", oo.ws, Oms, out=smWimOm)
-                ilv_u  = _N.diag(_N.sum(oo.ws, axis=0))
-                #tPSTH2 = _tm.time()
-                """
-                #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
-                _N.fill_diagonal(lv_u, 1./_N.diagonal(ilv_u))
-                lm_u  = _N.dot(lv_u, smWimOm)  #  nondiag of 1./Bi are inf
-                #A  = _N.dot(_N.linalg.inv(Bi), smWimOm)  #  nondiag of 1./Bi are inf
+            ########     per trial offset sample
+            Ons  = kpOws - oo.smpx[..., 2:, 0] - ARo - BaS
+            _N.einsum("mn,mn->m", oo.ws, Ons, out=smWinOn)  #  sum over trials
+            ilv_u  = _N.diag(_N.sum(oo.ws, axis=1))  #  var  of LL
+            #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
+            _N.fill_diagonal(lv_u, 1./_N.diagonal(ilv_u))
+            lm_u  = _N.dot(lv_u, smWinOn)  #  nondiag of 1./Bi are inf, mean LL
+            #  now sample
+            iVAR = ilv_u + iD_u
+            VAR  = _N.linalg.inv(iVAR)  #
+            Mn    = _N.dot(VAR, _N.dot(ilv_u, lm_u) + iD_u_u_u)
+            oo.us[:]  = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
+            oo.smp_u[:, it] = oo.us
 
-                #  now sample
-                iVAR = _N.dot(oo.B, _N.dot(ilv_u, oo.B.T)) + iD
-                VAR  = _N.linalg.inv(iVAR)  #  knots x knots
-                iBDBW = _N.linalg.inv(BDB + lv_u)   # BDB not diag
-                #Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_u - _N.dot(oo.B.T, oo.u_a))))
-                Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_u - BTua))
-
-                oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
-
-                oo.smp_aS[it, :] = oo.aS
-                #tPSTH3 = _tm.time()
+            ########     PSTH sample
+            Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo - oous_rs
+            #Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo
+            _N.einsum("mn,mn->n", oo.ws, Oms, out=smWimOm)   #  sum over 
+            ilv_f  = _N.diag(_N.sum(oo.ws, axis=0))
+            #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
+            _N.fill_diagonal(lv_f, 1./_N.diagonal(ilv_f))
+            lm_f  = _N.dot(lv_f, smWimOm)  #  nondiag of 1./Bi are inf
+            #  now sample
+            iVAR = _N.dot(oo.B, _N.dot(ilv_f, oo.B.T)) + iD_f
+            VAR  = _N.linalg.inv(iVAR)  #  knots x knots
+            iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
+            Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
+            oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
+            oo.smp_aS[it, :] = oo.aS
 
             #  _d.F, _d.N, _d.ks, 
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
-
 
             """
             #tkf1  = _tm.time()
@@ -530,14 +509,6 @@ class mcmcARp:
                 oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                 oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
 
-
-            # sample F0
-            # for mh in xrange(50):
-            #  F0(it+1)    using ws(it+1), u(it+1), smpx(it+1), ws(it+1)
-
-            #  wt.shape = (TR, C, _d.N+1+2, 1)
-            #  wts.shape = (TR, burn+NMC, C, _d.N+1+2, 1)
-            #  ut.shape = (TR, C, _d.N+1+1, 1)
 
             ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)  
             oo.F_alfa_rep = alpR + alpC   #  new constructed
@@ -579,17 +550,8 @@ class mcmcARp:
                     BB2 += 0.5 * _N.dot(rsd_stp, rsd_stp.T)
                 oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)
 
-            oo.smp_u[:, it] = oo.u
             oo.smp_q2[:, it]= oo.q2
             t2 = _tm.time()
-            # print "1  %.5f" % (tPG1 - t1)
-            # print "2  %.5f" % (tPG2 - tPG1)
-            # print "2a %.5f" % (tPSTH2 - tPSTH1)
-            # print "2b %.5f" % (tPSTH3 - tPSTH2)
-            # print "3  %.5f" % (tkf1 - tPG2)
-            # print "4  %.5f" % (tkf2 - tkf1)
-            # print "5  %.5f" % (t2 - tkf2)
-            print "----------------    %.5f" % (t2-t1)
 
         #pool.close()
 

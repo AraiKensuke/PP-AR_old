@@ -17,7 +17,6 @@ ctypedef _N.int_t iDTYPE_t
 __BNML__ = 0   # binomial
 __NBML__ = 1   # negative binomial
 
-#cdef Llklhds(int type, _N.ndarray[iDTYPE_t, ndim=1], int rn1, double p1):
 cdef Llklhds(int type, _N.ndarray[iDTYPE_t, ndim=1] ks, int rn1, double p1):
     if type == __BNML__:
         return _N.sum(_N.log(_sm.comb(rn1, ks)) + ks*_N.log(p1) + (rn1-ks)*_N.log(1 - p1))
@@ -33,9 +32,9 @@ def trPoi(lmd, a):
         ct = _N.random.poisson(lmd)
     return ct
 
-def MCMC(burn, NMC, cts, rns, us, dty, order, pcdlog):
+def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, double p0=0.05, int dist=__BNML__):
     Mk  = _N.mean(cts)
-    iMk = 1./Mk
+    cdef double iMk = 1./Mk
     sdk = _N.std(cts)
     cv = ((sdk*sdk) * iMk)
     nmin= _N.max(cts)   #  if n too small, can't generate data
@@ -46,11 +45,18 @@ def MCMC(burn, NMC, cts, rns, us, dty, order, pcdlog):
     istdu2= 1./ stdu2
 
     #  let's start it off from binomial
-    cdef double p0   = 0.05, p1
-    u0   = -log(1/p0 - 1)   #  generate initial u0.  sample u's.
+    cdef double p1
+        
+    cdef double u0   = -log(1/p0 - 1)   #  generate initial u0.  sample u's.
     cdef int rn0    = int(Mk / p0)
+    if dist == __BNML__:  #  make sure initial distribution is capable of generating data
+        while rn0 < nmin:
+            rn0 += 1
+    else:
+        while rn0 < rmin:
+            rn0 += 1
 
-    pTH  = 0.01
+    pTH  = 0.03
     uTH    = log(pTH / (1 - pTH))
 
     lFlB = _N.empty(2, dtype=_N.double)
@@ -61,16 +67,18 @@ def MCMC(burn, NMC, cts, rns, us, dty, order, pcdlog):
 
     print "cv is %.3f" % cv
 
-    cdef int dist   = __BNML__
     cdef int todist
     lFlB[1] = Llklhds(dist, cts, rn0, p0)
     rngs   = _N.arange(0, 20000)
 
     cross  = False
 
-    for it in xrange(burn + NMC):
+    cdef double u1, lmd0, lmd1, lmd
+    cdef int rn1
+    cdef int it
+    for it from 0 <= it < burn + NMC:
         if dist == __BNML__:
-            uu1  = -_N.log(rn0 * iMk - 1) # mean of proposal density
+            uu1  = -log(rn0 * iMk - 1.) # mean of proposal density
             u1 = uu1 + stdu * rdns[it]
 
             if u1 > uTH:       ###########   Stay in Binomial ##########
@@ -89,14 +97,14 @@ def MCMC(burn, NMC, cts, rns, us, dty, order, pcdlog):
             else:   ########  Switch to __NBML__  ####################
                 todist = __NBML__;   cross  = True
                 u1 = 2*uTH - u1  #  u1 now a parameter of NB distribution   
-                p1 = 1 / (1 + _N.exp(-u1))
+                p1 = 1 / (1 + exp(-u1))
                 lmd = (1./p1 - 1)*Mk
                 rn1 = trPoi(lmd, rmin)   #  mean is p0/Mk
                 lmd1= Mk*((1-p1)/p1);  lmd0= Mk/p0;   lmd= lmd1
                 uu0  = -log(rn1 * iMk) # mean of proposal density
                 lpPR = 0.5*istdu2*(-(((uTH-u1) - uu1)*((uTH-u1) - uu1)) + (((uTH-u0) - uu0)*((uTH-u0) - uu0)))
         elif dist == __NBML__:
-            uu1  = -_N.log(rn0 * iMk) # mean of proposal density
+            uu1  = -log(rn0 * iMk) # mean of proposal density
             u1 = uu1 + stdu * rdns[it]
             if u1 > uTH:       ######   Stay in Negative binomial ######
                 todist = __NBML__;    cross  = False

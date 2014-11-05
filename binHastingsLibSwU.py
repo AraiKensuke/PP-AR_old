@@ -19,11 +19,11 @@ def trPoi(lmd, a):
     a, b inclusive
     """
     ct = _N.random.poisson(lmd)
-    while (ct < a):
+    while (ct < a):  #  accept ct == a.
         ct = _N.random.poisson(lmd)
     return ct
 
-def MCMC(burn, NMC, cts, rns, us, dty, order, pcdlog):
+def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, p0=0.05, dist=__BNML__):
     Mk  = _N.mean(cts)
     iMk = 1./Mk
     sdk = _N.std(cts)
@@ -36,9 +36,14 @@ def MCMC(burn, NMC, cts, rns, us, dty, order, pcdlog):
     istdu2= 1./ stdu2
 
     #  let's start it off from binomial
-    p0   = 0.05
     u0   = -_N.log(1/p0 - 1)   #  generate initial u0.  sample u's.
     rn0    = int(Mk / p0)
+    if dist == __BNML__:  #  make sure initial distribution is capable of generating data
+        while rn0 < nmin:
+            rn0 += 1
+    else:
+        while rn0 < rmin:
+            rn0 += 1
 
     pTH  = 0.01
     uTH    = _N.log(pTH / (1 - pTH))
@@ -55,7 +60,7 @@ def MCMC(burn, NMC, cts, rns, us, dty, order, pcdlog):
     rngs   = _N.arange(0, 20000)
 
     cross  = False
-    dist   = __BNML__
+    print "nmin is %d" %  nmin
     for it in xrange(burn + NMC):
         #print "------------  it %d" % it
         if dist == __BNML__:
@@ -67,6 +72,8 @@ def MCMC(burn, NMC, cts, rns, us, dty, order, pcdlog):
                 p1 = 1 / (1 + _N.exp(-u1))
                 lmd= Mk/p1
                 rn1 = trPoi(lmd, nmin)   #  mean is p0/Mk
+                if rn1 < nmin:
+                    "rn1 is less than nmin.  Why?"
                 bLargeP = (p0 > 0.3) and (p1 > 0.3)
                 if bLargeP:#    fairly large p.  Exact proposal ratio
                     lmd = Mk/(0.5*(p0+p1))

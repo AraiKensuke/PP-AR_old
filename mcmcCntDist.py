@@ -12,7 +12,7 @@ __NBML__ = 1   # negative binomial
 epS      = 10
 
 #  proposal parameters
-stdu = 0.1;    
+stdu = 0.3;    
 stdu2= stdu**2;   
 istdu2= 1./ stdu2
 

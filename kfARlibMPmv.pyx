@@ -53,11 +53,14 @@ def armdl_FFBS_1itrMP(args):   #  approximation
     GQGT[0, 0] = q2
 
     ##########  FF
+    t1 = _tm.time()
     FFdv(y, Rv, N, k, F, GQGT, fx, fV)
+    t2 = _tm.time()
+    #print "FFdv  %.3f" % (t2-t1)
     ##########  BS
     smXN = _N.random.multivariate_normal(fx[N,:,0], fV[N], size=1)
     #t1 = _tm.time()
-    smpls = _kfcom.BSvec(F, N, k, GQGT, fx, fV, smXN)
+    smpls = _kfcom.BSvecChol(F, N, k, GQGT, fx, fV, smXN)
     #t2 = _tm.time()
     #print (t2-t1)
     return [smpls, fx, fV]

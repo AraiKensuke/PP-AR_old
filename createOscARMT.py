@@ -29,8 +29,6 @@ def create(setname):
     ARcoeff = _N.empty((nRhythms, 2))
     for n in xrange(nRhythms):
         ARcoeff[n]          = (-1*_Npp.polyfromroots(alfa[n])[::-1][1:]).real
-    #  AR weights.  In Kitagawa, a[0] is weight for most recent state
-    #  when used like dot(a, x), a needs to be stored in reverse direction
 
     #  x, prbs, spks    3 columns
     nColumns = 3

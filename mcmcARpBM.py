@@ -44,7 +44,7 @@ import os
 
 #os.system("taskset -p 0xff %d" % os.getpid())
 
-class mcmcARpTCS:
+class mcmcARpBM:
     #  Simulation params
     processes     = 1
     setname       = None
@@ -69,9 +69,9 @@ class mcmcARpTCS:
     #  Sampled 
     Bsmpx         = None
     smp_u         = None;    smp_aS        = None;
-    smp_ss        = None
     smp_q2        = None
     smp_x00       = None
+    smp_zs        = None;    smp_ms        = None;
     allalfas      = None
     uts           = None;    wts           = None
     ranks         = None
@@ -79,6 +79,9 @@ class mcmcARpTCS:
     fs            = None
     amps          = None
     dt            = None
+
+    ###########  TEMP
+    ss0           = None; ss1 = None;
 
     #  LFC
     lfc           = None
@@ -99,8 +102,11 @@ class mcmcARpTCS:
     fx            = None   #  filtered latent state
     px            = None   #  phase of latent state
     
-    #  Current values of params and state
-    s             = 0.01        #  trend.  TRm  = median trial
+    #  binomial states
+    nStates       = 2
+    s             = None   #  coupling M x 2
+    z             = None   #  state index M x 2  [(1, 0), (0, 1), (0, 1), ...]
+    m             = None   #  dim 2
     
     bpsth         = False
     q2            = None
@@ -124,6 +130,8 @@ class mcmcARpTCS:
     u_x00        = None;          s2_x00       = None
     # psth spline coefficient priors
     u_a          = 0;             s2_a         = 0.5
+    #  Dirichlet priors
+    alp          = None
 
     def __init__(self):
         self.lfc         = _lfc.logerfc()
@@ -228,7 +236,7 @@ class mcmcARpTCS:
         oo.TR    = len(oo.useTrials)
         oo.TRm   = 0.5*(oo.TR - 1)
         oo.N     = N
-        oo.trd   = _N.zeros((oo.TR, oo.TR))
+        oo.sd   = _N.zeros((oo.TR, oo.TR))
         oo.us    = _N.array(u)
 
         ####  
@@ -360,6 +368,20 @@ class mcmcARpTCS:
         if oo.bpsth:
             oo.u_a            = _N.ones(oo.dfPSTH)*_N.mean(oo.us)
 
+        oo.alp = _N.ones(oo.nStates)
+        oo.z = _N.zeros((oo.TR, oo.nStates), dtype=_N.int)
+        for tr in xrange(oo.TR):
+            oo.z[tr, 0] = 0;                 oo.z[tr, 1] = 1
+            if _N.random.rand() < 0.5:
+                oo.z[tr, 0] = 1;                 oo.z[tr, 1] = 0
+
+        oo.m = _N.ones(oo.nStates) / float(oo.nStates)
+        oo.smp_ms = _N.empty((oo.burn + oo.NMC, oo.nStates))
+        oo.smp_zs = _N.empty((oo.TR, oo.burn + oo.NMC, oo.nStates))
+        oo.s = _N.zeros((oo.TR, oo.nStates))
+        oo.s[:, 0] = 0.01
+        oo.s[:, 1] = 1
+
         """
         _plt.ioff()
         for m in xrange(oo.TR):
@@ -372,6 +394,8 @@ class mcmcARpTCS:
 
     def initBernoulli(self):  ###########################  INITBERNOULLI
         oo = self
+
+
         if oo.model == "bernoulli":
             w  =  5
             wf =  gauKer(w)
@@ -402,10 +426,6 @@ class mcmcARpTCS:
         ooN         = oo.N
         oo.x00         = _N.array(oo.smpx[:, 2])
         oo.V00         = _N.zeros((ooTR, ook, ook))
-
-        mmm0 = _N.zeros((ooTR, ooTR))   #  diagonal matrix, m-m0
-        for m in xrange(ooTR):
-            mmm0[m, m] = (m - oo.TRm)
 
         ARo   = _N.empty((ooTR, oo._d.N+1))
         
@@ -449,12 +469,33 @@ class mcmcARpTCS:
         oous_rs = oo.us.reshape((ooTR, 1))   #  done for broadcasting rules
         lrnBadLoc = _N.empty(oo.N+1, dtype=_N.bool)
 
-        #oo.s = 0.0589
+        #lows = [0, 2, 3, 4, 5, 6, 7]
+        #lows = [5,]
+        lows = [4,]
+        for tr in xrange(oo.TR):
+            oo.z[tr, 0] = 0;                oo.z[tr, 1] = 1
+            try:
+                lows.index(tr)
+                oo.z[tr, 0] = 1;                oo.z[tr, 1] = 0
+            except ValueError:
+                pass
+
+        for tr in xrange(oo.TR):
+            oo.sd[tr, tr] = oo.s[0, 1]
+            if oo.z[tr, 0] == 1:
+                oo.sd[tr, tr] = oo.s[0, 0]
+        isd = _N.linalg.inv(oo.sd)
+
+        s0  = oo.s[0, 0]
+        s1  = oo.s[0, 1]
         while (it < ooNMC + oo.burn - 1):
-            for tr in xrange(ooTR):        ###  TREND in modulation strength
-                oo.trd[tr, tr] = (tr - oo.TRm) * oo.s + 1
-            itrd = _N.linalg.inv(oo.trd)
-            trSMPX = _N.dot(oo.trd, oo.smpx[..., 2:, 0])
+            for tr in xrange(oo.TR):
+                oo.sd[tr, tr] = s1
+                if oo.z[tr, 0] == 1:
+                    oo.sd[tr, tr] = s0
+            isd = _N.linalg.inv(oo.sd)
+            sSMPX = _N.dot(oo.sd, oo.smpx[..., 2:, 0])
+
             t1 = _tm.time()
             it += 1
             print it
@@ -474,7 +515,7 @@ class mcmcARpTCS:
             #tPG1 = _tm.time()
             for m in xrange(ooTR):
                 #_N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(oo.smpx[m, 2:, 0] + BaS + oo.us[m])), out=ARo[m])   #  history Offset    
-                _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(trSMPX[m] + BaS + oo.us[m])), out=ARo[m])   #  history Offset   ####TRD change
+                _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(sSMPX[m] + BaS + oo.us[m])), out=ARo[m])   #  history Offset   ####TRD change
                 nani = _N.isnan(ARo[m], out=lrnBadLoc)
                 locs = _N.where(lrnBadLoc == True)
                 if locs[0].shape[0] > 0:
@@ -484,7 +525,7 @@ class mcmcARpTCS:
                         ARo[m, locs[0][l]] = ARo[m, locs[0][l] - 1]
 
                 #lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe
-                lw.rpg_devroye(oo.rn, trSMPX[m] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe  ####TRD change
+                lw.rpg_devroye(oo.rn, sSMPX[m] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe  ####TRD change
                     
             if ooTR == 1:
                 oo.ws   = oo.ws.reshape(1, ooN+1)
@@ -494,18 +535,18 @@ class mcmcARpTCS:
             #  ws(it+1)    using u(it), F0(it), smpx(it)
 
             #oo._d.y = kpOws - BaS - ARo - oous_rs     ####TRD change
-            oo._d.y = _N.dot(itrd, kpOws - BaS - ARo - oous_rs)
+            oo._d.y = _N.dot(isd, kpOws - BaS - ARo - oous_rs)
             #print _N.std(oo._d.y, axis=1)
             oo._d.copyParams(oo.F0, oo.q2)
             #oo._d.Rv[:, :] =1 / oo.ws[:, :]   #  time dependent noise
             #  (MxM)  (MxN) = (MxN)  (Rv is MxN)
-            _N.dot(_N.dot(itrd, itrd), 1 / oo.ws, out=oo._d.Rv)
+            _N.dot(_N.dot(isd, isd), 1 / oo.ws, out=oo._d.Rv)
 
             #  cov matrix, prior of aS 
 
             ########     per trial offset sample
             #Ons  = kpOws - oo.smpx[..., 2:, 0] - ARo - BaS
-            Ons  = kpOws - trSMPX - ARo - BaS  ####TRD change
+            Ons  = kpOws - sSMPX - ARo - BaS  ####TRD change
             _N.einsum("mn,mn->m", oo.ws, Ons, out=smWinOn)  #  sum over trials
             ilv_u  = _N.diag(_N.sum(oo.ws, axis=1))  #  var  of LL
             #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
@@ -521,7 +562,7 @@ class mcmcARpTCS:
             ########     PSTH sample
             if oo.bpsth:
                 #Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo - oous_rs
-                Oms  = kpOws - trSMPX - ARo - oous_rs  ####TRD change
+                Oms  = kpOws - sSMPX - ARo - oous_rs  ####TRD change
                 #Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo
                 _N.einsum("mn,mn->n", oo.ws, Oms, out=smWimOm)   #  sum over 
                 ilv_f  = _N.diag(_N.sum(oo.ws, axis=0))
@@ -542,19 +583,6 @@ class mcmcARpTCS:
             #  _d.F, _d.N, _d.ks, 
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
 
-            """
-            #tkf1  = _tm.time()
-            sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
-            #tkf2  = _tm.time()
-
-            for m in xrange(ooTR):
-                oo.smpx[m, 2:] = sxv[m][0]
-                oo._d.f_x[m] = sxv[m][1]
-                oo._d.f_V[m] = sxv[m][2]
-                oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
-                oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
-            """
             for m in xrange(ooTR):
                 oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
                 oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
@@ -563,10 +591,10 @@ class mcmcARpTCS:
 
 
             ######################################
-            trSMPX = _N.dot(oo.trd, oo.smpx[..., 2:, 0])
+            sSMPX = _N.dot(oo.sd, oo.smpx[..., 2:, 0])
             for m in xrange(ooTR):
                 #_N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(oo.smpx[m, 2:, 0] + BaS + oo.us[m])), out=ARo[m])   #  history Offset    
-                _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(trSMPX[m] + BaS + oo.us[m])), out=ARo[m])   #  history Offset   ####TRD change
+                _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(sSMPX[m] + BaS + oo.us[m])), out=ARo[m])   #  history Offset   ####TRD change
                 nani = _N.isnan(ARo[m], out=lrnBadLoc)
                 locs = _N.where(lrnBadLoc == True)
                 if locs[0].shape[0] > 0:
@@ -579,13 +607,6 @@ class mcmcARpTCS:
             ###  TREND coefficient
             ###  ARo calculated using old value smpx x (m-m0).  
             ###  while new value of oo.smpx itself used.  Is this OK?
-            AM = 0.5*_N.sum(_N.dot(_N.dot(mmm0, mmm0), oo.smpx[..., 2:, 0]*oo.smpx[..., 2:, 0]*oo.ws))
-            BR = oo.smpx[..., 2:, 0] + BaS + oous_rs + ARo - kpOws
-            BM = _N.sum(oo.ws*BR*_N.dot(mmm0, oo.smpx[..., 2:, 0]))
-            oo.s = -BM / (2*AM) + _N.sqrt(1/(2*AM)) * _N.random.randn()
-            oo.smp_ss[it] = oo.s
-
-            print (oo.s * oo.TRm)
 
             if not oo.bFixF:   
                 ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)  
@@ -630,6 +651,52 @@ class mcmcARpTCS:
                 oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)
 
             oo.smp_q2[:, it]= oo.q2
+
+            dirArgs = _N.empty(oo.nStates)  #  dirichlet distribution args
+            for i in xrange(oo.nStates):
+                dirArgs[i] = oo.alp[i] + _N.sum(oo.z[:, i])
+
+            oo.m[:] = _N.random.dirichlet(dirArgs)
+            if (oo.m[0] < 0) or (oo.m[1] < 0):
+                print "m is negative"
+                print dirArgs
+            print oo.m
+            oo.smp_ms[it] = oo.m
+
+            #print _N.sum(oo.ws*((oous_rs + BaS + oo.s[0, 0]*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2), axis=1)
+
+            ss0 = -0.5 * _N.sum(oo.ws*((oous_rs + BaS + s0*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2), axis=1)
+            ss1 = -0.5 * _N.sum(oo.ws*((oous_rs + BaS + s1*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2), axis=1)
+            oo.ss0 = -0.5 * oo.ws*((oous_rs + BaS + s0*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2)
+            oo.ss1 = -0.5 * oo.ws*((oous_rs + BaS + s1*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2)
+
+            for tr in xrange(oo.TR):
+                #print "*  %(tr)d   %(s0).3e   %(s1).3e" % {"tr" : tr, "s0" : ss0[tr], "s1" : ss1[tr]}
+                print "*  %(tr)d   %(s0).3e   %(s1).3e" % {"tr" : tr, "s0" : ss0[tr], "s1" : ss1[tr]}
+            print "^^^^^^^"
+
+            args0 = -0.5*_N.sum(oo.ws*((oous_rs + BaS + s0*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2), axis=1)
+            args1 = -0.5*_N.sum(oo.ws*((oous_rs + BaS + s1*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2), axis=1)
+
+            arg1m0 = args1 - args0
+            thrSt0 = 1 / (1 + (oo.m[1]/oo.m[0])*_N.exp(arg1m0))
+
+            print thrSt0
+
+            for tr in xrange(oo.TR):
+                oo.z[tr, 0] = 0; oo.z[tr, 1] = 1
+                if _N.random.rand() < thrSt0[tr]:
+                    oo.z[tr, 0] = 1; oo.z[tr, 1] = 0
+                oo.smp_zs[tr, it] = oo.z[tr]
+            # print "!!!!"
+            # for tr in lows:
+            #     print "%.4f" % ((oo.m[0]*stat0[tr]) / (oo.m[0]*stat0[tr] + oo.m[1]*stat1[tr]))
+            # print "----"
+            # for tr in xrange(oo.TR):
+            #     try:
+            #         lows.index(tr)
+            #     except ValueError:
+            #         print "%.4f" % ((oo.m[0]*stat0[tr]) / (oo.m[0]*stat0[tr] + oo.m[1]*stat1[tr]))            
 
             ###  update modulation strength trend parameter
 

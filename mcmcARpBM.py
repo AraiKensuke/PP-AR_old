@@ -82,6 +82,7 @@ class mcmcARpBM:
 
     ###########  TEMP
     ss0           = None; ss1 = None;
+    ARo01         = None
 
     #  LFC
     lfc           = None
@@ -462,16 +463,13 @@ class mcmcARpBM:
             for tr in xrange(ooTR):
                 oo.lrn[tr] = oo.build_lrnLambda2(tr)
 
-        #pool = Pool(processes=oo.processes)
         ###############################  MCMC LOOP  ########################
         ###  need pointer to oo.us, but reshaped for broadcasting to work
         ###############################  MCMC LOOP  ########################
         oous_rs = oo.us.reshape((ooTR, 1))   #  done for broadcasting rules
         lrnBadLoc = _N.empty(oo.N+1, dtype=_N.bool)
 
-        #lows = [0, 2, 3, 4, 5, 6, 7]
-        #lows = [5,]
-        lows = [4,]
+        lows = [3, ]
         for tr in xrange(oo.TR):
             oo.z[tr, 0] = 0;                oo.z[tr, 1] = 1
             try:
@@ -484,69 +482,112 @@ class mcmcARpBM:
             oo.sd[tr, tr] = oo.s[0, 1]
             if oo.z[tr, 0] == 1:
                 oo.sd[tr, tr] = oo.s[0, 0]
-        isd = _N.linalg.inv(oo.sd)
 
-        s0  = oo.s[0, 0]
-        s1  = oo.s[0, 1]
+        sd01   = _N.zeros((oo.nStates, oo.TR, oo.TR))
+        isd01  = _N.zeros((oo.nStates, oo.TR, oo.TR))
+
+        smpx01 = _N.zeros((oo.nStates, oo.TR, oo.N+1))
+        Esmpx01= _N.empty((oo.nStates, oo.TR, oo.N+3, oo.k))
+        ws01   = _N.empty((oo.nStates, oo.TR, oo.N+1))
+        kpOws01= _N.empty((oo.nStates, oo.TR, oo.N+1))
+        oo.ARo01  = _N.empty((oo.nStates, oo.TR, oo.N+1))
+
+        for tryZ in xrange(oo.nStates):
+            _N.fill_diagonal(sd01[tryZ], oo.s[0, tryZ])
+            isd01[tryZ] = _N.linalg.inv(sd01[tryZ])
+
         while (it < ooNMC + oo.burn - 1):
-            for tr in xrange(oo.TR):
-                oo.sd[tr, tr] = s1
-                if oo.z[tr, 0] == 1:
-                    oo.sd[tr, tr] = s0
-            isd = _N.linalg.inv(oo.sd)
-            sSMPX = _N.dot(oo.sd, oo.smpx[..., 2:, 0])
-
             t1 = _tm.time()
             it += 1
+
             print it
             if (it % 10) == 0:
                 print it
-            #  generate latent AR state
-            oo._d.f_x[:, 0, :, 0]     = oo.x00
-            if it == 1:
-                for m in xrange(ooTR):
-                    oo._d.f_V[m, 0]     = oo.s2_x00
-            else:
-                oo._d.f_V[:, 0]     = oo._d.f_V[:, 1]
 
             BaS = _N.dot(oo.B.T, oo.aS)
-            ###  PG latent variable sample
-
-            #tPG1 = _tm.time()
-            for m in xrange(ooTR):
-                #_N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(oo.smpx[m, 2:, 0] + BaS + oo.us[m])), out=ARo[m])   #  history Offset    
-                _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(sSMPX[m] + BaS + oo.us[m])), out=ARo[m])   #  history Offset   ####TRD change
-                nani = _N.isnan(ARo[m], out=lrnBadLoc)
-                locs = _N.where(lrnBadLoc == True)
-                if locs[0].shape[0] > 0:
-                    L = locs[0].shape[0]
-                    print "ARo locations bad tr %(m)d  %(L) d" % {"m" : m, "L" : L}
-                    for l in xrange(L):  #  fill with reasonable value
-                        ARo[m, locs[0][l]] = ARo[m, locs[0][l] - 1]
-
-                #lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe
-                lw.rpg_devroye(oo.rn, sSMPX[m] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe  ####TRD change
-                    
-            if ooTR == 1:
-                oo.ws   = oo.ws.reshape(1, ooN+1)
-            _N.divide(oo.kp, oo.ws, out=kpOws)
-
-            #  Now that we have PG variables, construct Gaussian timeseries
-            #  ws(it+1)    using u(it), F0(it), smpx(it)
-
-            #oo._d.y = kpOws - BaS - ARo - oous_rs     ####TRD change
-            oo._d.y = _N.dot(isd, kpOws - BaS - ARo - oous_rs)
-            #print _N.std(oo._d.y, axis=1)
             oo._d.copyParams(oo.F0, oo.q2)
-            #oo._d.Rv[:, :] =1 / oo.ws[:, :]   #  time dependent noise
-            #  (MxM)  (MxN) = (MxN)  (Rv is MxN)
-            _N.dot(_N.dot(isd, isd), 1 / oo.ws, out=oo._d.Rv)
 
-            #  cov matrix, prior of aS 
+            for tryZ in xrange(oo.nStates):
+                _N.dot(sd01[tryZ], oo.smpx[..., 2:, 0], out=smpx01[tryZ])
+
+                #  generate latent AR state
+                oo._d.f_x[:, 0, :, 0]     = oo.x00
+                if it == 1:
+                    for m in xrange(ooTR):
+                        oo._d.f_V[m, 0]     = oo.s2_x00
+                else:
+                    oo._d.f_V[:, 0]     = oo._d.f_V[:, 1]
+
+                ###  PG latent variable sample
+                for m in xrange(ooTR):
+                    _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(smpx01[tryZ, m] + BaS + oo.us[m])), out=oo.ARo01[tryZ, m])   #  history Offset   ####TRD change
+                    nani = _N.isnan(oo.ARo01[tryZ, m], out=lrnBadLoc)
+                    locs = _N.where(lrnBadLoc == True)
+                    if locs[0].shape[0] > 0:
+                        L = locs[0].shape[0]
+                        print "ARo locations bad tr %(m)d  %(L) d" % {"m" : m, "L" : L}
+                        for l in xrange(L):  #  fill with reasonable value
+                            oo.ARo01[tryZ, m, locs[0][l]] = oo.ARo01[tryZ, m, locs[0][l] - 1]
+
+                    lw.rpg_devroye(oo.rn, smpx01[tryZ, m] + oo.us[m] + BaS + oo.ARo01[tryZ, m], out=ws01[tryZ, m])  ######  devryoe  ####TRD change
+
+                _N.divide(oo.kp, ws01[tryZ], out=kpOws01[tryZ])
+
+                #  Now that we have PG variables, construct Gaussian timeseries
+                #  ws(it+1)    using u(it), F0(it), smpx(it)
+
+                oo._d.y = _N.dot(isd01[tryZ], kpOws01[tryZ] - BaS - oo.ARo01[tryZ] - oous_rs)
+
+                #  (MxM)  (MxN) = (MxN)  (Rv is MxN)
+                _N.dot(_N.dot(isd01[tryZ], isd01[tryZ]), 1 / ws01[tryZ], out=oo._d.Rv)
+
+                #######  DATA AUGMENTATION.  If we update 's' before, we need to update _d.y right after, _d.y depends on 's'
+                #  _d.F, _d.N, _d.ks, 
+                tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
+
+                for m in xrange(ooTR):
+                    Esmpx01[tryZ, m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
+                    Esmpx01[tryZ, m, 1, 0:ook-1]   = Esmpx01[tryZ, m, 2, 1:]
+                    Esmpx01[tryZ, m, 0, 0:ook-2]   = Esmpx01[tryZ, m, 2, 2:]
+
+                _N.dot(sd01[tryZ], Esmpx01[tryZ, :, 2:, 0], out=smpx01[tryZ])
+
+            args0 = -0.5*_N.sum(ws01[0]*((oous_rs + BaS + smpx01[0, :] + oo.ARo01[0] - kpOws01[0])**2 - kpOws01[0]**2), axis=1)
+            args1 = -0.5*_N.sum(ws01[1]*((oous_rs + BaS + smpx01[1, :] + oo.ARo01[1] - kpOws01[1])**2 - kpOws01[1]**2), axis=1)
+
+            arg1m0 = args1 - args0
+            thrSt0 = 1 / (1 + (oo.m[1]/oo.m[0])*_N.exp(arg1m0))
+            print thrSt0
+
+            btrSt = -1            
+
+            for tr in xrange(oo.TR):
+                btrSt = 0 if (_N.random.rand() < thrSt0[tr]) else 1
+
+                oo.z[tr, btrSt] = 1;   oo.z[tr, 1-btrSt] = 0
+                oo.smpx[tr] = Esmpx01[btrSt, tr]   #  oo.smpx
+                ARo[tr]     = oo.ARo01[btrSt, tr]
+                kpOws[tr]   = kpOws01[btrSt, tr]
+                oo.ws[tr]      = ws01[btrSt, tr]
+
+                oo.smp_zs[tr, it] = oo.z[tr]
+
+                oo.Bsmpx[tr, it, 2:]    = Esmpx01[btrSt, tr, 2:, 0]
+
+            dirArgs = _N.empty(oo.nStates)  #  dirichlet distribution args
+            for i in xrange(oo.nStates):
+                dirArgs[i] = oo.alp[i] + _N.sum(oo.z[:, i])
+
+            oo.m[:] = _N.random.dirichlet(dirArgs)
+            if (oo.m[0] < 0) or (oo.m[1] < 0):
+                print "m is negative"
+                print dirArgs
+            print oo.m
+            oo.smp_ms[it] = oo.m
+
 
             ########     per trial offset sample
-            #Ons  = kpOws - oo.smpx[..., 2:, 0] - ARo - BaS
-            Ons  = kpOws - sSMPX - ARo - BaS  ####TRD change
+            Ons  = kpOws - oo.smpx[..., 2:, 0] - ARo - BaS
             _N.einsum("mn,mn->m", oo.ws, Ons, out=smWinOn)  #  sum over trials
             ilv_u  = _N.diag(_N.sum(oo.ws, axis=1))  #  var  of LL
             #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
@@ -559,60 +600,10 @@ class mcmcARpBM:
             oo.us[:]  = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
             oo.smp_u[:, it] = oo.us
 
-            ########     PSTH sample
-            if oo.bpsth:
-                #Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo - oous_rs
-                Oms  = kpOws - sSMPX - ARo - oous_rs  ####TRD change
-                #Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo
-                _N.einsum("mn,mn->n", oo.ws, Oms, out=smWimOm)   #  sum over 
-                ilv_f  = _N.diag(_N.sum(oo.ws, axis=0))
-                #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
-                _N.fill_diagonal(lv_f, 1./_N.diagonal(ilv_f))
-                lm_f  = _N.dot(lv_f, smWimOm)  #  nondiag of 1./Bi are inf
-                #  now sample
-                iVAR = _N.dot(oo.B, _N.dot(ilv_f, oo.B.T)) + iD_f
-                VAR  = _N.linalg.inv(iVAR)  #  knots x knots
-                iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
-                Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
-                oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
-                oo.smp_aS[it, :] = oo.aS
-            else:
-                oo.aS[:]   = 0
-
-            #######  DATA AUGMENTATION.  If we update 's' before, we need to update _d.y right after, _d.y depends on 's'
-            #  _d.F, _d.N, _d.ks, 
-            tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
-
-            for m in xrange(ooTR):
-                oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
-                oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
-                oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
-
-
-            ######################################
-            sSMPX = _N.dot(oo.sd, oo.smpx[..., 2:, 0])
-            for m in xrange(ooTR):
-                #_N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(oo.smpx[m, 2:, 0] + BaS + oo.us[m])), out=ARo[m])   #  history Offset    
-                _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(sSMPX[m] + BaS + oo.us[m])), out=ARo[m])   #  history Offset   ####TRD change
-                nani = _N.isnan(ARo[m], out=lrnBadLoc)
-                locs = _N.where(lrnBadLoc == True)
-                if locs[0].shape[0] > 0:
-                    L = locs[0].shape[0]
-                    print "ARo locations bad tr %(m)d  %(L) d" % {"m" : m, "L" : L}
-                    for l in xrange(L):  #  fill with reasonable value
-                        ARo[m, locs[0][l]] = ARo[m, locs[0][l] - 1]
-            ######################################
-
-            ###  TREND coefficient
-            ###  ARo calculated using old value smpx x (m-m0).  
-            ###  while new value of oo.smpx itself used.  Is this OK?
-
-            if not oo.bFixF:   
-                ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)  
-                oo.F_alfa_rep = alpR + alpC   #  new constructed
-                prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
-                print prt
+            ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)  
+            oo.F_alfa_rep = alpR + alpC   #  new constructed
+            prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
+            print prt
             ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d)
             #ranks[it]    = rank
             oo.allalfas[it] = oo.F_alfa_rep
@@ -629,81 +620,38 @@ class mcmcARpBM:
             #  sample u     WE USED TO Do this after smpx
             #  u(it+1)    using ws(it+1), F0(it), smpx(it+1), ws(it+1)
 
-            if oo.ID_q2:   ####  mod. strength trends don't changes this part
-                for m in xrange(ooTR):
-                    #####################    sample q2
-                    a = oo.a_q2 + 0.5*(ooN+1)  #  N + 1 - 1
-                    rsd_stp = oo.smpx[m, 3:,0] - _N.dot(oo.smpx[m, 2:-1], oo.F0).T
-                    BB = oo.B_q2 + 0.5 * _N.dot(rsd_stp, rsd_stp.T)
-                    oo.q2[m] = _ss.invgamma.rvs(a, scale=BB)
-                    oo.x00[m]      = oo.smpx[m, 2]*0.1
-                    oo.smp_q2[m, it]= oo.q2[m]
-            else:
-                oo.a2 = oo.a_q2 + 0.5*(ooTR*ooN + 2)  #  N + 1 - 1
-                BB2 = oo.B_q2
-                for m in xrange(ooTR):
-                    #   set x00 
-                    oo.x00[m]      = oo.smpx[m, 2]*0.1
+            oo.a2 = oo.a_q2 + 0.5*(ooTR*ooN + 2)  #  N + 1 - 1
+            BB2 = oo.B_q2
+            for m in xrange(ooTR):
+                #   set x00 
+                oo.x00[m]      = oo.smpx[m, 2]*0.1
 
-                    #####################    sample q2
-                    rsd_stp = oo.smpx[m, 3:,0] - _N.dot(oo.smpx[m, 2:-1], oo.F0).T
-                    BB2 += 0.5 * _N.dot(rsd_stp, rsd_stp.T)
-                oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)
+                #####################    sample q2
+                rsd_stp = oo.smpx[m, 3:,0] - _N.dot(oo.smpx[m, 2:-1], oo.F0).T
+                BB2 += 0.5 * _N.dot(rsd_stp, rsd_stp.T)
+            oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)
 
             oo.smp_q2[:, it]= oo.q2
 
-            dirArgs = _N.empty(oo.nStates)  #  dirichlet distribution args
-            for i in xrange(oo.nStates):
-                dirArgs[i] = oo.alp[i] + _N.sum(oo.z[:, i])
+            ########     PSTH sample  Do PSTH after we generate zs
+            if oo.bpsth:
+                Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo - oous_rs
+                _N.einsum("mn,mn->n", oo.ws, Oms, out=smWimOm)   #  sum over 
+                ilv_f  = _N.diag(_N.sum(oo.ws, axis=0))
+                _N.fill_diagonal(lv_f, 1./_N.diagonal(ilv_f))
+                lm_f  = _N.dot(lv_f, smWimOm)  #  nondiag of 1./Bi are inf
+                #  now sample
+                iVAR = _N.dot(oo.B, _N.dot(ilv_f, oo.B.T)) + iD_f
+                VAR  = _N.linalg.inv(iVAR)  #  knots x knots
+                iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
+                Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
+                oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
+                oo.smp_aS[it, :] = oo.aS
+            else:
+                oo.aS[:]   = 0
 
-            oo.m[:] = _N.random.dirichlet(dirArgs)
-            if (oo.m[0] < 0) or (oo.m[1] < 0):
-                print "m is negative"
-                print dirArgs
-            print oo.m
-            oo.smp_ms[it] = oo.m
-
-            #print _N.sum(oo.ws*((oous_rs + BaS + oo.s[0, 0]*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2), axis=1)
-
-            ss0 = -0.5 * _N.sum(oo.ws*((oous_rs + BaS + s0*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2), axis=1)
-            ss1 = -0.5 * _N.sum(oo.ws*((oous_rs + BaS + s1*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2), axis=1)
-            oo.ss0 = -0.5 * oo.ws*((oous_rs + BaS + s0*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2)
-            oo.ss1 = -0.5 * oo.ws*((oous_rs + BaS + s1*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2)
-
-            for tr in xrange(oo.TR):
-                #print "*  %(tr)d   %(s0).3e   %(s1).3e" % {"tr" : tr, "s0" : ss0[tr], "s1" : ss1[tr]}
-                print "*  %(tr)d   %(s0).3e   %(s1).3e" % {"tr" : tr, "s0" : ss0[tr], "s1" : ss1[tr]}
-            print "^^^^^^^"
-
-            args0 = -0.5*_N.sum(oo.ws*((oous_rs + BaS + s0*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2), axis=1)
-            args1 = -0.5*_N.sum(oo.ws*((oous_rs + BaS + s1*oo.smpx[:, 2:, 0] + ARo - kpOws)**2 - kpOws**2), axis=1)
-
-            arg1m0 = args1 - args0
-            thrSt0 = 1 / (1 + (oo.m[1]/oo.m[0])*_N.exp(arg1m0))
-
-            print thrSt0
-
-            for tr in xrange(oo.TR):
-                oo.z[tr, 0] = 0; oo.z[tr, 1] = 1
-                if _N.random.rand() < thrSt0[tr]:
-                    oo.z[tr, 0] = 1; oo.z[tr, 1] = 0
-                oo.smp_zs[tr, it] = oo.z[tr]
-            # print "!!!!"
-            # for tr in lows:
-            #     print "%.4f" % ((oo.m[0]*stat0[tr]) / (oo.m[0]*stat0[tr] + oo.m[1]*stat1[tr]))
-            # print "----"
-            # for tr in xrange(oo.TR):
-            #     try:
-            #         lows.index(tr)
-            #     except ValueError:
-            #         print "%.4f" % ((oo.m[0]*stat0[tr]) / (oo.m[0]*stat0[tr] + oo.m[1]*stat1[tr]))            
-
-            ###  update modulation strength trend parameter
-
-            t2 = _tm.time()
-            print "gibbs iter %.3f" % (t2-t1)
-
-        #pool.close()
+        t2 = _tm.time()
+        print "gibbs iter %.3f" % (t2-t1)
 
     def build_lrnLambda2(self, tr):
         oo = self

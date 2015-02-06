@@ -8,6 +8,7 @@ timing
 FFBS  1.02443
 5  0.03322
 """
+import pickle
 from kflib import createDataAR
 import numpy as _N
 import patsy
@@ -71,6 +72,8 @@ class mcmcARp:
     smp_x00       = None
     allalfas      = None
     uts           = None;    wts           = None
+    rts           = None;    zts           = None
+    zts0          = None     #  the lowest component only
     ranks         = None
     pgs           = None
     fs            = None
@@ -276,7 +279,7 @@ class mcmcARp:
             oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), df=4, include_intercept=True)    #  spline basis
 
             oo.B = oo.B.T    #  My convention for beta
-            #oo.aS = _N.zeros(4)
+            oo.aS = _N.zeros(4)
 
         # #generate initial values of parameters
         oo._d = _kfardat.KFARGauObsDat(oo.TR, oo.N, oo.k)
@@ -493,22 +496,25 @@ class mcmcARp:
             oo.smp_u[:, it] = oo.us
 
             ########     PSTH sample
-            Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo - oous_rs
-            #Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo
-            _N.einsum("mn,mn->n", oo.ws, Oms, out=smWimOm)   #  sum over 
-            ilv_f  = _N.diag(_N.sum(oo.ws, axis=0))
-            #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
-            _N.fill_diagonal(lv_f, 1./_N.diagonal(ilv_f))
-            lm_f  = _N.dot(lv_f, smWimOm)  #  nondiag of 1./Bi are inf
-            #  now sample
-            iVAR = _N.dot(oo.B, _N.dot(ilv_f, oo.B.T)) + iD_f
-            VAR  = _N.linalg.inv(iVAR)  #  knots x knots
-            iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
-            Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
             if oo.bpsth:
+                Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo - oous_rs
+                #Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo
+                _N.einsum("mn,mn->n", oo.ws, Oms, out=smWimOm)   #  sum over 
+                ilv_f  = _N.diag(_N.sum(oo.ws, axis=0))
+                #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
+                _N.fill_diagonal(lv_f, 1./_N.diagonal(ilv_f))
+                lm_f  = _N.dot(lv_f, smWimOm)  #  nondiag of 1./Bi are inf
+                #  now sample
+                iVAR = _N.dot(oo.B, _N.dot(ilv_f, oo.B.T)) + iD_f
+                VAR  = _N.linalg.inv(iVAR)  #  knots x knots
+                iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
+                Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
+
                 oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
-#                oo.aS   = _N.zeros(4)
-            oo.smp_aS[it, :] = oo.aS
+                oo.smp_aS[it, :] = oo.aS
+            else:
+                oo.aS   = _N.zeros(4)
+
 
             #  _d.F, _d.N, _d.ks, 
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
@@ -577,6 +583,8 @@ class mcmcARp:
                 oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)
 
             oo.smp_q2[:, it]= oo.q2
+
+
             t2 = _tm.time()
             print "gibbs iter %.3f" % (t2-t1)
 
@@ -609,5 +617,52 @@ class mcmcARp:
 
             lrn[i] *= lmbd
         return lrn
+
+    def getComponents(self):
+        oo    = self
+        TR    = oo.TR
+        NMC   = oo.NMC
+        burn  = oo.burn
+        R     = oo.R
+        C     = oo.C
+        ddN   = oo.N
+
+        oo.rts = _N.empty((TR, burn+NMC, ddN+2, R))    #  real components   N = ddN
+        oo.zts = _N.empty((TR, burn+NMC, ddN+2, C))    #  imag components 
+
+        for tr in xrange(TR):
+            for it in xrange(1, burn + NMC):
+                b, c = dcmpcff(alfa=oo.allalfas[it])
+
+                for r in xrange(R):
+                    oo.rts[tr, it, :, r] = b[r] * oo.uts[tr, it, r, :]
+
+                for z in xrange(C):
+                    #print "z   %d" % z
+                    cf1 = 2*c[2*z].real
+                    gam = oo.allalfas[it, R+2*z]
+                    cf2 = 2*(c[2*z].real*gam.real + c[2*z].imag*gam.imag)
+                    oo.zts[tr, it, 0:ddN+2, z] = cf1*oo.wts[tr, it, z, 1:ddN+3] - cf2*oo.wts[tr, it, z, 0:ddN+2]
+
+        oo.zts0 = _N.array(oo.zts[:, :, 1:, 0])
+
+    def dump(self):
+        oo    = self
+        pcklme = [oo]
+        oo.Bsmpx = None
+        oo.smpx  = None
+        oo.wts   = None
+        oo.uts   = None
+        oo._d    = None
+        oo.lfc   = None
+        oo.rts   = None
+        oo.zts   = None
+
+        with open("mARp.dump", "wb") as f:
+            pickle.dump(pcklme, f)
+
+            # import pickle
+            # with open("mARp.dump", "rb") as f:
+            #lm = pickle.load(f)
 
 

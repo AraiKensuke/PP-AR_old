@@ -495,6 +495,13 @@ class mcmcARpTCS:
 
             #oo._d.y = kpOws - BaS - ARo - oous_rs     ####TRD change
             oo._d.y = _N.dot(itrd, kpOws - BaS - ARo - oous_rs)
+            print "shape dy"
+            print itrd.shape
+            print kpOws.shape
+            print BaS.shape
+            print ARo.shape
+            print oous_rs.shape
+            print oo._d.y.shape
             #print _N.std(oo._d.y, axis=1)
             oo._d.copyParams(oo.F0, oo.q2)
             #oo._d.Rv[:, :] =1 / oo.ws[:, :]   #  time dependent noise

@@ -102,7 +102,7 @@ class mcmcARpETM:
     #  Current values of params and state
     s             = 0.01        #  trend.  TRm  = median trial
     GAM           = None;   gam = None
-    dfGAM         = 9
+    dfGAM         = None;
     
     bpsth         = False
     q2            = None
@@ -290,10 +290,13 @@ class mcmcARpETM:
             oo.B = oo.B.T    #  My convention for beta
             oo.aS = _N.zeros(4)
 
+        if oo.dfGAM is None:
+            oo.dfGAM = 9
         oo.GAM = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), df=oo.dfGAM, include_intercept=True, degree=1)    #  Spline basis for modulation strength
-        #oo.GAM = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), knots=_N.array([0.12, 0.18, 0.43, 0.48, 0.6]), include_intercept=True, degree=1)    #  Spline basis for modulation strength
+
         oo.dfGAM = oo.GAM.shape[1]
-        oo.gam = _N.ones(oo.dfGAM)
+        if oo.gam is None:
+            oo.gam = _N.ones(oo.dfGAM)
         oo.GAM2= oo.GAM*oo.GAM
 
         # #generate initial values of parameters
@@ -611,7 +614,17 @@ class mcmcARpETM:
                     B += 2*(ibb*(tmpGAM[ig-1] + tmpGAM[ig+1] - 2*ug) - iaa*ug)
 
                 A2 = 2*A
-                oo.gam[ig] = B/(A2) + _N.sqrt(1/(A2))*_N.random.randn()
+                u  = B/A2
+                sd = _N.sqrt(1/A2)
+
+                a  = 0
+                b  = 100
+
+                a = (a - u) / sd
+                b = (b - u) / sd
+
+                #oo.gam[ig] = B/(A2) + _N.sqrt(1/(A2))*_N.random.randn()
+                oo.gam[ig] = u + sd*_ss.truncnorm.rvs(a, b)
 
             oo.smp_gam[it] = oo.gam
             print oo.gam
@@ -637,6 +650,7 @@ class mcmcARpETM:
             #  sample u     WE USED TO Do this after smpx
             #  u(it+1)    using ws(it+1), F0(it), smpx(it+1), ws(it+1)
 
+            """
             if oo.ID_q2:   ####  mod. strength trends don't changes this part
                 for m in xrange(ooTR):
                     #####################    sample q2
@@ -659,6 +673,7 @@ class mcmcARpETM:
                 oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)
 
             oo.smp_q2[:, it]= oo.q2
+            """
 
 
             ###  update modulation strength trend parameter

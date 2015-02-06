@@ -83,6 +83,7 @@ class mcmcARpBM:
     ###########  TEMP
     ss0           = None; ss1 = None;
     ARo01         = None
+    THR           = None
 
     #  LFC
     lfc           = None
@@ -353,7 +354,7 @@ class mcmcARpBM:
             oo.q2          /= mlt*mlt
             xE, nul = createDataAR(oo.N, oo.F0, oo.q2[0], 0.1)
 
-            if oo.model == "Bernoulli":
+            if (oo.model == "Bernoulli") or (oo.model == "bernoulli"):
                 oo.initBernoulli()
             #smpx[0, 2:, 0] = x[0]    ##########  DEBUG
 
@@ -396,7 +397,6 @@ class mcmcARpBM:
     def initBernoulli(self):  ###########################  INITBERNOULLI
         oo = self
 
-
         if oo.model == "bernoulli":
             w  =  5
             wf =  gauKer(w)
@@ -409,8 +409,8 @@ class mcmcARpBM:
                 fgk[m] = bpFilt(15, 100, 1, 135, 500, gk[m])   #  we want
                 fgk[m, :] /= 2*_N.std(fgk[m, :])
 
-                #oo.smpx[m, 2:, 0] = fgk[m, :]
-                oo.smpx[m, 2:, 0] = 0
+                oo.smpx[m, 2:, 0] = fgk[m, :]
+                #oo.smpx[m, 2:, 0] = 0
                 for n in xrange(2+oo.k-1, oo.N+1+2):  # CREATE square smpx
                     oo.smpx[m, n, 1:] = oo.smpx[m, n-oo.k+1:n, 0][::-1]
                 for n in xrange(2+oo.k-2, -1, -1):  # CREATE square smpx
@@ -489,6 +489,7 @@ class mcmcARpBM:
         smpx01 = _N.zeros((oo.nStates, oo.TR, oo.N+1))
         Esmpx01= _N.empty((oo.nStates, oo.TR, oo.N+3, oo.k))
         ws01   = _N.empty((oo.nStates, oo.TR, oo.N+1))
+        us01   = _N.zeros((oo.nStates, oo.TR))
         kpOws01= _N.empty((oo.nStates, oo.TR, oo.N+1))
         oo.ARo01  = _N.empty((oo.nStates, oo.TR, oo.N+1))
 
@@ -520,7 +521,7 @@ class mcmcARpBM:
 
                 ###  PG latent variable sample
                 for m in xrange(ooTR):
-                    _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(smpx01[tryZ, m] + BaS + oo.us[m])), out=oo.ARo01[tryZ, m])   #  history Offset   ####TRD change
+                    _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(smpx01[tryZ, m] + BaS + us01[tryZ, m])), out=oo.ARo01[tryZ, m])   #  history Offset   ####TRD change
                     nani = _N.isnan(oo.ARo01[tryZ, m], out=lrnBadLoc)
                     locs = _N.where(lrnBadLoc == True)
                     if locs[0].shape[0] > 0:
@@ -529,14 +530,26 @@ class mcmcARpBM:
                         for l in xrange(L):  #  fill with reasonable value
                             oo.ARo01[tryZ, m, locs[0][l]] = oo.ARo01[tryZ, m, locs[0][l] - 1]
 
-                    lw.rpg_devroye(oo.rn, smpx01[tryZ, m] + oo.us[m] + BaS + oo.ARo01[tryZ, m], out=ws01[tryZ, m])  ######  devryoe  ####TRD change
+                    lw.rpg_devroye(oo.rn, smpx01[tryZ, m] + us01[tryZ, m] + BaS + oo.ARo01[tryZ, m], out=ws01[tryZ, m])  ######  devryoe  ####TRD change
+
+                Ons  = kpOws - smpx01[tryZ] - oo.ARo01[tryZ] - BaS
+                _N.einsum("mn,mn->m", oo.ws, Ons, out=smWinOn)  #  sum over trials
+                ilv_u  = _N.diag(_N.sum(oo.ws, axis=1))  #  var  of LL
+                #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
+                _N.fill_diagonal(lv_u, 1./_N.diagonal(ilv_u))
+                lm_u  = _N.dot(lv_u, smWinOn)  #  nondiag of 1./Bi are inf, mean LL
+                #  now sample
+                iVAR = ilv_u + iD_u
+                VAR  = _N.linalg.inv(iVAR)  #
+                Mn    = _N.dot(VAR, _N.dot(ilv_u, lm_u) + iD_u_u_u)
+                us01[tryZ]  = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
 
                 _N.divide(oo.kp, ws01[tryZ], out=kpOws01[tryZ])
 
                 #  Now that we have PG variables, construct Gaussian timeseries
                 #  ws(it+1)    using u(it), F0(it), smpx(it)
 
-                oo._d.y = _N.dot(isd01[tryZ], kpOws01[tryZ] - BaS - oo.ARo01[tryZ] - oous_rs)
+                oo._d.y = _N.dot(isd01[tryZ], kpOws01[tryZ] - BaS - oo.ARo01[tryZ] - us01[tryZ].reshape(ooTR, 1))
 
                 #  (MxM)  (MxN) = (MxN)  (Rv is MxN)
                 _N.dot(_N.dot(isd01[tryZ], isd01[tryZ]), 1 / ws01[tryZ], out=oo._d.Rv)
@@ -552,8 +565,8 @@ class mcmcARpBM:
 
                 _N.dot(sd01[tryZ], Esmpx01[tryZ, :, 2:, 0], out=smpx01[tryZ])
 
-            args0 = -0.5*_N.sum(ws01[0]*((oous_rs + BaS + smpx01[0, :] + oo.ARo01[0] - kpOws01[0])**2 - kpOws01[0]**2), axis=1)
-            args1 = -0.5*_N.sum(ws01[1]*((oous_rs + BaS + smpx01[1, :] + oo.ARo01[1] - kpOws01[1])**2 - kpOws01[1]**2), axis=1)
+            args0 = -0.5*_N.sum(ws01[0]*((us01[0].reshape(ooTR, 1) + BaS + smpx01[0, :] + oo.ARo01[0] - kpOws01[0])**2 - kpOws01[0]**2), axis=1)
+            args1 = -0.5*_N.sum(ws01[1]*((us01[1].reshape(ooTR, 1) + BaS + smpx01[1, :] + oo.ARo01[1] - kpOws01[1])**2 - kpOws01[1]**2), axis=1)
 
             arg1m0 = args1 - args0
             thrSt0 = 1 / (1 + (oo.m[1]/oo.m[0])*_N.exp(arg1m0))
@@ -569,6 +582,7 @@ class mcmcARpBM:
                 ARo[tr]     = oo.ARo01[btrSt, tr]
                 kpOws[tr]   = kpOws01[btrSt, tr]
                 oo.ws[tr]      = ws01[btrSt, tr]
+                oo.us[tr]    = us01[btrSt, tr]
 
                 oo.smp_zs[tr, it] = oo.z[tr]
 
@@ -587,17 +601,6 @@ class mcmcARpBM:
 
 
             ########     per trial offset sample
-            Ons  = kpOws - oo.smpx[..., 2:, 0] - ARo - BaS
-            _N.einsum("mn,mn->m", oo.ws, Ons, out=smWinOn)  #  sum over trials
-            ilv_u  = _N.diag(_N.sum(oo.ws, axis=1))  #  var  of LL
-            #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
-            _N.fill_diagonal(lv_u, 1./_N.diagonal(ilv_u))
-            lm_u  = _N.dot(lv_u, smWinOn)  #  nondiag of 1./Bi are inf, mean LL
-            #  now sample
-            iVAR = ilv_u + iD_u
-            VAR  = _N.linalg.inv(iVAR)  #
-            Mn    = _N.dot(VAR, _N.dot(ilv_u, lm_u) + iD_u_u_u)
-            oo.us[:]  = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
             oo.smp_u[:, it] = oo.us
 
             ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)  

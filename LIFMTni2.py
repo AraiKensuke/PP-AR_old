@@ -122,7 +122,12 @@ def create(setname):
                     xBest = x
                     maxPwr = pwr
         elif bGenOscUsingSines:
-            x = createFlucOsc(f0, _N.array([f0VAR[tr]]), N, dt, 1, Bf=Bf, Ba=Ba, amp=amp, stdf=stdf, stda=stda, sig=sig, smoothKer=5) * etme[tr]  # sig is arbitrary, but we need to keep it same as when stdf, stda measured
+            xmult = 1
+            if _N.random.rand() < lowQpc:
+                xmult = 0.1
+                lowQs.append(tr)
+
+            x = xmult*createFlucOsc(f0, _N.array([f0VAR[tr]]), N, dt, 1, Bf=Bf, Ba=Ba, amp=amp, stdf=stdf, stda=stda, sig=sig, smoothKer=5) * etme[tr]  # sig is arbitrary, but we need to keep it same as when stdf, stda measured
             _xBest = x[0]
 
         dN[:] = 0

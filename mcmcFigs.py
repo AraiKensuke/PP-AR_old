@@ -3,8 +3,33 @@ import scipy.signal as _ssig
 import scipy.stats as _ss
 from ARcfSmplFuncs import dcmpcff
 import matplotlib.pyplot as _plt
-from filter import gauKer
+from filter import gauKer, lpFilt
 import scipy.signal as _ssig
+
+
+def last_fsamps(mARp, tr0, tr1):
+    amps    = mARp.amps[tr0:tr1, 0]
+    fs      = mARp.fs[tr0:tr1, 0]
+
+    minamps = min(amps)
+    maxamps = max(amps)
+    minfs   = min(fs)
+    maxfs   = max(fs)
+
+    nbins = int((tr1 - tr0)/10.)
+    if nbins > 80:
+        nbins = 80
+
+    fig = _plt.figure(figsize=(9, 4))
+    _plt.subplot(1, 2, 1)
+    _plt.hist(fs, bins=_N.linspace(minfs, maxfs, nbins))
+    _plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
+    _plt.subplot(1, 2, 2)
+    _plt.hist(amps, bins=_N.linspace(minamps, maxamps, nbins))
+    _plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
+    _plt.title("tr0=%(1)d  tr1=%(2)d" % {"1" : tr0, "2" : tr1})
+    _plt.savefig("last_fsamps")
+    _plt.close()
 
 def showFsHist(mARp, low, hi, nbins=100):
     t0 = mARp.burn
@@ -12,18 +37,26 @@ def showFsHist(mARp, low, hi, nbins=100):
     _plt.hist(mARp.fs[t0:t1, 0], bins=_N.linspace(low, hi, nbins))
     _plt.grid()
 
-def filterByFsAmps(mARp, flow, fhi, alow=0.9, ahigh=1):
-    t0 = mARp.burn
-    t1 = mARp.burn + mARp.NMC
+def filterByFsAmps(mARp, flow, fhi, alow=0.9, ahigh=1, t0=None, t1=None):
+    if t0 is None:
+        t0 = mARp.burn
+    if t1 is None:
+        t1 = mARp.burn + mARp.NMC
     inds = _N.where((mARp.fs[t0:t1, 0] > flow) & (mARp.fs[t0:t1, 0] < fhi) &
                     (mARp.amps[t0:t1, 0] > alow) & (mARp.amps[t0:t1, 0] < ahigh))
-    return inds
+    return inds[0] + t0
 
-def histPhase0_phaseInfrd(mARp, _mdn, t0=None, t1=None, bRealDat=False, trials=None):
+def histPhase0_phaseInfrd(mARp, _mdn, t0=None, t1=None, bRealDat=False, trials=None, filtParams=None, maxY=None, yticks=None, fn=None):
     #  what is the inferred phase when ground truth phase is 0
-    fig = _plt.figure()
     pInfrdAt0 = []
-    _fx  = mARp.x
+
+    if (filtParams is not None) and (not bRealDat):
+        _fx = _N.empty((mARp.TR, mARp.N+1))
+        for tr in xrange(mARp.TR):
+            _fx[tr] = lpFilt(20, 26, 500, mARp.x[tr])
+    else:
+        _fx  = mARp.x
+
     if bRealDat:
         _fx = mARp.fx
     gk  = gauKer(1) 
@@ -56,19 +89,36 @@ def histPhase0_phaseInfrd(mARp, _mdn, t0=None, t1=None, bRealDat=False, trials=N
         ht_mdn  = _ssig.hilbert(cv)
         ht_fx   = _ssig.hilbert(fx[tr, t0:t1] - _N.mean(fx[tr, t0:t1]))
         ph_mdn  = _N.arctan2(ht_mdn.imag, ht_mdn.real) / _N.pi
-        ph_fx   = _N.arctan2(ht_fx.imag, ht_fx.real)   / _N.pi
+        ph_fx   = ((_N.arctan2(ht_fx.imag, ht_fx.real)   / _N.pi) + 1)
         #  phase = 0 is somewhere in middle
         for i in xrange(t0-t0, t1-t0-1):
             if (ph_mdn[i] < 1) and (ph_mdn[i] > 0.5) and (ph_mdn[i+1] < -0.5):
                 nPh0s[itr-1] += 1
-                pInfrdAt0.append(ph_fx[i])
-                pInfrdAt0.append(ph_fx[i]+2)
-    pInfrdAt0A = _N.array(pInfrdAt0[::2])
+                pInfrdAt0.append(ph_fx[i]/2.)
+                pInfrdAt0.append((ph_fx[i]+2)/2.)
+
+    bgFnt = 22
+    smFnt = 20
+
+    fig = _plt.figure(figsize=(6, 4.2))
+    pInfrdAt0A = _N.array(pInfrdAt0[::2])#  0 to 2
     Npts = len(pInfrdAt0A)
-    R2   = (1./(Npts*Npts)) * (_N.sum(_N.cos(_N.pi*pInfrdAt0A))**2 + _N.sum(_N.sin(_N.pi*pInfrdAt0A))**2)
-    _plt.hist(pInfrdAt0, bins=_N.linspace(-1, 3, 41), color="black")
-    _plt.suptitle("R  %.3f" % _N.sqrt(R2))
-    _plt.savefig("fxPhase1_phaseInfrd.eps")
+    R2   = (1./(Npts*Npts)) * (_N.sum(_N.cos(2*_N.pi*pInfrdAt0A))**2 + _N.sum(_N.sin(2*_N.pi*pInfrdAt0A))**2)
+    _plt.hist(pInfrdAt0, bins=_N.linspace(0, 2, 41), color="black")
+    _plt.title("R  %.3f" % _N.sqrt(R2), fontsize=smFnt)
+    if maxY is not None:
+        _plt.ylim(0, maxY)
+    _plt.xlabel("phase", fontsize=bgFnt)
+    _plt.ylabel("frequency", fontsize=bgFnt)
+    _plt.xticks(fontsize=smFnt)
+    if yticks is not None:
+        _plt.yticks(yticks)
+    _plt.yticks(fontsize=smFnt)
+    fig.subplots_adjust(left=0.17, bottom=0.17, right=0.95, top=0.9)
+    if fn is None:
+        fn = "fxPhase1_phaseInfrd.eps"
+    
+    _plt.savefig(fn, transparent=True)
     _plt.close()
     return pInfrdAt0, _N.sqrt(R2), nPh0s
 
@@ -193,12 +243,16 @@ def plotPSTH(mARp):
     _plt.close()
     return meanPSTH
 
-def plotFsAmp(mARp):
+def plotFsAmp(mARp, tr0=None, tr1=None):
+    if tr0 is None:
+        tr0 = 1
+    if tr1 is None:
+        tr1 = mARp.burn + mARp.NMC
     fig = _plt.figure(figsize=(5, 6))
     fig.add_subplot(2, 1, 1)
-    _plt.plot(mARp.fs[1:, 0])
+    _plt.plot(mARp.fs[tr0:tr1, 0])
     fig.add_subplot(2, 1, 2)
-    _plt.plot(mARp.amps[1:, 0])
+    _plt.plot(mARp.amps[tr0:tr1, 0])
     _plt.savefig("fs_amps")
     _plt.close()
 
@@ -229,3 +283,111 @@ def acorrs(mARp, mdn, realDat=False):
     _plt.savefig("acorrs")
     _plt.close()
 
+def findCentral(aorf, firstTR, lastTR, nbins=50, ofMax=0.8, fn=None):
+    """
+    nbins    bin size for drawing histogram of aorf
+    ofMax    the relative height of left right lims
+    """
+    #############################################
+    fsLO = _N.min(aorf[firstTR:lastTR, 0])
+    fsHI = _N.max(aorf[firstTR:lastTR, 0])
+    df   = fsHI - fsLO
+
+    cts, bins, lines = _plt.hist(aorf[firstTR:lastTR, 0], _N.linspace(fsLO - df*0.05, fsHI + df*0.05, nbins))
+
+    x = (bins[0:-1] + bins[1:])*0.5
+    xm = _N.mean(x)
+    xxm = x - xm
+
+    a, b, c, d, e, f, g, h = _N.polyfit(x - xm, cts, 7)
+
+    yF = a*xxm**7 + b*xxm**6 + c*xxm**5 + d*xxm**4 + e*xxm**3 + f*xxm**2 + g*xxm + h
+
+    _plt.plot(x, yF)
+
+    maxF   = yF.max()
+    iStart = yF.tolist().index(maxF)
+
+    iL     = -1
+    iR     = -1
+    i      = iStart - 1
+    while i > 0:
+        if yF[i] < ofMax*maxF:
+            iL = i
+            break 
+        i -= 1
+
+    i      = iStart + 1
+
+    while i < nbins:
+        if yF[i] < ofMax*maxF:
+            iR = i
+            break
+        i += 1
+
+    fMin = x[iL]      #  min f (or amp)
+    fMax = x[iR]      #  max f (or amp)
+    _plt.axvline(x=x[iL])
+    _plt.axvline(x=x[iR])
+    
+    if fn is not None:
+        _plt.savefig(fn)
+    _plt.close()
+
+    return fMin, fMax
+
+
+def findStationaryMCMCIters(mARp, win=30):
+    """
+    win      win size use to estimate spread during small win in iterations
+    """
+    bNMC = mARp.burn + mARp.NMC
+    win  = 30                  #  take 30 iters each
+
+    minStdF =   _N.std(mARp.fs[bNMC-win:bNMC, 0])
+    minStdA = _N.std(mARp.amps[bNMC-win:bNMC, 0])
+
+    stdFs     = []
+    stdAs     = []
+    its       = []
+    for it in xrange(bNMC - 2*win, 2, -1*win):
+        it0 = it
+        it1 = it + win
+
+        stdF =   _N.std(mARp.fs[it0:it1, 0])
+        stdA = _N.std(mARp.amps[it0:it1, 0])
+        stdFs.append(stdF)
+        stdAs.append(stdA)
+        its.append(it)
+
+        if stdF < minStdF:
+            minStdF = stdF
+        if stdA < minStdA:
+            minStdA = stdA
+
+    stdAs.reverse()
+    stdFs.reverse()
+    its.reverse()
+
+    #  Find the ones the intervals with small fluctuations
+    keep = []
+    for it in xrange(len(its)):
+        if (stdAs[it] < 3*minStdA) and (stdFs[it] < 3*minStdF):
+            keep.append(it)
+
+
+    cons = _N.diff(keep)
+    bigSkip = _N.where(cons > 1)
+
+    if len(bigSkip[0]) > 0.2*len(cons):
+        print "Not fairly smooth"
+    else:
+        print "looks like it hit stationary state"
+        if its[keep[-1]] == bNMC - 2*win:
+            lastTR = bNMC
+        else:
+            lastTR = its[keep[-1]] + win
+        firstTR = its[keep[0]]
+        print "use from trial=%(1)d  to %(2)d" % {"1" : firstTR, "2" : lastTR}
+
+    return firstTR, lastTR

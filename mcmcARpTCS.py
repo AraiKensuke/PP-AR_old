@@ -1,17 +1,7 @@
-"""
-timing
-1  0.00005
-2  0.00733
-2a 0.08150
-2b 0.03315
-3  0.11470
-FFBS  1.02443
-5  0.03322
-"""
 import pickle
+import patsy
 from kflib import createDataAR
 import numpy as _N
-import patsy
 import re as _re
 from filter import bpFilt, lpFilt, gauKer
 
@@ -42,204 +32,16 @@ from multiprocessing import Pool
 
 import os
 
+import mcmcARp as mARp
+
 #os.system("taskset -p 0xff %d" % os.getpid())
 
-class mcmcARpTCS:
-    #  Simulation params
-    processes     = 1
-    setname       = None
-    rs            = -1
-    bFixF         = False
-    burn          = None;    NMC           = None
-    t0            = None;    t1            = None
-    useTrials     = None;    restarts      = 0
-
-    #  Description of model
-    model         = None
-    rn            = None    #  used for count data
-    k             = None
-    Cn            = None;    Cs            = None;    C             = None
-    kntsPSTH      = None;    dfPSTH        = None
-    ID_q2         = True
-    use_prior     = _cd.__COMP_REF__
-    AR2lims       = None
-    F_alfa_rep    = None
-    #######  TREND 
-
-    #  Sampled 
-    Bsmpx         = None
-    smp_u         = None;    smp_aS        = None;
-    smp_ss        = None
-    smp_q2        = None
-    smp_x00       = None
-    allalfas      = None
-    uts           = None;    wts           = None
-    ranks         = None
-    pgs           = None
-    fs            = None
-    amps          = None
-    dt            = None
-
-    #  LFC
-    lfc           = None
-
-    ####  TEMPORARY
-    Bi            = None
-
-    #  input data
-    histFN        = None
-    y             = None
-    kp            = None
-    l2            = None
-    lrn           = None
-
-    #  Gibbs
-    ARord         = _cd.__NF__
-    x             = None   #  true latent state
-    fx            = None   #  filtered latent state
-    px            = None   #  phase of latent state
-    
+class mcmcARpTCS(mARp.mcmcARp):
     #  Current values of params and state
-    s             = 0.01        #  trend.  TRm  = median trial
+    s             = 0.01        #  trend.  
+    TRm  = None
+    trd           = None
     
-    bpsth         = False
-    q2            = None
-    B             = None;    aS            = None; us             = None;    
-    smpx          = None
-    ws            = None
-    x00           = None
-    V00           = None
-
-    #  
-    _d            = None
-
-    fSigMax       = 500.    #  fixed parameters
-    freq_lims     = [[1 / .85, fSigMax]]
-
-    #  u   --  Gaussian prior
-    u_u          = 0;             s2_u         = 1.5
-    #  q2  --  Inverse Gamma prior
-    a_q2         = 1e-1;          B_q2         = 1e-6
-    #  initial states
-    u_x00        = None;          s2_x00       = None
-    # psth spline coefficient priors
-    u_a          = 0;             s2_a         = 0.5
-
-    def __init__(self):
-        self.lfc         = _lfc.logerfc()
-
-    def loadDat(self, trials): #################  loadDat
-        oo = self
-        bGetFP = False
-        if oo.model== "bernoulli":
-            x_st_cnts = _N.loadtxt(resFN("xprbsdN.dat", dir=oo.setname))
-            y_ch      = 2   #  spike channel
-            p = _re.compile("^\d{6}")   # starts like "exptDate-....."
-            m = p.match(oo.setname)
-
-            bRealDat = True
-            dch = 4    #  # of data columns per trial
-
-            if m == None:   #  not real data
-                bRealDat = False
-                dch = 3
-            else:
-                flt_ch      = 1    # Filtered LFP
-                ph_ch       = 3    # Hilbert Trans
-                bGetFP      = True
-        else:
-            x_st_cnts = _N.loadtxt(resFN("cnt_data.dat", dir=oo.setname))
-            y_ch        = 1    # spks
-
-            dch  = 2
-        TR = x_st_cnts.shape[1] / dch    #  number of trials will get filtered
-
-        #  If I only want to use a small portion of the data
-        n0     = oo.t0
-        oo.N   = x_st_cnts.shape[0] - 1
-        if oo.t1 == None:
-            oo.t1 = oo.N + 1
-        #  meaning of N changes here
-        N   = oo.t1 - 1 - oo.t0
-
-        if TR == 1:
-            x   = x_st_cnts[oo.t0:oo.t1, 0]
-            y   = x_st_cnts[oo.t0:oo.t1, y_ch]
-            fx  = x_st_cnts[oo.t0:oo.t1, 0]
-            px  = x_st_cnts[oo.t0:oo.t1, y_ch]
-            x   = x.reshape(1, oo.t1 - oo.t0)
-            y   = y.reshape(1, oo.t1 - oo.t0)
-            fx  = x.reshape(1, oo.t1 - oo.t0)
-            px  = y.reshape(1, oo.t1 - oo.t0)
-        else:
-            x   = x_st_cnts[oo.t0:oo.t1, ::dch].T
-            y   = x_st_cnts[oo.t0:oo.t1, y_ch::dch].T
-            if bRealDat:
-                fx  = x_st_cnts[oo.t0:oo.t1, flt_ch::dch].T
-                px  = x_st_cnts[oo.t0:oo.t1, ph_ch::dch].T
-
-        ####  Now keep only trials that have spikes
-        kpTrl = range(TR)
-        if trials is None:
-            trials = range(oo.TR)
-        oo.useTrials = []
-        for utrl in trials:
-            try:
-                ki = kpTrl.index(utrl)
-                if _N.sum(y[utrl, :]) > 0:
-                    oo.useTrials.append(ki)
-            except ValueError:
-                print "a trial requested to use will be removed %d" % utrl
-        ######  oo.y are for trials that have at least 1 spike
-        oo.y     = _N.array(y[oo.useTrials])
-        oo.x     = _N.array(x[oo.useTrials])
-        if bRealDat:
-            oo.fx    = _N.array(fx[oo.useTrials])
-            oo.px    = _N.array(px[oo.useTrials])
-
-        #  INITIAL samples
-        if TR > 1:
-            mnCt= _N.mean(oo.y, axis=1)
-        else:
-            mnCt= _N.array([_N.mean(oo.y)])
-
-        #  remove trials where data has no information
-        rmTrl = []
-
-        if oo.model == "binomial":
-            oo.kp  = oo.y - oo.rn*0.5
-            p0   = mnCt / float(oo.rn)       #  matches 1 - p of genearted
-            u  = _N.log(p0 / (1 - p0))    #  -1*u generated
-        elif oo.model == "negative binomial":
-            oo.kp  = (oo.y - oo.rn) *0.5
-            p0   = mnCt / (mnCt + oo.rn)       #  matches 1 - p of genearted
-            u  = _N.log(p0 / (1 - p0))    #  -1*u generated
-        else:
-            oo.kp  = oo.y - 0.5
-            oo.rn  = 1
-            #oo.dt  = 0.001
-            logdt = _N.log(oo.dt)
-            if TR > 1:
-                ysm = _N.sum(oo.y, axis=1)
-                u   = _N.log(ysm / ((N+1 - ysm)*oo.dt)) + logdt
-            else:   #  u is a vector here
-                u   = _N.array([_N.log(_N.sum(oo.y) / ((N+1 - _N.sum(oo.y))*oo.dt)) + logdt])
-
-        oo.TR    = len(oo.useTrials)
-        oo.TRm   = 0.5*(oo.TR - 1)
-        oo.N     = N
-        oo.trd   = _N.zeros((oo.TR, oo.TR))
-        oo.us    = _N.array(u)
-
-        ####  
-        oo.l2 = loadL2(oo.setname, fn=oo.histFN)
-
-        """
-        if (l2 is not None) and (len(l2.shape) == 0):
-            print "set up l2"
-            oo.l2 = _N.array([l2])
-        """
-
     def run(self, runDir=None, trials=None): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line
         oo.setname = os.getcwd().split("/")[-1]
@@ -271,6 +73,8 @@ class mcmcARpTCS:
 
     def initGibbs(self):   ################################ INITGIBBS
         oo   = self
+        oo.TRm   = 0.5*(oo.TR - 1)
+        oo.trd   = _N.zeros((oo.TR, oo.TR))
 
         if oo.bpsth:
             oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), df=oo.dfPSTH, knots=oo.kntsPSTH, include_intercept=True)    #  spline basis
@@ -449,7 +253,6 @@ class mcmcARpTCS:
         oous_rs = oo.us.reshape((ooTR, 1))   #  done for broadcasting rules
         lrnBadLoc = _N.empty(oo.N+1, dtype=_N.bool)
 
-        #oo.s = 0.0589
         while (it < ooNMC + oo.burn - 1):
             for tr in xrange(ooTR):        ###  TREND in modulation strength
                 oo.trd[tr, tr] = (tr - oo.TRm) * oo.s + 1
@@ -495,13 +298,6 @@ class mcmcARpTCS:
 
             #oo._d.y = kpOws - BaS - ARo - oous_rs     ####TRD change
             oo._d.y = _N.dot(itrd, kpOws - BaS - ARo - oous_rs)
-            print "shape dy"
-            print itrd.shape
-            print kpOws.shape
-            print BaS.shape
-            print ARo.shape
-            print oous_rs.shape
-            print oo._d.y.shape
             #print _N.std(oo._d.y, axis=1)
             oo._d.copyParams(oo.F0, oo.q2)
             #oo._d.Rv[:, :] =1 / oo.ws[:, :]   #  time dependent noise
@@ -643,82 +439,5 @@ class mcmcARpTCS:
             t2 = _tm.time()
             print "gibbs iter %.3f" % (t2-t1)
 
-        #pool.close()
-
-    def build_lrnLambda2(self, tr):
-        oo = self
-        #  lmbda2 is short snippet of after-spike depression behavior
-        lrn = _N.ones(oo.N + 1)
-        lh    = len(oo.l2)
-
-        hst  = []    #  spikes whose history is still felt
-
-        for i in xrange(oo.N + 1):
-            L  = len(hst)
-            lmbd = 1
-
-            for j in xrange(L - 1, -1, -1):
-                th = hst[j]
-                #  if i == 10, th == 9, lh == 1
-                #  10 - 9 -1 == 0  < 1.   Still efective
-                #  11 - 9 -1 == 1         No longer effective
-                if i - th - 1 < lh:
-                    lmbd *= oo.l2[i - th - 1]
-                else:
-                    hst.pop(j)
-
-            if oo.y[tr, i] == 1:
-                hst.append(i)
-
-            lrn[i] *= lmbd
-        return lrn
-
-
-    def getComponents(self):
-        oo    = self
-        TR    = oo.TR
-        NMC   = oo.NMC
-        burn  = oo.burn
-        R     = oo.R
-        C     = oo.C
-        ddN   = oo.N
-
-        oo.rts = _N.empty((TR, burn+NMC, ddN+2, R))    #  real components   N = ddN
-        oo.zts = _N.empty((TR, burn+NMC, ddN+2, C))    #  imag components 
-
-        for tr in xrange(TR):
-            for it in xrange(1, burn + NMC):
-                b, c = dcmpcff(alfa=oo.allalfas[it])
-
-                for r in xrange(R):
-                    oo.rts[tr, it, :, r] = b[r] * oo.uts[tr, it, r, :]
-
-                for z in xrange(C):
-                    #print "z   %d" % z
-                    cf1 = 2*c[2*z].real
-                    gam = oo.allalfas[it, R+2*z]
-                    cf2 = 2*(c[2*z].real*gam.real + c[2*z].imag*gam.imag)
-                    oo.zts[tr, it, 0:ddN+2, z] = cf1*oo.wts[tr, it, z, 1:ddN+3] - cf2*oo.wts[tr, it, z, 0:ddN+2]
-
-        oo.zts0 = _N.array(oo.zts[:, :, 1:, 0])
-
-    def dump(self):
-        oo    = self
-        pcklme = [oo]
-        oo.Bsmpx = None
-        oo.smpx  = None
-        oo.wts   = None
-        oo.uts   = None
-        oo._d    = None
-        oo.lfc   = None
-        oo.rts   = None
-        oo.zts   = None
-
-        with open("mARp.dump", "wb") as f:
-            pickle.dump(pcklme, f)
-
-            # import pickle
-            # with open("mARp.dump", "rb") as f:
-            #lm = pickle.load(f)
 
 

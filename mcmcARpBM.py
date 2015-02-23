@@ -41,9 +41,14 @@ class mcmcARpBM(mARp.mcmcARp):
     z             = None   #  state index M x 2  [(1, 0), (0, 1), (0, 1), ...]
     m             = None   #  dim 2
     sd            = None
+
+    fxdz          = None
     
     #  Dirichlet priors
-    alp          = None
+    alp           = None
+
+    #  initial value
+    lowStates     = None   #  
 
     def initGibbs(self):   ################################ INITGIBBS
         oo   = self
@@ -53,6 +58,20 @@ class mcmcARpBM(mARp.mcmcARp):
         oo.smp_zs    = _N.zeros((oo.TR, oo.burn + oo.NMC, oo.nStates))
         oo.smp_ms    = _N.zeros((oo.burn + oo.NMC, oo.nStates))
         oo.Z         = _N.zeros((oo.TR, oo.nStates), dtype=_N.int)
+
+        if oo.lowStates is not None:
+            for tr in xrange(oo.TR):
+                oo.Z[tr, 0] = 0;                oo.Z[tr, 1] = 1
+                try:
+                    oo.lowStates.index(tr)
+                    oo.Z[tr, 0] = 1;                oo.Z[tr, 1] = 0
+                except ValueError:
+                    pass
+        else:
+            for tr in xrange(oo.TR):
+                oo.Z[tr, 0] = 0;                oo.Z[tr, 1] = 1
+                
+
         oo.s         = _N.array([0.01, 1])
         oo.sd        = _N.zeros((oo.TR, oo.TR))
         oo.m         = _N.array([0.5, 0.5])
@@ -109,15 +128,6 @@ class mcmcARpBM(mARp.mcmcARp):
         oous_rs = oo.us.reshape((ooTR, 1))   #  done for broadcasting rules
         lrnBadLoc = _N.empty(oo.N+1, dtype=_N.bool)
 
-        lows = [3, ]
-        for tr in xrange(oo.TR):
-            oo.Z[tr, 0] = 0;                oo.Z[tr, 1] = 1
-            try:
-                lows.index(tr)
-                oo.Z[tr, 0] = 1;                oo.Z[tr, 1] = 0
-            except ValueError:
-                pass
-
         sd01   = _N.zeros((oo.nStates, oo.TR, oo.TR))
         _N.fill_diagonal(sd01[0], oo.s[0])
         _N.fill_diagonal(sd01[1], oo.s[1])
@@ -142,11 +152,13 @@ class mcmcARpBM(mARp.mcmcARp):
 
         THR = _N.empty(oo.TR)
         dirArgs = _N.empty(oo.nStates)  #  dirichlet distribution args
+        expT= _N.empty(ooN+1)
+        BaS = _N.dot(oo.B.T, oo.aS)
+
         while (it < ooNMC + oo.burn - 1):
             t1 = _tm.time()
             it += 1
             print it
-            BaS = _N.dot(oo.B.T, oo.aS)
 
             if it > oo.startZ:
                 ######  Z
@@ -162,7 +174,7 @@ class mcmcARpBM(mARp.mcmcARp):
                         #  p0, p1 not normalized
                         ll[tryZ] = 0
                         #  Ber(0 | ) and Ber(1 | )
-                        expT = _N.exp(smpx01[tryZ, m] + BaS + ARo01[tryZ, m] + oo.us[m])
+                        _N.exp(smpx01[tryZ, m] + BaS + ARo01[tryZ, m] + oo.us[m], out=expT)
                         Bp[0]   = 1 / (1 + expT)
                         Bp[1]   = expT / (1 + expT)
                         #   z[:, 1]   is state label
@@ -171,10 +183,11 @@ class mcmcARpBM(mARp.mcmcARp):
                             ll[tryZ] += _N.log(Bp[oo.y[m, n], n])
 
                     ofs = _N.min(ll)
-                    nc = oo.m[0]*_N.exp(ll[0] - ofs) + oo.m[1]*_N.exp(ll[1] - ofs)
+                    ll  -= ofs
+                    nc = oo.m[0]*_N.exp(ll[0]) + oo.m[1]*_N.exp(ll[1])
 
                     oo.Z[m, 0] = 0;  oo.Z[m, 1] = 1
-                    THR[m] = (oo.m[0]*_N.exp(ll[0] - ofs) / nc)
+                    THR[m] = (oo.m[0]*_N.exp(ll[0]) / nc)
                     if _N.random.rand() < THR[m]:
                         oo.Z[m, 0] = 1;  oo.Z[m, 1] = 0
                     oo.smp_zs[m, it] = oo.Z[m]
@@ -189,8 +202,8 @@ class mcmcARpBM(mARp.mcmcARp):
                 oo.m[:] = _N.random.dirichlet(dirArgs)
                 oo.smp_ms[it] = oo.m
             else:
-                _N.fill_diagonal(zd, 1.)
-                _N.fill_diagonal(izd, 1.)
+                _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
+                _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])            
                 _N.dot(zd, oo.smpx[..., 2:, 0], out=zsmpx)
             oo.build_addHistory(ARo, zsmpx, BaS, oo.us, lrnBadLoc)
 
@@ -212,6 +225,25 @@ class mcmcARpBM(mARp.mcmcARp):
             Mn    = _N.dot(VAR, _N.dot(ilv_u, lm_u) + iD_u_u_u)
             oo.us[:]  = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
             oo.smp_u[:, it] = oo.us
+
+            ########     PSTH sample  Do PSTH after we generate zs
+            if oo.bpsth:
+                Oms  = kpOws - zsmpx - ARo - oous_rs
+                _N.einsum("mn,mn->n", oo.ws, Oms, out=smWimOm)   #  sum over 
+                ilv_f  = _N.diag(_N.sum(oo.ws, axis=0))
+                _N.fill_diagonal(lv_f, 1./_N.diagonal(ilv_f))
+                lm_f  = _N.dot(lv_f, smWimOm)  #  nondiag of 1./Bi are inf
+                #  now sample
+                iVAR = _N.dot(oo.B, _N.dot(ilv_f, oo.B.T)) + iD_f
+                VAR  = _N.linalg.inv(iVAR)  #  knots x knots
+                iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
+                Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
+                oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
+                oo.smp_aS[it, :] = oo.aS
+            else:
+                oo.aS[:]   = 0
+
+            BaS = _N.dot(oo.B.T, oo.aS)
 
             ####  Sample latent state
             oo._d.y = _N.dot(izd, kpOws - BaS - ARo - oous_rs)
@@ -259,23 +291,6 @@ class mcmcARpBM(mARp.mcmcARp):
             oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)
 
             oo.smp_q2[:, it]= oo.q2
-
-            ########     PSTH sample  Do PSTH after we generate zs
-            if oo.bpsth:
-                Oms  = kpOws - zsmpx - ARo - oous_rs
-                _N.einsum("mn,mn->n", oo.ws, Oms, out=smWimOm)   #  sum over 
-                ilv_f  = _N.diag(_N.sum(oo.ws, axis=0))
-                _N.fill_diagonal(lv_f, 1./_N.diagonal(ilv_f))
-                lm_f  = _N.dot(lv_f, smWimOm)  #  nondiag of 1./Bi are inf
-                #  now sample
-                iVAR = _N.dot(oo.B, _N.dot(ilv_f, oo.B.T)) + iD_f
-                VAR  = _N.linalg.inv(iVAR)  #  knots x knots
-                iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
-                Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
-                oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
-                oo.smp_aS[it, :] = oo.aS
-            else:
-                oo.aS[:]   = 0
 
         t2 = _tm.time()
         print "gibbs iter %.3f" % (t2-t1)

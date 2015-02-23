@@ -6,7 +6,7 @@ import numpy as _N
 import matplotlib.pyplot as _plt
 
 #  [3.3, 11, 1, 15]
-def modhist(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None):
+def modhist(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, maxY=None, yticks=None):
     """
     shftPhase from 0 to 1.  
     """
@@ -71,10 +71,26 @@ def modhist(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr
     wfsv= _N.array(wfs)
     sta = _N.mean(wfsv, axis=0)
 
-    _plt.figure()
-    _plt.hist(phs + (_N.array(phs) + 1).tolist(), bins=_N.linspace(0, 2, 50), color="black")
-    _plt.title("R = %.3f" % _N.sqrt(R2))
-    _plt.savefig(resFN("modulationHistogram.eps", dir=setname))
+    bgFnt = 22
+    smFnt = 20
+    fig = _plt.figure(figsize=(6, 4.2))
+    _plt.hist(phs + (_N.array(phs) + 1).tolist(), bins=_N.linspace(0, 2, 51), color="black")
+    if maxY is not None:
+        _plt.ylim(0, maxY)
+    _plt.title("R = %.3f" % _N.sqrt(R2), fontsize=smFnt)
+    _plt.xlabel("phase", fontsize=bgFnt)
+    _plt.ylabel("frequency", fontsize=bgFnt)
+    _plt.xticks(fontsize=smFnt)
+    _plt.yticks(fontsize=smFnt)
+    if yticks is not None:
+        _plt.yticks(yticks)
+
+    fig.subplots_adjust(left=0.17, bottom=0.17, right=0.95, top=0.9)
+
+    if fn is None:
+        fn = "modulationHistogram.eps"
+    
+    _plt.savefig(resFN(fn, dir=setname), transparent=True)
     _plt.close()
 
 

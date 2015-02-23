@@ -42,7 +42,7 @@ import os
 
 #os.system("taskset -p 0xff %d" % os.getpid())
 
-class mcmcARp:
+class mcmcNOARp:
     #  Simulation params
     processes     = 1
     setname       = None
@@ -264,7 +264,7 @@ class mcmcARp:
         if oo.bpsth:
             oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), df=oo.dfPSTH, knots=oo.kntsPSTH, include_intercept=True)    #  spline basis
             if oo.dfPSTH is None:
-                oo.dfPSTH = B.shape[1] 
+                oo.dfPSTH = oo.B.shape[1] 
             oo.B = oo.B.T    #  My convention for beta
             oo.aS = _N.linalg.solve(_N.dot(oo.B, oo.B.T), _N.dot(oo.B, _N.ones(oo.t1 - oo.t0)*_N.mean(oo.u)))
 

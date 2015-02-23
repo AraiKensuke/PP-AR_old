@@ -15,7 +15,6 @@ import patsy
 import re as _re
 from filter import bpFilt, lpFilt, gauKer
 
-import scipy.sparse.linalg as _ssl
 import scipy.stats as _ss
 from kassdirs import resFN, datFN
 
@@ -29,9 +28,7 @@ import numpy.polynomial.polynomial as _Npp
 import time as _tm
 import ARlib as _arl
 import kfARlibMPmv as _kfar
-#import kfARlibMP as _kfar
 import LogitWrapper as lw
-#import pyPG as lw
 from ARcfSmpl import ARcfSmpl, FilteredTimeseries
 
 import logerfc as _lfc
@@ -54,6 +51,7 @@ class mcmcARp:
     t0            = None;    t1            = None
     useTrials     = None;    restarts      = 0
 
+
     #  Description of model
     model         = None
     rn            = None    #  used for count data
@@ -65,6 +63,7 @@ class mcmcARp:
     AR2lims       = None
     F_alfa_rep    = None
 
+    noAR          = False    #  no oscillation
     #  Sampled 
     Bsmpx         = None
     smp_u         = None;    smp_aS        = None
@@ -85,6 +84,7 @@ class mcmcARp:
 
     ####  TEMPORARY
     Bi            = None
+    rsds          = None
 
     #  input data
     histFN        = None
@@ -124,7 +124,8 @@ class mcmcARp:
     u_a          = 0;             s2_a         = 0.5
 
     def __init__(self):
-        self.lfc         = _lfc.logerfc()
+        if self.noAR is not None:
+            self.lfc         = _lfc.logerfc()
 
     def loadDat(self, trials): #################  loadDat
         oo = self
@@ -189,7 +190,7 @@ class mcmcARp:
             except ValueError:
                 print "a trial requested to use will be removed %d" % utrl
         ######  oo.y are for trials that have at least 1 spike
-        oo.y     = _N.array(y[oo.useTrials])
+        oo.y     = _N.array(y[oo.useTrials], dtype=_N.int)
         oo.x     = _N.array(x[oo.useTrials])
         if bRealDat:
             oo.fx    = _N.array(fx[oo.useTrials])
@@ -226,6 +227,7 @@ class mcmcARp:
         oo.TR    = len(oo.useTrials)
         oo.N     = N
         oo.us    = _N.array(u)
+        #oo.us    = _N.zeros(oo.TR)
 
         ####  
         oo.l2 = loadL2(oo.setname, fn=oo.histFN)
@@ -236,7 +238,7 @@ class mcmcARp:
             oo.l2 = _N.array([l2])
         """
 
-    def run(self, runDir=None, trials=None): ###########  RUN
+    def run(self, runDir=None, trials=None, minSpkCnt=0): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line
         oo.setname = os.getcwd().split("/")[-1]
 
@@ -339,7 +341,7 @@ class mcmcARp:
             oo.q2          /= mlt*mlt
             xE, nul = createDataAR(oo.N, oo.F0, oo.q2[0], 0.1)
 
-            if oo.model == "Bernoulli":
+            if oo.model == "bernoulli":
                 oo.initBernoulli()
             #smpx[0, 2:, 0] = x[0]    ##########  DEBUG
 
@@ -379,8 +381,11 @@ class mcmcARp:
                 fgk[m] = bpFilt(15, 100, 1, 135, 500, gk[m])   #  we want
                 fgk[m, :] /= 2*_N.std(fgk[m, :])
 
-                #oo.smpx[m, 2:, 0] = fgk[m, :]
-                oo.smpx[m, 2:, 0] = 0
+                if oo.noAR:
+                    oo.smpx[m, 2:, 0] = 0
+                else:
+                    oo.smpx[m, 2:, 0] = fgk[m, :]
+                
                 for n in xrange(2+oo.k-1, oo.N+1+2):  # CREATE square smpx
                     oo.smpx[m, n, 1:] = oo.smpx[m, n-oo.k+1:n, 0][::-1]
                 for n in xrange(2+oo.k-2, -1, -1):  # CREATE square smpx
@@ -391,6 +396,7 @@ class mcmcARp:
 
     def gibbsSamp(self):  ###########################  GIBBSSAMPH
         oo          = self
+        oo.rsds     = _N.empty((oo.burn + oo.NMC, oo.TR))
         ooTR        = oo.TR
         ook         = oo.k
         ooNMC       = oo.NMC
@@ -456,16 +462,9 @@ class mcmcARp:
             ###  PG latent variable sample
 
             #tPG1 = _tm.time()
-            for m in xrange(ooTR):
-                _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(oo.smpx[m, 2:, 0] + BaS + oo.us[m])), out=ARo[m])   #  history Offset
-                nani = _N.isnan(ARo[m], out=lrnBadLoc)
-                locs = _N.where(lrnBadLoc == True)
-                if locs[0].shape[0] > 0:
-                    L = locs[0].shape[0]
-                    print "ARo locations bad tr %(m)d  %(L) d" % {"m" : m, "L" : L}
-                    for l in xrange(L):  #  fill with reasonable value
-                        ARo[m, locs[0][l]] = ARo[m, locs[0][l] - 1]
+            oo.build_addHistory(ARo, oo.smpx[:, 2:, 0], BaS, oo.us, lrnBadLoc)
 
+            for m in xrange(ooTR):
                 lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe
                     
             if ooTR == 1:
@@ -516,73 +515,61 @@ class mcmcARp:
                 oo.aS   = _N.zeros(4)
 
 
+            if not oo.noAR:
             #  _d.F, _d.N, _d.ks, 
-            tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
+                tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
 
-            """
-            #tkf1  = _tm.time()
-            sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
-            #tkf2  = _tm.time()
-
-            for m in xrange(ooTR):
-                oo.smpx[m, 2:] = sxv[m][0]
-                oo._d.f_x[m] = sxv[m][1]
-                oo._d.f_V[m] = sxv[m][2]
-                oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
-                oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
-            """
-            for m in xrange(ooTR):
-                oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
-                oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
-                oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
-
-
-            if not oo.bFixF:   
-                ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)  
-                oo.F_alfa_rep = alpR + alpC   #  new constructed
-                prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
-                print prt
-            ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d)
-            #ranks[it]    = rank
-            oo.allalfas[it] = oo.F_alfa_rep
-
-            for m in xrange(ooTR):
-                oo.wts[m, it, :, :]   = wt[m, :, :, 0]
-                oo.uts[m, it, :, :]   = ut[m, :, :, 0]
-                if not oo.bFixF:
-                    oo.amps[it, :]  = amp
-                    oo.fs[it, :]    = f
-
-            oo.F0          = (-1*_Npp.polyfromroots(oo.F_alfa_rep)[::-1].real)[1:]
-
-
-            #  sample u     WE USED TO Do this after smpx
-            #  u(it+1)    using ws(it+1), F0(it), smpx(it+1), ws(it+1)
-
-            if oo.ID_q2:
                 for m in xrange(ooTR):
-                    #####################    sample q2
-                    a = oo.a_q2 + 0.5*(ooN+1)  #  N + 1 - 1
-                    rsd_stp = oo.smpx[m, 3:,0] - _N.dot(oo.smpx[m, 2:-1], oo.F0).T
-                    BB = oo.B_q2 + 0.5 * _N.dot(rsd_stp, rsd_stp.T)
-                    oo.q2[m] = _ss.invgamma.rvs(a, scale=BB)
-                    oo.x00[m]      = oo.smpx[m, 2]*0.1
-                    oo.smp_q2[m, it]= oo.q2[m]
-            else:
-                oo.a2 = oo.a_q2 + 0.5*(ooTR*ooN + 2)  #  N + 1 - 1
-                BB2 = oo.B_q2
+                    oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
+                    oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                    oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
+                    oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+
+                if not oo.bFixF:   
+                    ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)  
+                    oo.F_alfa_rep = alpR + alpC   #  new constructed
+                    prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
+                    print prt
+                ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d)
+                #ranks[it]    = rank
+                oo.allalfas[it] = oo.F_alfa_rep
+
                 for m in xrange(ooTR):
-                    #   set x00 
-                    oo.x00[m]      = oo.smpx[m, 2]*0.1
+                    oo.wts[m, it, :, :]   = wt[m, :, :, 0]
+                    oo.uts[m, it, :, :]   = ut[m, :, :, 0]
+                    if not oo.bFixF:
+                        oo.amps[it, :]  = amp
+                        oo.fs[it, :]    = f
 
-                    #####################    sample q2
-                    rsd_stp = oo.smpx[m, 3:,0] - _N.dot(oo.smpx[m, 2:-1], oo.F0).T
-                    BB2 += 0.5 * _N.dot(rsd_stp, rsd_stp.T)
-                oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)
+                oo.F0          = (-1*_Npp.polyfromroots(oo.F_alfa_rep)[::-1].real)[1:]
 
-            oo.smp_q2[:, it]= oo.q2
+
+                #  sample u     WE USED TO Do this after smpx
+                #  u(it+1)    using ws(it+1), F0(it), smpx(it+1), ws(it+1)
+
+                if oo.ID_q2:
+                    for m in xrange(ooTR):
+                        #####################    sample q2
+                        a = oo.a_q2 + 0.5*(ooN+1)  #  N + 1 - 1
+                        rsd_stp = oo.smpx[m, 3:,0] - _N.dot(oo.smpx[m, 2:-1], oo.F0).T
+                        BB = oo.B_q2 + 0.5 * _N.dot(rsd_stp, rsd_stp.T)
+                        oo.q2[m] = _ss.invgamma.rvs(a, scale=BB)
+                        oo.x00[m]      = oo.smpx[m, 2]*0.1
+                        oo.smp_q2[m, it]= oo.q2[m]
+                else:
+                    oo.a2 = oo.a_q2 + 0.5*(ooTR*ooN + 2)  #  N + 1 - 1
+                    BB2 = oo.B_q2
+                    for m in xrange(ooTR):
+                        #   set x00 
+                        oo.x00[m]      = oo.smpx[m, 2]*0.1
+
+                        #####################    sample q2
+                        rsd_stp = oo.smpx[m, 3:,0] - _N.dot(oo.smpx[m, 2:-1], oo.F0).T
+                        oo.rsds[it, m] = _N.dot(rsd_stp, rsd_stp.T)
+                        BB2 += 0.5 * _N.dot(rsd_stp, rsd_stp.T)
+                    oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)
+
+                oo.smp_q2[:, it]= oo.q2
 
 
             t2 = _tm.time()
@@ -617,6 +604,18 @@ class mcmcARp:
 
             lrn[i] *= lmbd
         return lrn
+
+    def build_addHistory(self, ARo, smpx, BaS, us, lrnBadLoc):
+        oo = self
+        for m in xrange(oo.TR):
+            _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(smpx[m] + BaS + us[m])), out=ARo[m])   #  history Offset   ####TRD change
+            nani = _N.isnan(ARo[m], out=lrnBadLoc)
+            locs = _N.where(lrnBadLoc == True)
+            if locs[0].shape[0] > 0:
+                L = locs[0].shape[0]
+                print "ARo locations bad tr %(m)d  %(L) d" % {"m" : m, "L" : L}
+                for l in xrange(L):  #  fill with reasonable value
+                    ARo[m, locs[0][l]] = ARo[m, locs[0][l]]
 
     def getComponents(self):
         oo    = self
@@ -666,3 +665,14 @@ class mcmcARp:
             #lm = pickle.load(f)
 
 
+    def CIF(self, us, alps, osc):
+        oo = self
+        ARo   = _N.empty((oo.TR, oo.N+1))
+        lrnBadLoc = _N.empty(oo.N+1, dtype=_N.bool)
+
+        BaS = _N.dot(oo.B.T, alps)
+        oo.build_addHistory(ARo, osc, BaS, us, lrnBadLoc)
+
+        cif = _N.exp(us + ARo + osc + BaS) / (1 + _N.exp(us + ARo + osc + BaS))
+
+        return cif

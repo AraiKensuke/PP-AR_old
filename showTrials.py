@@ -1,11 +1,12 @@
 from kassdirs import resFN, datFN
 
-setname="080305-0-127-theta"
+setname="071221-0-187-theta"
 
 dat = _N.loadtxt(resFN("xprbsdN.dat", dir=setname))
 
-tr0 = 250
-tr1 = 500
+tr0 = 0
+tr1 = None
+#tr1 = 158
 
 
 COLS= 4

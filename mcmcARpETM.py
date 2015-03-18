@@ -26,7 +26,7 @@ from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
 from multiprocessing import Pool
 
 import os
-import mcmcARp as mARp
+import mcmcARpFV as mARp
 
 class mcmcARpETM(mARp.mcmcARp):
     smp_gam       = None
@@ -121,6 +121,7 @@ class mcmcARpETM(mARp.mcmcARp):
         ietme = _N.zeros((oo.N+1, oo.N+1))  #  ietme
         tempetme = _N.ones(oo.N+1)
 
+        oo.nSMP_smpxC = 0
         while (it < ooNMC + oo.burn - 1):
             _N.fill_diagonal(oo.etme, _N.dot(oo.GAM, oo.gam))
             #_N.fill_diagonal(oo.etme, tempetme)
@@ -132,12 +133,19 @@ class mcmcARpETM(mARp.mcmcARp):
             if (it % 10) == 0:
                 print it
             #  generate latent AR state
-            oo._d.f_x[:, 0, :, 0]     = oo.x00
+            oo._d.f_x[:, 0, :, 0]     = _N.mean(oo.SMP_x00, axis=1)
             if it == 1:
                 for m in xrange(ooTR):
                     oo._d.f_V[m, 0]     = oo.s2_x00
             else:
-                oo._d.f_V[:, 0]     = oo._d.f_V[:, 1]
+                oo._d.f_V[:, 0]     = _N.mean(oo._d.f_V[:, 1:], axis=1)
+
+            # oo._d.f_x[:, 0, :, 0]     = oo.x00
+            # if it == 1:
+            #     for m in xrange(ooTR):
+            #         oo._d.f_V[m, 0]     = oo.s2_x00
+            # else:
+            #     oo._d.f_V[:, 0]     = oo._d.f_V[:, 1]
 
             BaS = _N.dot(oo.B.T, oo.aS)
             ###  PG latent variable sample
@@ -217,7 +225,9 @@ class mcmcARpETM(mARp.mcmcARp):
                 oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                 oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                 oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
-
+                oo.SMP_x00[m, oo.nSMP_smpxC] = oo.smpx[m, 2]*0.3
+            oo.nSMP_smpxC += 1
+            oo.nSMP_smpxC %= oo.nSMP_smpx
 
             ######################################
             etmeSMPX = _N.dot(oo.smpx[..., 2:, 0], oo.etme)
@@ -277,11 +287,11 @@ class mcmcARpETM(mARp.mcmcARp):
                 print oo.gam
 
             if not oo.bFixF:   
-                ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)  
+                ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H)  
                 oo.F_alfa_rep = alpR + alpC   #  new constructed
                 prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
                 print prt
-            ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR.tolist(), alpC.tolist(), oo._d)
+            ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d)
             #ranks[it]    = rank
             oo.allalfas[it] = oo.F_alfa_rep
 
@@ -297,7 +307,7 @@ class mcmcARpETM(mARp.mcmcARp):
             #  sample u     WE USED TO Do this after smpx
             #  u(it+1)    using ws(it+1), F0(it), smpx(it+1), ws(it+1)
 
-            """
+
             if oo.ID_q2:   ####  mod. strength trends don't changes this part
                 for m in xrange(ooTR):
                     #####################    sample q2
@@ -320,7 +330,7 @@ class mcmcARpETM(mARp.mcmcARp):
                 oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)
 
             oo.smp_q2[:, it]= oo.q2
-            """
+
 
             ###  update modulation strength trend parameter
 

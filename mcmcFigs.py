@@ -10,17 +10,14 @@ import scipy.signal as _ssig
 def last_fsamps(mARp, tr0, tr1):
     amps    = mARp.amps[tr0:tr1, 0]
     fs      = mARp.fs[tr0:tr1, 0]
-
     minamps = min(amps)
     maxamps = max(amps)
     minfs   = min(fs)
     maxfs   = max(fs)
-
     nbins = int((tr1 - tr0)/10.)
     if nbins > 80:
         nbins = 80
-
-    fig = _plt.figure(figsize=(9, 4))
+    fig = _plt.figure(figsize=(11, 4))
     _plt.subplot(1, 2, 1)
     _plt.hist(fs, bins=_N.linspace(minfs, maxfs, nbins))
     _plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
@@ -176,23 +173,15 @@ def plotWFandSpks(mARp, zts0, sFilename="latnt,GrdTr,Spks", tMult=1, intv=None, 
         xLFPGT =mARp.fx
 
     for tr in xrange(mARp.TR):
-        """
-        for it1 in xrange(ITER):
-            _N.subtract(zts0[tr, it1], zts0[tr], out=df)  # dim(df) is ITER x N
-            _N.sqrt(_N.sum(df*df, axis=1), out=avgD)  #  one term in sum is 0
-
-            avgDs[it1] = _N.sum(avgD) / (ITER-1)
-
-        cls2EvryO = [i[0] for i in sorted(enumerate(avgDs), key=lambda x:x[1])]
-        """
-
-        #mdn[tr] = zts0[tr, int(ITER*_N.random.rand())]
-        #mdn[tr] = _N.mean(zts0[tr, cls2EvryO[0:30]], axis=0)
         mdn[tr] = _N.mean(zts0[tr, cls2EvryO], axis=0)
-        MINx = _N.min(zts0[tr])
-        MAXx = _N.max(zts0[tr])
+        if not norm:
+            MINx = _N.min(zts0[tr])
+            MAXx = _N.max(zts0[tr])
+        else:
+            MINx = -1.
+            MAXx =  1.
 
-        fig = _plt.figure(figsize=(12, 4), frameon=False)
+        fig, ax = _plt.subplots(figsize=(12, 4))
 
         AMP  = MAXx - MINx
         ht   = 0.08*AMP
@@ -212,23 +201,36 @@ def plotWFandSpks(mARp, zts0, sFilename="latnt,GrdTr,Spks", tMult=1, intv=None, 
             if mARp.y[tr, n] == 1:
                 _plt.plot([n, n], [ys1, ys2], lw=2.5, color="black")
         _plt.ylim(ys2 - 0.05*AMP, MAXx + 0.05*AMP)
-        _plt.yticks(fontsize=20)
+        #_plt.yticks(fontsize=20)
+        _plt.yticks([])
+
 
         tcks = _plt.xticks()
         ot   = _N.array(tcks[0], dtype=_N.int)
         mt   = _N.array(tcks[0] * tMult, dtype=_N.int)
-        _plt.xticks(ot, mt, fontsize=20)
+        _plt.xticks(ot, mt, fontsize=24)
 
         #_plt.xticks(_N.linspace(0, mARp.N+1, 7, dtype=_N.int), _N.linspace(0, mARp.N+1, 7, dtype=_N.int)*tMult, fontsize=20)
         _plt.xlim(0, (mARp.N+1)+1)
-        _plt.xlabel("millisecond", fontsize=22)
-        _plt.axhline(y=0, color="grey", lw=2, ls="--")
+        _plt.xlabel("millisecond", fontsize=26)
+        #_plt.axhline(y=0, color="grey", lw=2, ls="--")
+
+        #fig.patch.set_visible(False)
+        #ax.axis("off")
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_visible(False)
+        ax.spines["bottom"].set_visible(False)
+        ax.yaxis.set_ticks_position("none")
+        ax.xaxis.set_ticks_position("bottom")
+        for tic in ax.xaxis.get_major_ticks():
+            tic.tick1On = tic.tick2On = False
 
         if intv is not None:
             _plt.xlim(intv[0], intv[1])
         if sTitle is not None:
             _plt.title(sTitle)
-        fig.subplots_adjust(left=0.05, right=0.95, bottom=0.15, top=0.85)
+        fig.subplots_adjust(left=0.05, right=0.95, bottom=0.2, top=0.85)
         if sFilename != None:
             _plt.savefig("%(fn)s,tr=%(tr)d.eps" % {"fn" : sFilename, "tr" : tr})
             _plt.close()

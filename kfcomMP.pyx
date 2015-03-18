@@ -13,7 +13,7 @@ def BSvec(F, N, k, GQGT, fx, fV, smXN):
     smX = _N.empty((N+1, k))   #  where to store our samples
     smX[N] = smXN[:]
 
-    fFT    = _N.dot(fV, F.T)
+    fFT    = _N.dot(fV, F.T)  #  
     #  sum F_{il} V_{lm} F_{mj}
     FfFT   = _N.einsum("il,nlj->nij", F, fFT)
     iv     = _N.linalg.inv(FfFT + _N.tile(GQGT, (N+1,1,1)))

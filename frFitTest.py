@@ -4,7 +4,7 @@ from tmrsclTest import timeRescaleTest, zoom
 
 #  Give me a firing rate and spikes
 
-setname  = "histPSTH6"
+setname  = "fig1"
 dat      = _N.loadtxt(resFN("xprbsdN.dat", dir=setname))
 N        = dat.shape[0]
 M        = dat.shape[1]/3

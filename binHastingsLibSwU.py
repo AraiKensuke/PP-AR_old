@@ -8,11 +8,29 @@ warnings.filterwarnings("error")
 __BNML__ = 0   # binomial
 __NBML__ = 1   # negative binomial
 
+####  THRESHOLD for jumping
+pTH  = 0.01
+uTH    = _N.log(pTH / (1 - pTH))
+
+####  parameters for proposal. nmin, rmin are data dependent
+stdu = 0.1
+stdu2= stdu**2
+istdu2= 1./ stdu2
+
 def Llklhds(type, ks, rn1, p1):
-    if type == __BNML__:
-        return _N.sum(_N.log(_sm.comb(rn1, ks)) + ks*_N.log(p1) + (rn1-ks)*_N.log(1 - p1))
-    if type == __NBML__:
-        return _N.sum(_N.log(_sm.comb(ks + rn1-1, ks)) + ks*_N.log(p1) + rn1*_N.log(1 - p1))
+    try:
+        if type == __BNML__:
+            return _N.sum(_N.log(_sm.comb(rn1, ks)) + ks*_N.log(p1) + (rn1-ks)*_N.log(1 - p1))
+        if type == __NBML__:
+            return _N.sum(_N.log(_sm.comb(ks + rn1-1, ks)) + ks*_N.log(p1) + rn1*_N.log(1 - p1))
+    except Warning:
+        print "!!!!!!!!"
+        print type
+        print rn1
+        print ks
+        print p1
+
+        raise
 
 def trPoi(lmd, a):
     """
@@ -23,20 +41,19 @@ def trPoi(lmd, a):
         ct = _N.random.poisson(lmd)
     return ct
 
-def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, p0=0.05, dist=__BNML__):
+def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, p0=0.3, dist=__BNML__, xn=None):
     Mk  = _N.mean(cts)
     iMk = 1./Mk
+    if xn is None:
+        xn = _N.zeros(len(cts))
     sdk = _N.std(cts)
     cv = ((sdk*sdk) * iMk)
     nmin= _N.max(cts)   #  if n too small, can't generate data
     rmin= 1
 
-    stdu = 0.1
-    stdu2= stdu**2
-    istdu2= 1./ stdu2
-
     #  let's start it off from binomial
     u0   = -_N.log(1/p0 - 1)   #  generate initial u0.  sample u's.
+    p0x  = 1 / (1 + _N.exp(-(u0 + xn)))  #  p0 
     rn0    = int(Mk / p0)
     if dist == __BNML__:  #  make sure initial distribution is capable of generating data
         while rn0 < nmin:
@@ -44,9 +61,6 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, p0=0.05, dist=__BNML__):
     else:
         while rn0 < rmin:
             rn0 += 1
-
-    pTH  = 0.01
-    uTH    = _N.log(pTH / (1 - pTH))
 
     lFlB = _N.empty(2)
     rn1rn0 = _N.empty(2)
@@ -56,11 +70,12 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, p0=0.05, dist=__BNML__):
 
     print "cv is %.3f" % cv
 
-    lFlB[1] = Llklhds(__BNML__, cts, rn0, p0)
+    lFlB[1] = Llklhds(dist, cts, rn0, p0x)
     rngs   = _N.arange(0, 20000)
 
     cross  = False
     print "nmin is %d" %  nmin
+    lls = []
     for it in xrange(burn + NMC):
         #print "------------  it %d" % it
         if dist == __BNML__:
@@ -70,6 +85,7 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, p0=0.05, dist=__BNML__):
             if u1 > uTH:       ###########   Stay in Binomial ##########
                 todist = __BNML__;    cross  = False
                 p1 = 1 / (1 + _N.exp(-u1))
+                p1x = 1 / (1 + _N.exp(-(u1+xn)))
                 lmd= Mk/p1
                 rn1 = trPoi(lmd, nmin)   #  mean is p0/Mk
                 if rn1 < nmin:
@@ -86,6 +102,7 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, p0=0.05, dist=__BNML__):
                 todist = __NBML__;   cross  = True
                 u1 = 2*uTH - u1  #  u1 now a parameter of NB distribution   
                 p1 = 1 / (1 + _N.exp(-u1))
+                p1x = 1 / (1 + _N.exp(-(u1+xn)))
                 lmd = (1./p1 - 1)*Mk
                 rn1 = trPoi(lmd, rmin)   #  mean is p0/Mk
                 lmd1= Mk*((1-p1)/p1);  lmd0= Mk/p0;   lmd= lmd1
@@ -97,6 +114,7 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, p0=0.05, dist=__BNML__):
             if u1 > uTH:       ######   Stay in Negative binomial ######
                 todist = __NBML__;    cross  = False
                 p1 = 1 / (1 + _N.exp(-u1))
+                p1x = 1 / (1 + _N.exp(-(u1+xn)))
                 lmd = (1./p1 - 1)*Mk
                 rn1 = trPoi(lmd, rmin)   #  mean is p0/Mk
                 bLargeP = (p0 > 0.3) and (p1 > 0.3)
@@ -111,13 +129,14 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, p0=0.05, dist=__BNML__):
                 todist = __BNML__;    cross  = True
                 u1 = 2*uTH - u1  #  u in NB distribution
                 p1 = 1 / (1 + _N.exp(-u1))
+                p1x = 1 / (1 + _N.exp(-(u1+xn)))
                 lmd = Mk/p1
                 rn1 = trPoi(lmd, nmin)   #  mean is p0/Mk
                 lmd1= Mk/p1;     lmd0= Mk*((1-p0)/p0);     lmd = lmd1
                 uu0  = -_N.log(rn1 * iMk - 1) # mean of proposal density
                 lpPR = 0.5*istdu2*(-(((uTH-u1) - uu1)*((uTH-u1) - uu1)) + (((uTH-u0) - uu0)*((uTH-u0) - uu0)))
         
-        lFlB[0] = Llklhds(todist, cts, rn1, p1)
+        lFlB[0] = Llklhds(todist, cts, rn1, p1x)
         rn1rn0[0] = rn1;                   rn1rn0[1] = rn0
 
         ########  log of proposal probabilities
@@ -128,17 +147,21 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, p0=0.05, dist=__BNML__):
                 lnPR = rn1*(_N.log(lmd1) - _N.log(lmd0)) - (lmd1 - lmd0) 
             else:
                 if rn0 > rn1: # range(n1+1, n0+1)
-                    lnPR = rn1*_N.log(lmd1) - rn0*_N.log(lmd0) + _N.sum(pcdlog[rngs[rn1+1:rn0+1]]) - (lmd1 - lmd0)
+                    #lnPR = rn1*_N.log(lmd1) - rn0*_N.log(lmd0) + _N.sum(pcdlog[rngs[rn1+1:rn0+1]]) - (lmd1 - lmd0)
+                    lnPR = rn1*_N.log(lmd1) - rn0*_N.log(lmd0) + _N.sum(pcdlog[rn1+1:rn0+1]) - (lmd1 - lmd0)
                 else:
-                    lnPR = rn1*_N.log(lmd1) - rn0*_N.log(lmd0) - _N.sum(pcdlog[rngs[rn0+1:rn1+1]]) - (lmd1 - lmd0)
+                    #lnPR = rn1*_N.log(lmd1) - rn0*_N.log(lmd0) - _N.sum(pcdlog[rngs[rn0+1:rn1+1]]) - (lmd1 - lmd0)
+                    lnPR = rn1*_N.log(lmd1) - rn0*_N.log(lmd0) - _N.sum(pcdlog[rn0+1:rn1+1]) - (lmd1 - lmd0)
         else:
             if rn0 == rn1:
                 lnPR = 0  #  r0 == r1
             else:
                 if rn0 > rn1: # range(r1+1, r0+1)
-                    lnPR = (rn1-rn0) * _N.log(lmd) + _N.sum(pcdlog[rngs[rn1+1:rn0+1]])
+                    #lnPR = (rn1-rn0) * _N.log(lmd) + _N.sum(pcdlog[rngs[rn1+1:rn0+1]])
+                    lnPR = (rn1-rn0) * _N.log(lmd) + _N.sum(pcdlog[rn1+1:rn0+1])
                 else:
-                    lnPR = (rn1-rn0) * _N.log(lmd) - _N.sum(pcdlog[rngs[rn0+1:rn1+1]])
+                    #lnPR = (rn1-rn0) * _N.log(lmd) - _N.sum(pcdlog[rngs[rn0+1:rn1+1]])
+                    lnPR = (rn1-rn0) * _N.log(lmd) - _N.sum(pcdlog[rn0+1:rn1+1])
 
         lPR = lnPR + lpPR
 
@@ -159,8 +182,11 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, p0=0.05, dist=__BNML__):
             rn0 = rn1
             p0 = p1
             lFlB[1] = lFlB[0]
+            lls.append(lFlB[1])
             #print "accepted  %d" % it
             dist = todist
         dty[it] = dist
         us[it] = u0
         rns[it] = rn0    #  rn0 is the newly sampled value if accepted
+
+    return lls

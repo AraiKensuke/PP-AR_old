@@ -4,10 +4,11 @@ from ARcfSmplFuncs import ampAngRep, dcmpcff, betterProposal
 import matplotlib.pyplot as _plt
 from filter import gauKer
 
-def createFlucOsc(f0, f0VAR, N, dt0, TR, Bf=[0.99], Ba=[0.99], amp=1, stdf=None, stda=None, sig=0.1, smoothKer=0):
+def createFlucOsc(f0, f0VAR, N, dt0, TR, Bf=[0.99], Ba=[0.99], amp=1, amp_nz=0, stdf=None, stda=None, sig=0.1, smoothKer=0, dSF=5, dSA=5):
     """
     AR as a generative model creates oscillations where amplitude is 
     sometimes small - to the point of calling it an oscillation is not quite 
+    dSA, dSF    modulations created like (AR / (dSX x stddev)).
     """
     out = _N.empty((TR, N))
 
@@ -32,7 +33,7 @@ def createFlucOsc(f0, f0VAR, N, dt0, TR, Bf=[0.99], Ba=[0.99], amp=1, stdf=None,
         while not bGood:
             f, dum = createDataAR(N+trm, Bf, sig, sig, trim=trm)
 
-            fn   = 1 + (f / (3*stdf))  #  going above 4 stdf very rare.  |xn| is almost < 1
+            fn   = 1 + (f / (dSF*stdf))  #  going above 4 stdf very rare.  |xn| is almost < 1
 
             if _N.min(fn) > 0:
                 bGood = True
@@ -48,13 +49,14 @@ def createFlucOsc(f0, f0VAR, N, dt0, TR, Bf=[0.99], Ba=[0.99], amp=1, stdf=None,
         bGood = False
         while not bGood:
             a, dum = createDataAR(N+trm, Ba, sig, sig, trim=trm)
-            an   = a / (5*stda)   #  in limit of large N, std(xn) = 1
+            an   = a / (dSA*stda)   #  in limit of large N, std(xn) = 1
+
             AM   = 1 + an  #  if we get fluctuations 2 stds bigger, 
             if _N.min(AM) > 0:
                 bGood = True
 
         if smoothKer > 0:
-            out[tr] = _N.convolve(y*AM*amp, gk, mode="same")
+            out[tr] = _N.convolve(y*AM*(amp+_N.random.randn()*amp_nz),  gk, mode="same")
         else:
             out[tr] = y*AM*amp
 
@@ -531,3 +533,17 @@ def quickPSTH(alldat, TR, COLS, plot=False, fn=None, dt=0.001):
         _plt.close()
 
     return spks
+
+def disjointSubset(_superSet, subSetA):
+    #  Give me subSetB that is a disjoint subset of superSet and subSetA
+    if type(_superSet) is _N.ndarray:
+        superSet = _superSet.tolist()
+    else:
+        superSet = _superSet
+    for i in xrange(len(subSetA)):
+        try:
+            superSet.pop(superSet.index(subSetA[i]))
+        except ValueError:
+            print "Warning 2nd set is not a subset of the superset"
+            pass
+    return list(superSet)

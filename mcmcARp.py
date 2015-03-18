@@ -111,8 +111,12 @@ class mcmcARp:
     #  
     _d            = None
 
+    #  coefficient sampling
     fSigMax       = 500.    #  fixed parameters
     freq_lims     = [[1 / .85, fSigMax]]
+    sig_ph0L      = -1
+    sig_ph0H      = 0
+    
 
     #  u   --  Gaussian prior
     u_u          = 0;             s2_u         = 1.5
@@ -456,7 +460,13 @@ class mcmcARp:
                 for m in xrange(ooTR):
                     oo._d.f_V[m, 0]     = oo.s2_x00
             else:
-                oo._d.f_V[:, 0]     = oo._d.f_V[:, 1]
+                oo._d.f_V[:, 0]     = _N.mean(oo._d.f_V[:, 1:], axis=1)
+
+            # if it == 1:
+            #     for m in xrange(ooTR):
+            #         oo._d.f_V[m, 0]     = oo.s2_x00
+            # else:
+            #     oo._d.f_V[:, 0]     = oo._d.f_V[:, 1]
 
             BaS = _N.dot(oo.B.T, oo.aS)
             ###  PG latent variable sample
@@ -526,11 +536,11 @@ class mcmcARp:
                     oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
 
                 if not oo.bFixF:   
-                    ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)  
+                    ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H)  
                     oo.F_alfa_rep = alpR + alpC   #  new constructed
                     prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
                     print prt
-                ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d)
+                ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
                 #ranks[it]    = rank
                 oo.allalfas[it] = oo.F_alfa_rep
 
@@ -643,7 +653,7 @@ class mcmcARp:
                     cf2 = 2*(c[2*z].real*gam.real + c[2*z].imag*gam.imag)
                     oo.zts[tr, it, 0:ddN+2, z] = cf1*oo.wts[tr, it, z, 1:ddN+3] - cf2*oo.wts[tr, it, z, 0:ddN+2]
 
-        oo.zts0 = _N.array(oo.zts[:, :, 1:, 0])
+        oo.zts0 = _N.array(oo.zts[:, :, 1:, 0], dtype=_N.float16)
 
     def dump(self):
         oo    = self

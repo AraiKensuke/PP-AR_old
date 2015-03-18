@@ -38,7 +38,7 @@ import mcmcARp as mARp
 
 class mcmcARpTCS(mARp.mcmcARp):
     #  Current values of params and state
-    s             = 0.01        #  trend.  
+    s             = 0.0        #  trend.  
     TRm  = None
     trd           = None
     
@@ -391,11 +391,11 @@ class mcmcARpTCS(mARp.mcmcARp):
             print (oo.s * oo.TRm)
 
             if not oo.bFixF:   
-                ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)  
+                ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H)  
                 oo.F_alfa_rep = alpR + alpC   #  new constructed
                 prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
                 print prt
-            ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d)
+            ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
             #ranks[it]    = rank
             oo.allalfas[it] = oo.F_alfa_rep
 

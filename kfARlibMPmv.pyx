@@ -121,6 +121,12 @@ def FFdv(y, Rv, N, k, F, GQGT, fx, fV):   #  approximate KF    #  k==1,dynamic v
 
         # px + K(y - o - Hpx)  K column vec, (y-o-Hpx) is scalar
         #KyHpx = K[n]* (y[n] - pxmv[n, 0, 0])
+        """
+        print "!!!"
+        print K.shape
+        print y.shape
+        print KyHpx.shape
+        """
         _N.multiply(K[n], y[n] - pxmv[n, 0, 0], out=KyHpx)
         _N.add(px[n], KyHpx, out=fx[n])
 

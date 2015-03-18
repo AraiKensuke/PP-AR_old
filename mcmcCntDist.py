@@ -59,6 +59,7 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, xn=None, cv0=0.99):
     cvs  = _N.empty(Npcs)
     mns  = _N.empty(Npcs)
     rn0s = _N.empty(Npcs)
+    rn1s = _N.empty(Npcs)
 
     for ep in xrange(Npcs):
         mp       = _N.mean(cts[ep*epS:(ep+1)*epS])
@@ -173,8 +174,7 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, xn=None, cv0=0.99):
                 p1x = 1 / (1 + _N.exp(-(u1+xn)))
 
                 lmd = (1./p1 - 1)*Mk
-                #rn1 = trPoi(lmd, rmin)   #  mean is p0/Mk
-                rn1 = int(lmd)   #  mean is p0/Mk
+                rn1 = trPoi(lmd, rmin)   #  mean is p0/Mk
                 bLargeP = (p0 > 0.3) and (p1 > 0.3)
                 if bLargeP:#    fairly large p.  Exact proposal ratio
                     lmd= Mk*((1-0.5*(p0+p1))/(0.5*(p0+p1)))
@@ -225,22 +225,23 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, xn=None, cv0=0.99):
         else:
             prRat = _N.exp(lPR)
 
-        posRat = 1e+50 if (lFlB[0] - lFlB[1] > 100) else _N.exp(lFlB[0]-lFlB[1])
+        posRat = 1.01e+304 if (lFlB[0] - lFlB[1] > 700) else _N.exp(lFlB[0]-lFlB[1])
 
         rat  = posRat*prRat
 
         aln  = rat if (rat < 1)  else 1
-        if dist == __BNML__:
-            cvI = 1 - p0
-        else:
-            cvI = 1 / (1 - p0)
-        if todist == __BNML__:
-            cvF = 1 - p1
-        else:
-            cvF = 1 / (1 - p1)
+        # if dist == __BNML__:
+        #     cvI = 1 - p0
+        # else:
+        #     cvI = 1 / (1 - p0)
+        # if todist == __BNML__:
+        #     cvF = 1 - p1
+        # else:
+        #     cvF = 1 / (1 - p1)
 
-        if cvF < cvI:
-            print "cvI %(cvi).2f  cvF  %(cvf).2f  %(it)d   %(aln).5f   posRat %(posRat).3f    lnPR %(lnPR).3f   lpPR %(lpPR).3f" % {"it" : it, "aln" : aln, "posRat" : posRat, "lnPR" : lnPR, "lpPR" : lpPR, "cvi" : cvI, "cvf" : cvF}
+        # if cvF < cvI:
+        #print "cvI %(cvi).2f  cvF  %(cvf).2f  %(it)d   %(aln).5f   posRat %(posRat).3f    lnPR %(lnPR).3f   lpPR %(lpPR).3f" % {"it" : it, "aln" : aln, "posRat" : posRat, "lnPR" : lnPR, "lpPR" : lpPR, "cvi" : cvI, "cvf" : cvF}
+        #print "%(it)d   %(aln).5f   posRat %(posRat).3f    lnPR %(lnPR).3f   lpPR %(lpPR).3f" % {"it" : it, "aln" : aln, "posRat" : posRat, "lnPR" : lnPR, "lpPR" : lpPR}
         if rds[it] < aln:   #  accept
             u0 = u1
             rn0 = rn1

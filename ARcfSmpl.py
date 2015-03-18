@@ -8,15 +8,16 @@ import commdefs as _cd
 import numpy as _N
 #from ARcfSmplFuncs import ampAngRep, randomF, dcmpcff, betterProposal
 from ARcfSmplFuncs import ampAngRep, dcmpcff, betterProposal
+import matplotlib.pyplot as _plt
 
 
-def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, accepts=1, prior=_cd.__COMP_REF__, aro=_cd.__NF__):
+def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, TR, accepts=1, prior=_cd.__COMP_REF__, aro=_cd.__NF__, sig_ph0L=-1, sig_ph0H=0):
     C = Cs + Cn
 
     #  I return F and Eigvals
 
-    ujs     = _N.empty((_d.TR, R, N + 1, 1))
-    wjs     = _N.empty((_d.TR, C, N + 2, 1))
+    ujs     = _N.empty((TR, R, N + 1, 1))
+    wjs     = _N.empty((TR, C, N + 2, 1))
 
     #  CONVENTIONS, DATA FORMAT
     #  x1...xN  (observations)   size N-1
@@ -40,29 +41,34 @@ def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, ac
     F1  = _N.zeros(2)
     A   = _N.empty(2)
 
-    Xs     = _N.empty((_d.TR, N-2, 2))
+    Xs     = _N.empty((TR, N-2, 2))
     Ys     = _N.empty((N-2, 1))
-    H      = _N.empty((_d.TR, 2, 2))
-    iH     = _N.empty((_d.TR, 2, 2))
-    mu     = _N.empty((_d.TR, 2, 1))
+    H      = _N.empty((TR, 2, 2))
+    iH     = _N.empty((TR, 2, 2))
+    mu     = _N.empty((TR, 2, 1))
     J      = _N.empty((2, 2))
-    Mj     = _N.empty(_d.TR)
-    Mji    = _N.empty(_d.TR)
-    mj     = _N.empty(_d.TR)
+    Mj     = _N.empty(TR)
+    Mji    = _N.empty(TR)
+    mj     = _N.empty(TR)
 
     #  r = sqrt(-1*phi_1)   0.25 = -1*phi_1   -->  phi_1 >= -0.25   gives r >= 0.5 for signal components   
     if aro == _cd.__SF__:    #  signal first
         arInd = range(C)
     else:                    #  noise first
         arInd = range(C-1, -1, -1)
-    
+
     for c in arInd:   #  Filtering signal root first drastically alters the strength of the signal root upon update sometimes.  
     #for c in xrange(C-1, -1, -1):
         rprior = prior
         if c >= Cs:
            rprior = _cd.__COMP_REF__
-        ph0L = -1
-        ph0H = 0
+        if c >= Cs:
+            ph0L = -1
+            ph0H = 0
+        else:
+            ph0L = sig_ph0L   # 
+            ph0H = sig_ph0H #  R=0.97, reasonably oscillatory
+            
         j = 2*c + 1
         p1a =  AR2lims[c, 0]
         p1b =  AR2lims[c, 1]
@@ -82,8 +88,11 @@ def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, ac
         ##########  CREATE FILTERED TIMESERIES   ###########
         ##########  Frmj is k x k, smpxW is (N+2) x k ######
 
-        for m in xrange(_d.TR):
+        for m in xrange(TR):
             _N.dot(smpxW[m], Ff.T, out=wjs[m, c])
+            #_N.savetxt("%(2)d-%(1)d" % {"2" : aro, "1" : c}, wjs[m, c])
+            #_plt.figure(figsize=(15, 4))
+            #_plt.plot(wjs[m, c, 1000:1300])
 
             ####   Needed for proposal density calculation
             #Ys[:, 0]    = wj[2:N, 0]
@@ -240,8 +249,15 @@ def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, ac
         #alpC.insert(j,   (A[0] - img)*0.5)       #  vals[1] now at end
 
         #  the positive root comes first
-        alpC.insert(j-1, (A[0] - img)*0.5)       
-        alpC.insert(j-1, (A[0] + img)*0.5)        
+        alpC.insert(j-1, (A[0] - img)*0.5)     #alpC.insert(j - 1, jth_r1)
+        alpC.insert(j-1, (A[0] + img)*0.5)     #alpC.insert(j - 1, jth_r2)
+        
+        #a = [1, 2, 3, 4, 5, 6]
+        #  j = 3
+        # r1 = a.pop(j)
+        # r2 = a.pop(j-1)
+        # a.insert(j-1, r1)
+        # a.insert(j-1, r2)
 
 
     Ff  = _N.zeros((1, k))
@@ -256,7 +272,7 @@ def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, ac
         ##########  CREATE FILTERED TIMESERIES   ###########
         ##########  Frmj is k x k, smpxU is (N+1) x k ######
 
-        for m in xrange(_d.TR):
+        for m in xrange(TR):
             #uj  = _N.dot(Ff, smpxU[m].T).T
             #_N.dot(Ff, smpxU[m].T, out=ujs[m, j])
             _N.dot(smpxU[m], Ff.T, out=ujs[m, j])
@@ -281,13 +297,13 @@ def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d, ac
     return ujs, wjs#, lsmpld
 
 
-def FilteredTimeseries(N, k, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d):
+def FilteredTimeseries(N, k, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, TR):
     C = Cs + Cn
 
     #  I return F and Eigvals
 
-    ujs     = _N.empty((_d.TR, R, N + 1, 1))
-    wjs     = _N.empty((_d.TR, C, N + 2, 1))
+    ujs     = _N.empty((TR, R, N + 1, 1))
+    wjs     = _N.empty((TR, C, N + 2, 1))
 
     #  CONVENTIONS, DATA FORMAT
     #  x1...xN  (observations)   size N-1
@@ -325,7 +341,7 @@ def FilteredTimeseries(N, k, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d):
         ##########  CREATE FILTERED TIMESERIES   ###########
         ##########  Frmj is k x k, smpxW is (N+2) x k ######
 
-        for m in xrange(_d.TR):
+        for m in xrange(TR):
             _N.dot(smpxW[m], Ff.T, out=wjs[m, c])
             
         alpC.insert(j-1, jth_r1)
@@ -343,7 +359,7 @@ def FilteredTimeseries(N, k, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, _d):
         ##########  CREATE FILTERED TIMESERIES   ###########
         ##########  Frmj is k x k, smpxU is (N+1) x k ######
 
-        for m in xrange(_d.TR):
+        for m in xrange(TR):
             _N.dot(smpxU[m], Ff.T, out=ujs[m, j])
 
         alpR.insert(j, jth_r)

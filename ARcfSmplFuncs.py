@@ -103,8 +103,46 @@ def initF(nR, nCS, nCN, ifs=None):
             r  = 0.95
         else:  #  Looking at how noise roots distribute themselves
                #  they seem to spread out fairly evenly in spectrum
-            th = _N.pi*(0.15 + 0.8 / (nCN - (n - nCS)))   #  above 80Hz, weak
-            r  = (1 + _N.random.rand()) / (2 * _N.sqrt(nCN))   #  r ~ (1 / (2*nCN))
+            #th = _N.pi*(0.1 + 0.05 / (nCN - (n - nCS)))   #  above 80Hz, weak
+            th = _N.pi*(0.2 + 0.8*_N.random.rand())
+            #r  = (1 + _N.random.rand()) / (2 * _N.sqrt(nCN))   #  r ~ (1 / (2*nCN))
+            #r  = 1.5 / (2 * _N.sqrt(nCN))   #  r ~ (1 / (2*nCN))
+            r  = 0.2+0.75*_N.random.rand()
+            #r   = 0.8
+        iRs[nR + 2*n]     = r*(_N.cos(th) + _N.sin(th)*1j)
+        iRs[nR + 2*n + 1] = r*(_N.cos(th) - _N.sin(th)*1j)
+    print iRs
+
+    return iRs
+
+def initFL(nR, nCS, nCN, ifs=None):
+    #  random AR coeff set.  nR real roots and nCPr cmplx pairs
+    nCPr = nCS + nCN
+
+    if nCPr == 0:
+        iRs = _N.empty(nR + 2*nCPr, dtype=_N.float64)    # inverse roots
+    else:
+        iRs = _N.empty(nR + 2*nCPr, dtype=_N.complex)    # inverse roots
+
+    #iRs[0:nR] = -0.6 - 0.4*_N.random.rand(nR)
+    #iRs[0:nR] = 0.1*_N.random.rand(nR)
+    iRs[0:nR] = 0.0
+
+    if (ifs == None):
+        ifs  = []
+        for n in xrange(nCS):
+            ifs.append(0.03 * (n + 1) * _N.pi)
+
+    for n in xrange(nCPr):
+        if n < nCS:
+            th = ifs[n]
+            r  = 0.95
+        else:  #  Looking at how noise roots distribute themselves
+               #  they seem to spread out fairly evenly in spectrum
+            th = _N.pi*(0.6 + 0.3 / (nCN - (n - nCS)))   #  above 80Hz, weak
+            #r  = (1 + _N.random.rand()) / (2 * _N.sqrt(nCN))   #  r ~ (1 / (2*nCN))
+            r  = 1.5 / (2 * _N.sqrt(nCN))   #  r ~ (1 / (2*nCN))
+            #r  = 0.3 + 0.3*_N.random.rand()
         iRs[nR + 2*n]     = r*(_N.cos(th) + _N.sin(th)*1j)
         iRs[nR + 2*n + 1] = r*(_N.cos(th) - _N.sin(th)*1j)
 
@@ -169,6 +207,7 @@ def dcmpcff(alfa):
 
     b   = None
     c   = None
+
     if R > 0:
         b      = _N.empty(R)
         b[:]   = bbc[0:R].real

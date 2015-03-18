@@ -1,4 +1,4 @@
-from kflib import createDataAR
+from kflib import createDataAR, disjointSubset
 #import matplotlib.pyplot as _plt
 import numpy as _N
 import re as _re
@@ -26,8 +26,9 @@ from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
 from multiprocessing import Pool
 
 import os
-
 import mcmcARp as mARp
+
+import matplotlib.pyplot as _plt
 
 class mcmcARpBM(mARp.mcmcARp):
     ###########  TEMP
@@ -38,11 +39,14 @@ class mcmcARpBM(mARp.mcmcARp):
     #  binomial states
     nStates       = 2
     s             = None   #  coupling M x 2
-    z             = None   #  state index M x 2  [(1, 0), (0, 1), (0, 1), ...]
+    Z             = None   #  state index M x 2  [(1, 0), (0, 1), (0, 1), ...]
     m             = None   #  dim 2
     sd            = None
 
+    #  Do not vary these Z's
     fxdz          = None
+    varz          = None
+
     
     #  Dirichlet priors
     alp           = None
@@ -57,25 +61,37 @@ class mcmcARpBM(mARp.mcmcARp):
 
         oo.smp_zs    = _N.zeros((oo.TR, oo.burn + oo.NMC, oo.nStates))
         oo.smp_ms    = _N.zeros((oo.burn + oo.NMC, oo.nStates))
-        oo.Z         = _N.zeros((oo.TR, oo.nStates), dtype=_N.int)
-
-        if oo.lowStates is not None:
-            for tr in xrange(oo.TR):
-                oo.Z[tr, 0] = 0;                oo.Z[tr, 1] = 1
-                try:
-                    oo.lowStates.index(tr)
-                    oo.Z[tr, 0] = 1;                oo.Z[tr, 1] = 0
-                except ValueError:
-                    pass
-        else:
-            for tr in xrange(oo.TR):
-                oo.Z[tr, 0] = 0;                oo.Z[tr, 1] = 1
-                
+        if oo.Z is None:   #  not set externally
+            oo.Z         = _N.zeros((oo.TR, oo.nStates), dtype=_N.int)
+            if oo.lowStates is not None:
+                for tr in xrange(oo.TR):
+                    oo.Z[tr, 0] = 0;                oo.Z[tr, 1] = 1
+                    try:
+                        oo.lowStates.index(tr)
+                        oo.Z[tr, 0] = 1;                oo.Z[tr, 1] = 0
+                    except ValueError:
+                        pass
+            else:
+                for tr in xrange(oo.TR):
+                    oo.Z[tr, 0] = 0;                oo.Z[tr, 1] = 1
 
         oo.s         = _N.array([0.01, 1])
         oo.sd        = _N.zeros((oo.TR, oo.TR))
         oo.m         = _N.array([0.5, 0.5])
         oo.alp       = _N.array([1, 1])
+
+        if (oo.varz is None) and (oo.fxdz is None):
+            ##  
+            oo.varz  = _N.arange(oo.TR)
+            oo.fxdz  = _N.array([])
+        elif (oo.varz is None) and (oo.fxdz is not None):
+            if type(oo.fxdz) is list:
+                oo.fxdz = _N.array(oo.fxdz)
+            oo.varz  = _N.array(disjointSubset(range(oo.TR), oo.fxdz), dtype=_N.int)
+        elif (oo.varz is not None) and (oo.fxdz is None):
+            if type(oo.varz) is list:
+                oo.varz = _N.array(oo.varz)
+            oo.fxdz  = _N.array(disjointSubset(range(oo.TR), oo.varz), dtype=_N.int)
 
     def gibbsSamp(self):  ###########################  GIBBSSAMP
         oo          = self
@@ -126,7 +142,7 @@ class mcmcARpBM(mARp.mcmcARp):
         ###  need pointer to oo.us, but reshaped for broadcasting to work
         ###############################  MCMC LOOP  ########################
         oous_rs = oo.us.reshape((ooTR, 1))   #  done for broadcasting rules
-        lrnBadLoc = _N.empty(oo.N+1, dtype=_N.bool)
+        lrnBadLoc = _N.empty((oo.TR, oo.N+1), dtype=_N.bool)
 
         sd01   = _N.zeros((oo.nStates, oo.TR, oo.TR))
         _N.fill_diagonal(sd01[0], oo.s[0])
@@ -142,7 +158,7 @@ class mcmcARpBM(mARp.mcmcARp):
 
         zd     = _N.zeros((oo.TR, oo.TR))
         izd    = _N.zeros((oo.TR, oo.TR))
-        ll    = _N.empty(oo.nStates)
+        ll    = _N.zeros(oo.nStates)
         Bp    = _N.empty((oo.nStates, oo.N+1))
 
         for m in xrange(ooTR):
@@ -155,19 +171,36 @@ class mcmcARpBM(mARp.mcmcARp):
         expT= _N.empty(ooN+1)
         BaS = _N.dot(oo.B.T, oo.aS)
 
+        oo.nSMP_smpxC = 0
         while (it < ooNMC + oo.burn - 1):
             t1 = _tm.time()
             it += 1
-            print it
+            print "****------------  %d" % it
+
+            #  generate latent AR state
 
             if it > oo.startZ:
                 ######  Z
+                #print "!!!!!!!!!!!!!!!  1"
                 for tryZ in xrange(oo.nStates):
                     _N.dot(sd01[tryZ], oo.smpx[..., 2:, 0], out=smpx01[tryZ])
-                    oo.build_addHistory(ARo01[tryZ], smpx01[tryZ, m], BaS, oo.us, lrnBadLoc)
-
-                for m in xrange(oo.TR):
-                    for tryZ in xrange(oo.nStates):
+                    #oo.build_addHistory(ARo01[tryZ], smpx01[tryZ, m], BaS, oo.us, lrnBadLoc)
+                    oo.build_addHistory(ARo01[tryZ], smpx01[tryZ], BaS, oo.us, lrnBadLoc)
+                    for m in xrange(oo.TR):
+                        locs = _N.where(lrnBadLoc[m] == True)
+                        if locs[0].shape[0] > 0:
+                            print "found a bad loc"
+                            fig = _plt.figure(figsize=(8, 5))
+                            _plt.suptitle("%d" % m)
+                            _plt.subplot(2, 1, 1)
+                            _plt.plot(smpx01[tryZ, m])
+                            _plt.subplot(2, 1, 2)
+                            _plt.plot(ARo01[tryZ, m])
+                    #print "!!!!!!!!!!!!!!!  2"
+                for m in oo.varz:
+                    #print "m is %d" % m
+                    #print "BEGIN"
+                    for tryZ in xrange(oo.nStates):  #  only allow certain trials to change
 
                         #  calculate p0, p1  p0 = m_0 x PROD_n Ber(y_n | Z_j)
                         #                       = m_0 x _N.exp(_N.log(  ))
@@ -177,6 +210,7 @@ class mcmcARpBM(mARp.mcmcARp):
                         _N.exp(smpx01[tryZ, m] + BaS + ARo01[tryZ, m] + oo.us[m], out=expT)
                         Bp[0]   = 1 / (1 + expT)
                         Bp[1]   = expT / (1 + expT)
+
                         #   z[:, 1]   is state label
 
                         for n in xrange(oo.N+1):
@@ -185,23 +219,30 @@ class mcmcARpBM(mARp.mcmcARp):
                     ofs = _N.min(ll)
                     ll  -= ofs
                     nc = oo.m[0]*_N.exp(ll[0]) + oo.m[1]*_N.exp(ll[1])
+                    #print "%(nc).3e   %(m)s" % {"nc" : nc, "m" : str(oo.m)}
+
 
                     oo.Z[m, 0] = 0;  oo.Z[m, 1] = 1
                     THR[m] = (oo.m[0]*_N.exp(ll[0]) / nc)
                     if _N.random.rand() < THR[m]:
                         oo.Z[m, 0] = 1;  oo.Z[m, 1] = 0
                     oo.smp_zs[m, it] = oo.Z[m]
+                    #print "END----"
+                for m in oo.fxdz: #####  outside BM loop
+                    oo.smp_zs[m, it] = oo.Z[m]
 
-                print THR
+                #print THR
                 #  Z  set
                 _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
-                _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])            
+                _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])
+                #for kkk in xrange(oo.TR):
+                #    print zd[kkk, kkk]
                 _N.dot(zd, oo.smpx[..., 2:, 0], out=zsmpx)
                 ######  sample m's
-                _N.add(oo.alp, _N.sum(oo.Z, axis=0), out=dirArgs)
+                _N.add(oo.alp, _N.sum(oo.Z[oo.varz], axis=0), out=dirArgs)
                 oo.m[:] = _N.random.dirichlet(dirArgs)
                 oo.smp_ms[it] = oo.m
-            else:
+            else:  #  it < startZ
                 _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
                 _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])            
                 _N.dot(zd, oo.smpx[..., 2:, 0], out=zsmpx)
@@ -250,8 +291,16 @@ class mcmcARpBM(mARp.mcmcARp):
             oo._d.copyParams(oo.F0, oo.q2)
             #  (MxM)  (MxN) = (MxN)  (Rv is MxN)
             _N.dot(_N.dot(izd, izd), 1. / oo.ws, out=oo._d.Rv)
-            oo._d.f_x[:, 0, :, 0]     = oo.x00
-            oo._d.f_V[:, 0]     =       oo._d.f_V[:, 1]
+
+            oo._d.f_x[:, 0, :, 0]     = _N.mean(oo.SMP_x00, axis=1)
+            if it == 1:
+                for m in xrange(ooTR):
+                    oo._d.f_V[m, 0]     = oo.s2_x00
+            else:
+                oo._d.f_V[:, 0]     = _N.mean(oo._d.f_V[:, 1:], axis=1)
+
+            #oo._d.f_x[:, 0, :, 0]     = oo.x00
+            #oo._d.f_V[:, 0]     =       oo._d.f_V[:, 1]
             #  _d.F, _d.N, _d.ks, 
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
 
@@ -260,10 +309,14 @@ class mcmcARpBM(mARp.mcmcARp):
                 oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                 oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                 oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+                oo.SMP_x00[m, oo.nSMP_smpxC] = oo.smpx[m, 2]*0.5
+            oo.nSMP_smpxC += 1
+            oo.nSMP_smpxC %= oo.nSMP_smpx
+                    
 
             #######  Sample AR coefficient
             if not oo.bFixF:   
-                ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d, prior=oo.use_prior, accepts=30, aro=oo.ARord)
+                ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord)
 
                 oo.F_alfa_rep = alpR + alpC   #  new constructed
                 prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)

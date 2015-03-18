@@ -21,20 +21,31 @@ N, cols = dat.shape
 
 TR   = cols / COLS
 
-dat2 = _N.zeros((N/2, cols))
+M    = 2   #  mult by
+datM = _N.zeros((N/M, cols))
 
+missingSpikes = 0
 for tr in xrange(TR):
-    for n in xrange(N/2):
-        if (dat[2*n, COLS*tr + 2] == 1) or (dat[2*n + 1, COLS*tr + 2] == 1):
-            dat2[n, COLS*tr + 2]   = 1   #  we lose 1 spk.  not a big deal
+    for n in xrange(N/M):
+        iFound = 0
+        for i in xrange(M):
+            if (dat[M*n + i, COLS*tr + 2] == 1):
+                iFound += 1
+            if iFound > 0:
+                datM[n, COLS*tr + 2]   = 1   #  we lose 1 spk.  not a big deal
+            if iFound > 1:
+                print "More than 1 spikes in this collapsed bin"
+                missingSpikes += iFound - 1
 
-    dat2[:, COLS*tr:COLS*tr+2] = dat[::2, COLS*tr:COLS*tr+2]
+    datM[:, COLS*tr:COLS*tr+2] = dat[::M, COLS*tr:COLS*tr+2]
+    if bRealDat:
+        datM[:, COLS*tr+3] = dat[::M, COLS*tr+3]
 
-setnameM="%sL" % setname
+setnameM="%(sn)sM%(M)d" % {"sn" : setname, "M" : M}
 
 if bRealDat:
-    fmt = "% .3e % .3e %.3e %d " * TR
-    _N.savetxt(resFN("xprbsdN.dat", dir=setnameM, create=True), dat2, fmt=fmt)
+    fmt = "% .3e % .3e %d %.3f " * TR
+    _N.savetxt(resFN("xprbsdN.dat", dir=setnameM, create=True), datM, fmt=fmt)
 else:
     fmt = "% .3e %.3e %d " * TR
-    _N.savetxt(resFN("xprbsdN.dat", dir=setnameM, create=True), dat2, fmt=fmt)
+    _N.savetxt(resFN("xprbsdN.dat", dir=setnameM, create=True), datM, fmt=fmt)

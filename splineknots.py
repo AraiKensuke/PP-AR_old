@@ -4,6 +4,7 @@ import scipy.io as _sio
 import utilities as _U
 import numpy as _N
 import matplotlib.pyplot as _plt
+from utildirs import setFN
 
 v = 5
 c = 5
@@ -75,7 +76,16 @@ def suggestHistKnots(dt, TR, N, bindat, tsclPct=0.85, outfn="fittedL2.dat"):
         allKnts[tr, :] = knts
 
     bstKnts = allKnts[_N.where(r2s == r2s.min())[0][0], :]
-    return bstKnts, nhaz, tscl
+
+    B  = patsy.bs(xs[0:-1], knots=bstKnts, include_intercept=True)
+    Bc = B[:, v:];   Bv = B[:, 0:v]
+    iBvTBv = _N.linalg.inv(_N.dot(Bv.T, Bv))
+    av = _N.dot(iBvTBv, _N.dot(Bv.T, _N.log(nhaz) - _N.dot(Bc, ac)))
+    a = _N.array(av.tolist() + ac.tolist())
+    #  Now fit where the last few nots are fixed
+    lmd2          = _N.exp(_N.dot(B, a))
+
+    return bstKnts, lmd2, nhaz, tscl
 
 def suggestPSTHKnots(dt, TR, N, bindat, bnsz=50, iknts=2):
     """
@@ -114,7 +124,7 @@ def suggestPSTHKnots(dt, TR, N, bindat, bnsz=50, iknts=2):
 
     return knts, apsth
 
-def display(N, dt, tscl, nhaz, apsth, lambda2, psth, histknts, psthknts, outfn=None):
+def display(N, dt, tscl, nhaz, apsth, lambda2, psth, histknts, psthknts, dir=None):
     """
     N        length of trial, also time in ms
     tscl
@@ -127,14 +137,12 @@ def display(N, dt, tscl, nhaz, apsth, lambda2, psth, histknts, psthknts, outfn=N
 
     x  = _N.linspace(0., N-1, N, endpoint=False)  # in units of ms.
 
-    fig = _plt.figure(figsize=(6, 4*2))
-
     theknts = [histknts, psthknts]
     for f in xrange(1, 3):
-        fig.add_subplot(2, 1, f)
         knts = theknts[f-1]
         
         if f == 1:
+            fig = _plt.figure()
             B  = patsy.bs(x[0:len(nhaz)], knots=knts, include_intercept=True)
             Bc = B[:, v:];    Bv = B[:, 0:v]
             ac = _N.zeros(c)
@@ -144,22 +152,130 @@ def display(N, dt, tscl, nhaz, apsth, lambda2, psth, histknts, psthknts, outfn=N
 
             a = _N.array(av.tolist() + ac.tolist())
             _plt.plot(x[0:len(nhaz)], nhaz, color="grey", lw=2)   #  empirical
-            _plt.plot(lambda2, color="red", lw=2)               #  ground truth
-            _plt.ylim(0, 2.5)
+            ymax = -1
+            if lambda2 is not None:
+                _plt.plot(lambda2, color="red", lw=2)               #  ground truth
+                ymax = max(lambda2)
+            _plt.ylim(0, max(ymax, max(nhaz[0:tscl]))*1.1)
             _plt.xlim(0, 3*tscl)
+            splFt = _N.exp(_N.dot(B, a))
+            _plt.plot(splFt)
+            _plt.savefig(setFN("hist.eps", dir=dir))
+            _plt.xlim(0, tscl)
+            _plt.grid()
+            _plt.savefig(setFN("histZ.eps", dir=dir))
+            _plt.close()
         else:
+            fig = _plt.figure()
             B  = patsy.bs(x, knots=knts, include_intercept=True)
             iBTB   = _N.linalg.inv(_N.dot(B.T, B))
             a     = _N.dot(iBTB, _N.dot(B.T, _N.log(apsth)))
             _plt.plot(x, apsth, color="grey", lw=2)   #  empirical
-            fHz   = ((_N.exp(psth)*dt) / (1 + dt*_N.exp(psth))) / dt
-            _plt.plot(fHz, color="red", lw=2)               #  ground truth
+            if psth is not None:
+                fHz   = ((_N.exp(psth)*dt) / (1 + dt*_N.exp(psth))) / dt
+                _plt.plot(fHz, color="red", lw=2)               #  ground truth
 
-        splFt = _N.exp(_N.dot(B, a))
+            splFt = _N.exp(_N.dot(B, a))
+            _plt.plot(splFt)
+            _plt.savefig(setFN("psth.eps", dir=dir))
+            _plt.close()
 
-        _plt.plot(splFt)
+"""
+def reasonableHist(lmd, maxH=1.2):
+    L = lmd.shape[0]
+    cmpLmd = _N.array(lmd)  #  compressed lambda
 
-    if outfn != None:
-        _plt.savefig(outfn)
-        _plt.close()
+    maxAmp = _N.max(lmd-1)
+    bAbv    = False
+    bFellOnce=False
+    bForce1 = False   #  force it to be 1 hereafter
+    
+    for i in xrange(L):
+        if (not bAbv) and lmd[i] > 1:
+            bAbv = True
+            
+        if (lmd[i] > 1):
+            cmpLmd[i] = 1 + ((lmd[i] - 1) / maxAmp) * (maxH - 1)
+        elif (lmd[i] < 1) and bAbv:
+            cmpLmd[i] = 1
 
+        if bAbv and (not bFellOnce):
+            if lmd[i] < lmd[i-1]:
+                bFellOnce = True
+
+        if (not bForce1) and bAbv and (lmd[i] > lmd[i-1]) and bFellOnce:
+            bForce1 = True
+            cmpLmd[i] = 1
+        if bForce1:
+            cmpLmd[i] = 1
+
+            
+    return cmpLmd
+"""
+
+def reasonableHistory(lmd, maxH=1.2, cutoff=100):
+    """
+    search for max between 0 and cutoff
+    """
+    L = lmd.shape[0]
+    cmpLmd = _N.array(lmd)  #  compressed lambda
+
+    maxAmp = _N.max(lmd-1)
+    bAbv    = False
+    bFellOnce=False
+    bForce1 = False   #  force it to be 1 hereafter
+    
+    for i in xrange(L):
+        if (not bAbv) and lmd[i] > 1:
+            bAbv = True
+            
+        if (lmd[i] > 1):
+            cmpLmd[i] = 1 + ((lmd[i] - 1) / maxAmp) * (maxH - 1)
+        elif (lmd[i] < 1) and bAbv:
+            cmpLmd[i] = 1
+
+        if bAbv and (not bFellOnce):
+            if lmd[i] < lmd[i-1]:
+                bFellOnce = True
+
+        if (not bForce1) and bAbv and (lmd[i] > lmd[i-1]) and bFellOnce:
+            bForce1 = True
+            cmpLmd[i] = 1
+        if bForce1:
+            cmpLmd[i] = 1
+
+            
+    return cmpLmd
+
+def reasonableHistory2(lmd, maxH=1.2, strT=1, cutoff=100, dcyTS=60):
+    """
+    search for max between 0 and cutoff
+    stretchT
+    """
+    hiest = max(lmd[0:cutoff])
+    L = lmd.shape[0]
+    cmpLmd = _N.empty(dcyTS)  #  compressed lambda
+
+    ihiest= _N.where(lmd == hiest)[0][0]
+
+    ###  
+    x    = _N.linspace(0, ihiest, ihiest+1)
+
+    for i in xrange(ihiest + 1):
+        cmpLmd[i] = lmd[i] * (maxH / hiest)
+    
+    print ihiest
+    if strT > 1:
+
+        nIDP   = int((ihiest+1)*strT)   #  number of interpolated data points
+        xI     = _N.linspace(0, ihiest, nIDP)
+        cI     = _N.interp(xI, x, cmpLmd[0:ihiest+1])
+
+        cmpLmd[0:nIDP] = cI
+        ihiest = int(ihiest*strT)
+
+    dy  = (maxH - 1) / float(dcyTS - ihiest)
+    for i in xrange(ihiest + 1, dcyTS):
+        cmpLmd[i] = maxH -  (i - ihiest) * dy
+
+    return cmpLmd

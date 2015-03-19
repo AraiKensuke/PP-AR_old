@@ -1,6 +1,7 @@
 import pickle as _pkl
 import numpy as _N
 import scipy.stats as _ss
+import os
 
 cdef extern from "math.h":
     double exp(double)
@@ -19,7 +20,15 @@ class logerfc:
     #  useful constants
 
     def __init__(self):
-        fpk = open("/Users/arai/usb/nctc/mscripts/logerfc.dat", "r")
+        try:
+            floc = os.environ["logerfc"]
+        except ValueError:
+            print "Need logerfc.dat file location.  Put it in shell startup script";    exit()
+        try:
+            fpk = open(floc, "r")
+        except IOError:
+            print "Didn't find logerfc.dat file at %s" % floc;  exit()
+
         dat = _pkl.load(fpk)
         self._logerfc = dat
         self._R, c     = self._logerfc.shape

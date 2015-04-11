@@ -19,8 +19,9 @@ def genKnts(tscl, xMax):
     knts[3:]  = TSCL + (xMax - TSCL)*_N.random.rand(3)
     return _N.sort(knts)
 
-def hazzard(dt, TR, N, bindat, tsclPct=0.85):
+def hazzard(dt, TR, bindat, tsclPct=0.85):
     ####  Suggest knots for history term
+
     isis    = _U.fromBinDat(bindat, ISIs=True)
     ecdf    = _sma.distributions.ECDF(isis)
     xs      = _N.arange(0, max(isis))        #  in units of ms.
@@ -42,9 +43,9 @@ def hazzard(dt, TR, N, bindat, tsclPct=0.85):
     return xs, nhaz, tscl
 
 
-def suggestHistKnots(dt, TR, N, bindat, tsclPct=0.85, outfn="fittedL2.dat"):
+def suggestHistKnots(dt, TR, bindat, tsclPct=0.85, outfn="fittedL2.dat"):
     global v, c
-    xs, nhaz, tscl = hazzard(dt, TR, N, bindat, tsclPct=tsclPct)
+    xs, nhaz, tscl = hazzard(dt, TR, bindat, tsclPct=tsclPct)
 
     ITERS   = 1000
     allKnts = _N.empty((ITERS, 6))
@@ -98,6 +99,7 @@ def suggestPSTHKnots(dt, TR, N, bindat, bnsz=50, iknts=2):
     fs     = (h / (TR * bnsz * dt))
     apsth = _N.repeat(fs, bnsz)    #    piecewise boxy approximate PSTH
 
+    _plt.plot(apsth)
     ITERS = 1000
     x     = _N.linspace(0., N-1, N, endpoint=False)  # in units of ms.
     r2s   = _N.empty(ITERS)
@@ -142,7 +144,7 @@ def display(N, dt, tscl, nhaz, apsth, lambda2, psth, histknts, psthknts, dir=Non
         knts = theknts[f-1]
         
         if f == 1:
-            fig = _plt.figure()
+            fig, ax = _plt.subplots(figsize=(6, 4))
             B  = patsy.bs(x[0:len(nhaz)], knots=knts, include_intercept=True)
             Bc = B[:, v:];    Bv = B[:, 0:v]
             ac = _N.zeros(c)
@@ -160,9 +162,13 @@ def display(N, dt, tscl, nhaz, apsth, lambda2, psth, histknts, psthknts, dir=Non
             _plt.xlim(0, 3*tscl)
             splFt = _N.exp(_N.dot(B, a))
             _plt.plot(splFt)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.xaxis.set_ticks_position("bottom")
+            ax.yaxis.set_ticks_position("left")
             _plt.savefig(setFN("hist.eps", dir=dir))
             _plt.xlim(0, tscl)
-            _plt.grid()
+            #_plt.grid()
             _plt.savefig(setFN("histZ.eps", dir=dir))
             _plt.close()
         else:

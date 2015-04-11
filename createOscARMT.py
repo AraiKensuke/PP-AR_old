@@ -4,7 +4,7 @@ from utildirs import setFN
 from mcmcARpPlot import plotWFandSpks
 import matplotlib.pyplot as _plt
 
-from kflib import createDataPPl2, savesetMT
+from kflib import createDataPPl2, savesetMT, savesetMTnosc
 from kassdirs import resFN, datFN
 import numpy as _N
 import pickle as _pk
@@ -36,6 +36,7 @@ def create(setname):
     #  x, prbs, spks    3 columns
     nColumns = 3
     alldat  = _N.empty((N, TR*nColumns))
+    probNOsc  = _N.empty((N, TR))
     spksPT  = _N.empty(TR)
     stNzs   = _N.empty((TR, nRhythms))
 
@@ -59,16 +60,18 @@ def create(setname):
         us = _N.zeros(TR) * us
     for tr in xrange(TR):
         #x, dN, prbs, fs = createDataPPl2Simp(TR, N, dt, ARcoeff, psth + us[tr], stNzs[tr], lambda2=lambda2, p=1, nRhythms=nRhythms, cs=csTR[tr])
-        x, dN, prbs, fs = createDataPPl2(TR, N, dt, ARcoeff, psth + us[tr], stNzs[tr], lambda2=lambda2, p=1, nRhythms=nRhythms, cs=csTR[tr], etme=etme[tr])
+        x, dN, prbs, fs, prbsNOsc = createDataPPl2(TR, N, dt, ARcoeff, psth + us[tr], stNzs[tr], lambda2=lambda2, p=1, nRhythms=nRhythms, cs=csTR[tr], etme=etme[tr])
 
         spksPT[tr] = _N.sum(dN)
         rpsth.extend(_N.where(dN == 1)[0])
         alldat[:, nColumns*tr] = _N.sum(x, axis=0).T*etme[tr]*csTR[tr]
         alldat[:, nColumns*tr+1] = prbs
         alldat[:, nColumns*tr+2] = dN
+        probNOsc[:, tr] = prbsNOsc
         isis.extend(_U.toISI([_N.where(dN == 1)[0].tolist()])[0])
 
     savesetMT(TR, alldat, model, setname)
+    savesetMTnosc(TR, probNOsc, setname)
 
     arfs = ""
     xlst = []

@@ -37,6 +37,8 @@ import commdefs as _cd
 from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
 from multiprocessing import Pool
 
+import matplotlib.pyplot as _plt
+
 import os
 
 #os.system("taskset -p 0xff %d" % os.getpid())
@@ -92,6 +94,14 @@ class mcmcARp:
     kp            = None
     l2            = None
     lrn           = None
+    s_lrn           = None   #  saturated lrn
+    sprb           = None   #  spiking prob
+    lrn_scr2           = None   #  scratch space
+    lrn_scr1           = None   #  scratch space
+    lrn_iscr1           = None   #  scratch space
+    lrn_scr3           = None   #  scratch space
+    lrn_scld           = None   #  scratch space
+    mean_isi_1st2spks  = None   #  mean isis for all trials of 1st 2 spikes
 
     #  Gibbs
     ARord         = _cd.__NF__
@@ -101,7 +111,7 @@ class mcmcARp:
     
     #  Current values of params and state
     bpsth         = False
-    q2            = None
+    q2            = None;    q20           = None
     B             = None;    aS            = None; us             = None;    
     smpx          = None
     ws            = None
@@ -128,7 +138,7 @@ class mcmcARp:
     u_a          = 0;             s2_a         = 0.5
 
     def __init__(self):
-        if self.noAR is not None:
+        if (self.noAR is not None) or (self.noAR == False):
             self.lfc         = _lfc.logerfc()
 
     def loadDat(self, trials): #################  loadDat
@@ -230,11 +240,21 @@ class mcmcARp:
 
         oo.TR    = len(oo.useTrials)
         oo.N     = N
-        oo.us    = _N.array(u)
+        if oo.us is None:
+            oo.us    = _N.array(u)
         #oo.us    = _N.zeros(oo.TR)
 
         ####  
         oo.l2 = loadL2(oo.setname, fn=oo.histFN)
+
+        tot_isi = 0
+        nisi    = 0
+        for tr in xrange(oo.TR):
+            spkts = _N.where(oo.y[tr] == 1)
+            if len(spkts[0]) > 2:
+                nisi += 1
+                tot_isi += spkts[0][1] - spkts[0][0]
+        oo.mean_isi_1st2spks = float(tot_isi) / nisi
 
         """
         if (l2 is not None) and (len(l2.shape) == 0):
@@ -280,7 +300,8 @@ class mcmcARp:
             if oo.dfPSTH is None:
                 oo.dfPSTH = oo.B.shape[1] 
             oo.B = oo.B.T    #  My convention for beta
-            oo.aS = _N.linalg.solve(_N.dot(oo.B, oo.B.T), _N.dot(oo.B, _N.ones(oo.t1 - oo.t0)*0.01))   #  small amplitude psth at first
+            if oo.aS is None:
+                oo.aS = _N.linalg.solve(_N.dot(oo.B, oo.B.T), _N.dot(oo.B, _N.ones(oo.t1 - oo.t0)*0.01))   #  small amplitude psth at first
         else:
             oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), df=4, include_intercept=True)    #  spline basis
 
@@ -334,13 +355,13 @@ class mcmcARp:
             print "begin---"
             print ampAngRep(oo.F_alfa_rep)
             print "begin^^^"
-            q20         = 1e-3
-            #oo.q2          = _N.ones(oo.TR)*q20
-            oo.q2          = _N.ones(oo.TR)*0.00077
+            if oo.q20 is None:
+                oo.q20         = 0.00077
+            oo.q2          = _N.ones(oo.TR)*oo.q20
 
             oo.F0          = (-1*_Npp.polyfromroots(oo.F_alfa_rep)[::-1].real)[1:]
             ########  Limit the amplitude to something reasonable
-            xE, nul = createDataAR(oo.N, oo.F0, q20, 0.1)
+            xE, nul = createDataAR(oo.N, oo.F0, oo.q20, 0.1)
             mlt  = _N.std(xE) / 0.5    #  we want amplitude around 0.5
             oo.q2          /= mlt*mlt
             xE, nul = createDataAR(oo.N, oo.F0, oo.q2[0], 0.1)
@@ -398,6 +419,7 @@ class mcmcARp:
 
                 oo.Bsmpx[m, 0, :] = oo.smpx[m, :, 0]
 
+
     def gibbsSamp(self):  ###########################  GIBBSSAMPH
         oo          = self
         oo.rsds     = _N.empty((oo.burn + oo.NMC, oo.TR))
@@ -437,9 +459,18 @@ class mcmcARp:
         it    = 0
 
         oo.lrn   = _N.empty((ooTR, ooN+1))
+        oo.s_lrn   = _N.empty((ooTR, ooN+1))
+        oo.sprb   = _N.empty((ooTR, ooN+1))
+        oo.lrn_scr1   = _N.empty(ooN+1)
+        oo.lrn_iscr1   = _N.empty(ooN+1)
+        oo.lrn_scr2   = _N.empty(ooN+1)
+        oo.lrn_scr3   = _N.empty(ooN+1)
+        oo.lrn_scld   = _N.empty(ooN+1)
         if oo.l2 is None:
             oo.lrn[:] = 1
         else:
+            #  assume ISIs near beginning of data are exponentially 
+            #  distributed estimate
             for tr in xrange(ooTR):
                 oo.lrn[tr] = oo.build_lrnLambda2(tr)
 
@@ -447,7 +478,7 @@ class mcmcARp:
         ###############################  MCMC LOOP
         ###  need pointer to oo.us, but reshaped for broadcasting to work
         oous_rs = oo.us.reshape((ooTR, 1))
-        lrnBadLoc = _N.empty(oo.N+1, dtype=_N.bool)
+        lrnBadLoc = _N.empty((oo.TR, oo.N+1), dtype=_N.bool)
         while (it < ooNMC + oo.burn - 1):
             t1 = _tm.time()
             it += 1
@@ -524,7 +555,6 @@ class mcmcARp:
             else:
                 oo.aS   = _N.zeros(4)
 
-
             if not oo.noAR:
             #  _d.F, _d.N, _d.ks, 
                 tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
@@ -534,6 +564,9 @@ class mcmcARp:
                     oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                     oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                     oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+                stds = _N.std(oo.Bsmpx[:, it, 2:], axis=1)
+                mnStd = _N.mean(stds, axis=0)
+                print "mnStd  %.3f" % mnStd
 
                 if not oo.bFixF:   
                     ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H)  
@@ -552,7 +585,6 @@ class mcmcARp:
                         oo.fs[it, :]    = f
 
                 oo.F0          = (-1*_Npp.polyfromroots(oo.F_alfa_rep)[::-1].real)[1:]
-
 
                 #  sample u     WE USED TO Do this after smpx
                 #  u(it+1)    using ws(it+1), F0(it), smpx(it+1), ws(it+1)
@@ -593,6 +625,40 @@ class mcmcARp:
         lrn = _N.ones(oo.N + 1)
         lh    = len(oo.l2)
 
+        spkts = _N.where(oo.y[tr] == 1)[0]
+
+        #  P(isi | t - t0 = t').  This prob is zero for isi < t-t0.  What is the shape of the distribution for longer isis?
+        for t in spkts:
+            maxL = lh if t + lh <= oo.N else oo.N - t
+            lrn[t+1:t+1 + maxL] = oo.l2[0:maxL]
+
+        ###  It stands to reason that at t=0, the actual state of the
+        #    spiking history lambda is not always == 1, ie a spike
+        #    occurred just slightly prior to t=0.  Let's just assume
+        #    some virtual observation, and set
+        bDone = False
+
+        while not bDone:
+            ivrtISI = int(oo.mean_isi_1st2spks*_N.random.exponential())
+            if (ivrtISI > 2) and (ivrtISI > spkts[0]):
+                bDone = True
+        #  if vrtISI == oo.y[tr, 0] + 2, put virtual 2 bins back in time
+
+        bckwds = ivrtISI - spkts[0]
+
+        if bckwds < lh:
+            lrn[0:lh-bckwds] = oo.l2[bckwds:]
+
+        return lrn
+
+    #def build_lrnLambda2_morethan1hist(self, tr):
+    """
+    def build_lrnLambda2(self, tr):
+        oo = self
+        #  lmbda2 is short snippet of after-spike depression behavior
+        lrn = _N.ones(oo.N + 1)
+        lh    = len(oo.l2)
+
         hst  = []    #  spikes whose history is still felt
 
         for i in xrange(oo.N + 1):
@@ -614,18 +680,57 @@ class mcmcARp:
 
             lrn[i] *= lmbd
         return lrn
-
+    """
     def build_addHistory(self, ARo, smpx, BaS, us, lrnBadLoc):
         oo = self
         for m in xrange(oo.TR):
+            _N.exp(smpx[m] + BaS + us[m], out=oo.lrn_scr1) #ex
+            _N.add(1, oo.lrn_scr1, out=oo.lrn_scr2)     # 1 + ex
+
+            _N.divide(oo.lrn_scr1, oo.lrn_scr2, out=oo.lrn_scr3)  #ex / (1+ex)
+            _N.multiply(oo.lrn_scr3, oo.lrn[m], out=oo.sprb[m])#(lam ex)/(1+ex)
+
+            _N.exp(-smpx[m] - BaS - us[m], out=oo.lrn_iscr1)  #e{-x}
+            _N.add(0.99, 0.99*oo.lrn_iscr1, out=oo.lrn_scld)  # 0.99(1 + e-x)
+            sat = _N.where(oo.sprb[m] > 0.99)
+            if len(sat[0]) > 0:
+                print "bad loc   %(m)d     %(l)d" % {"m" : m, "l" : len(sat[0])}
+                #fig = _plt.figure(figsize=(14, 3))
+                #                _plt.plot(oo.lrn[m], lw=3, color="blue")
+                #_plt.plot(oo.s_lrn[m], lw=2, color="red")
+
+            oo.s_lrn[m, :] = oo.lrn[m]
+            oo.s_lrn[m, sat[0]] = oo.lrn_scld[sat[0]]
+            # if len(sat[0]) > 0:            
+            #     _plt.plot(oo.s_lrn[m], lw=2)
+
+            _N.log(oo.s_lrn[m] / (1 + (1 - oo.s_lrn[m])*oo.lrn_scr1), out=ARo[m])   #  history Offset   ####TRD change
+
+    def build_addHistory_old(self, ARo, smpx, BaS, us, lrnBadLoc):
+        oo = self
+        for m in xrange(oo.TR):
             _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(smpx[m] + BaS + us[m])), out=ARo[m])   #  history Offset   ####TRD change
-            nani = _N.isnan(ARo[m], out=lrnBadLoc)
-            locs = _N.where(lrnBadLoc == True)
+            1
+            _N.isnan(ARo[m], out=lrnBadLoc[m])
+            locs = _N.where(lrnBadLoc[m] == True)
             if locs[0].shape[0] > 0:
                 L = locs[0].shape[0]
+
+                #  lrnBadLoc[m], not out=lrnBadLoc  otherwise 
+                #print "^^^^   "
+                #for i in xrange(oo.N+1):
+                #    print "%(i)d    %(nani)r" % {"i" : i, "nani" : lrnBadLoc[m, i]}
+                #print ARo[m]
+
+                #print locs[0]
+                #print L
+
                 print "ARo locations bad tr %(m)d  %(L) d" % {"m" : m, "L" : L}
+                #print "#######"
+                
                 for l in xrange(L):  #  fill with reasonable value
-                    ARo[m, locs[0][l]] = ARo[m, locs[0][l]]
+                    print "%(t).3f  %(f).3f" % {"t" : ARo[m, locs[0][l]], "f" : ARo[m, locs[0][l]-1]}
+                    ARo[m, locs[0][l]] = ARo[m, locs[0][l]-1]
 
     def getComponents(self):
         oo    = self
@@ -667,21 +772,35 @@ class mcmcARp:
         oo.rts   = None
         oo.zts   = None
 
-        with open("mARp.dump", "wb") as f:
-            pickle.dump(pcklme, f)
+        dmp = open("mARp.dump", "wb")
+        pickle.dump(pcklme, dmp)
+        dmp.close()
 
-            # import pickle
-            # with open("mARp.dump", "rb") as f:
-            #lm = pickle.load(f)
+        # import pickle
+        # with open("mARp.dump", "rb") as f:
+        # lm = pickle.load(f)
 
 
     def CIF(self, us, alps, osc):
         oo = self
+        ooTR = oo.TR
+        ooN  = oo.N
         ARo   = _N.empty((oo.TR, oo.N+1))
-        lrnBadLoc = _N.empty(oo.N+1, dtype=_N.bool)
+        lrnBadLoc = _N.empty((oo.TR, oo.N+1), dtype=_N.bool)
 
         BaS = _N.dot(oo.B.T, alps)
         oo.build_addHistory(ARo, osc, BaS, us, lrnBadLoc)
+
+        """
+        oo.lrn   = _N.empty((ooTR, ooN+1))
+        oo.s_lrn   = _N.empty((ooTR, ooN+1))
+        oo.sprb   = _N.empty((ooTR, ooN+1))
+        oo.lrn_scr1   = _N.empty(ooN+1)
+        oo.lrn_iscr1   = _N.empty(ooN+1)
+        oo.lrn_scr2   = _N.empty(ooN+1)
+        oo.lrn_scr3   = _N.empty(ooN+1)
+        oo.lrn_scld   = _N.empty(ooN+1)
+        """
 
         cif = _N.exp(us + ARo + osc + BaS) / (1 + _N.exp(us + ARo + osc + BaS))
 

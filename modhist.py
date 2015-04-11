@@ -8,7 +8,7 @@ import random as _ran
 import myColors as mC
 
 #  [3.3, 11, 1, 15]
-def modhist(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, maxY=None, yticks=None):
+def modhist(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, maxY=None, yticks=None, normed=False):
     """
     shftPhase from 0 to 1.  
     """
@@ -76,16 +76,21 @@ def modhist(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr
     bgFnt = 22
     smFnt = 20
     fig, ax = _plt.subplots(figsize=(6, 4.2))
-    _plt.hist(phs + (_N.array(phs) + 1).tolist(), bins=_N.linspace(0, 2, 51), color=mC.hist1, edgecolor=mC.hist1)
-    if maxY is not None:
+    #_plt.hist(phs + (_N.array(phs) + 1).tolist(), bins=_N.linspace(0, 2, 51), color=mC.hist1, edgecolor=mC.hist1)
+    _plt.hist(phs + (_N.array(phs) + 1).tolist(), bins=_N.linspace(0, 2, 51), color=mC.hist1, edgecolor=mC.hist1, normed=normed)
+    
+    if (maxY is not None):
         _plt.ylim(0, maxY)
+
     #_plt.title("R = %.3f" % _N.sqrt(R2), fontsize=smFnt)
     _plt.xlabel("phase", fontsize=bgFnt)
-    _plt.ylabel("frequency", fontsize=bgFnt)
+    _plt.ylabel("probability", fontsize=bgFnt)
     _plt.xticks(fontsize=smFnt)
     _plt.yticks(fontsize=smFnt)
     if yticks is not None:
         _plt.yticks(yticks)
+    if normed:
+        _plt.yticks([0.25, 0.5, 0.75, 1], ["0.25", "0.5", "0.75", "1"])
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
@@ -106,7 +111,7 @@ def modhist(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr
     _plt.close()
 
 
-def oscPer(setname, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None):
+def oscPer(setname, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, showHist=True):
     """
     find period of oscillation
     """
@@ -127,12 +132,12 @@ def oscPer(setname, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None,
 
     bRealDat = True
     COLS = 4
-    sub  = 2
+    sub  = 1
 
     if m == None:
         bRealDat = False
         COLS = 3
-        sub  = 1
+        sub  = 0
 
     TR   = cols / COLS
     if trials is None:
@@ -142,7 +147,7 @@ def oscPer(setname, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None,
 
     Ts = []
     for tr in trials:
-        x   = dat[:, tr*COLS]
+        x   = dat[:, tr*COLS+sub]
 
         if fltPrms is None:
             fx = x
@@ -155,12 +160,16 @@ def oscPer(setname, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None,
 
         Ts.extend(_N.diff(intvs[0]))
 
-    _plt.hist(Ts, bins=range(min(Ts) - 1, max(Ts)+1))
-    print _N.mean(Ts)
-    print _N.std(Ts)
+    if showHist:
+        fig = _plt.figure()
+        _plt.hist(Ts, bins=range(min(Ts) - 1, max(Ts)+1))
+    mn = _N.mean(Ts)
+    std= _N.std(Ts)
+    print "%(m).3f  %(d).3f  %(cv).3f    %(f).3f" % {"m" : mn, "d" : std, "cv" : (std/mn), "f" : (1000/mn)}
 
 
-def modhistFltrd(setname, shftPhase=0, t0=None, t1=None, tr0=0, tr1=None, trials=None, surrogates=1):
+
+def modhistFltrd(setname, shftPhase=0, t0=None, t1=None, tr0=0, tr1=None, trials=None, surrogates=1, maxY=None, yticks=None, fn=None):
     """
     shftPhase from 0 to 1.  
     """
@@ -210,10 +219,41 @@ def modhistFltrd(setname, shftPhase=0, t0=None, t1=None, tr0=0, tr1=None, trials
         shf_phs.append(phs)
 
     phs = shf_phs[0]
+
+
+    bgFnt = 22
+    smFnt = 20
     fig, ax = _plt.subplots(figsize=(6, 4.2))
-    _plt.hist(phs + (_N.array(phs) + 1).tolist(), bins=_N.linspace(0, 2, 51), color="black")
+    _plt.hist(phs + (_N.array(phs) + 1).tolist(), bins=_N.linspace(0, 2, 51), color=mC.hist1, edgecolor=mC.hist1)
+    if maxY is not None:
+        _plt.ylim(0, maxY)
+    #_plt.title("R = %.3f" % _N.sqrt(R2), fontsize=smFnt)
+    _plt.xlabel("phase", fontsize=bgFnt)
+    _plt.ylabel("frequency", fontsize=bgFnt)
+    _plt.xticks(fontsize=smFnt)
+    _plt.yticks(fontsize=smFnt)
+    if yticks is not None:
+        _plt.yticks(yticks)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    ax.yaxis.set_ticks_position("left")
+    ax.xaxis.set_ticks_position("bottom")
+    for tic in ax.xaxis.get_major_ticks():
+        tic.tick1On = tic.tick2On = False
+
+    # fig, ax = _plt.subplots(figsize=(6, 4.2))
+    # _plt.hist(phs + (_N.array(phs) + 1).tolist(), bins=_N.linspace(0, 2, 51), color="black")
     #_plt.title("R = %.3f" % _N.sqrt(R2s[0]))
-    _plt.savefig(resFN("modFltrdHistogram,R=%.3f.eps" % _N.sqrt(R2s[0]), dir=setname))
+
+    fig.subplots_adjust(left=0.17, bottom=0.17, right=0.95, top=0.9)
+
+    if fn is None:
+        fn = "modulationHistogram,R=%.3f.eps" % _N.sqrt(R2s[0])
+    else:
+        fn = "%(1)s,R=%(2).3f.eps" % {"1" : fn, "2" : _N.sqrt(R2s[0])}
+    print fn
+    _plt.savefig(resFN(fn, dir=setname), transparent=True)
     _plt.close()
     return R2s
 

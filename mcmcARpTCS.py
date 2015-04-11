@@ -82,7 +82,8 @@ class mcmcARpTCS(mARp.mcmcARp):
             if oo.dfPSTH is None:
                 oo.dfPSTH = oo.B.shape[1] 
             oo.B = oo.B.T    #  My convention for beta
-            oo.aS = _N.linalg.solve(_N.dot(oo.B, oo.B.T), _N.dot(oo.B, _N.ones(oo.t1 - oo.t0)*0.01))   #  small amplitude psth at first
+            if oo.aS is None:
+                oo.aS = _N.linalg.solve(_N.dot(oo.B, oo.B.T), _N.dot(oo.B, _N.ones(oo.t1 - oo.t0)*0.01))   #  small amplitude psth at first
         else:
             oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), df=4, include_intercept=True)    #  spline basis
 
@@ -254,6 +255,7 @@ class mcmcARpTCS(mARp.mcmcARp):
         lrnBadLoc = _N.empty(oo.N+1, dtype=_N.bool)
 
         while (it < ooNMC + oo.burn - 1):
+            print "value of oo.s   %.3f" % oo.s
             for tr in xrange(ooTR):        ###  TREND in modulation strength
                 oo.trd[tr, tr] = (tr - oo.TRm) * oo.s + 1
             itrd = _N.linalg.inv(oo.trd)
@@ -364,6 +366,9 @@ class mcmcARpTCS(mARp.mcmcARp):
                 oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                 oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
 
+            stds = _N.std(oo.Bsmpx[:, it, 2:], axis=1)
+            mnStd = _N.mean(stds, axis=0)
+            print "mnStd  %.3f" % mnStd
 
             ######################################
             trSMPX = _N.dot(oo.trd, oo.smpx[..., 2:, 0])

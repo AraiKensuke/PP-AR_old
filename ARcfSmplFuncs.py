@@ -103,11 +103,10 @@ def initF(nR, nCS, nCN, ifs=None):
             r  = 0.95
         else:  #  Looking at how noise roots distribute themselves
                #  they seem to spread out fairly evenly in spectrum
-            #th = _N.pi*(0.1 + 0.05 / (nCN - (n - nCS)))   #  above 80Hz, weak
-            th = _N.pi*(0.2 + 0.8*_N.random.rand())
-            #r  = (1 + _N.random.rand()) / (2 * _N.sqrt(nCN))   #  r ~ (1 / (2*nCN))
+            th = _N.pi*(0.15 + 0.8 / (nCN - (n - nCS)))   #  above 80Hz, weak
+            r  = (1 + _N.random.rand()) / (2 * _N.sqrt(nCN))   #  r ~ (1 / (2*nCN))
             #r  = 1.5 / (2 * _N.sqrt(nCN))   #  r ~ (1 / (2*nCN))
-            r  = 0.2+0.75*_N.random.rand()
+            #r  = 0.5+0.3*_N.random.rand()
             #r   = 0.8
         iRs[nR + 2*n]     = r*(_N.cos(th) + _N.sin(th)*1j)
         iRs[nR + 2*n + 1] = r*(_N.cos(th) - _N.sin(th)*1j)

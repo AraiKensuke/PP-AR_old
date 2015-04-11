@@ -3,6 +3,7 @@ import numpy as _N
 from ARcfSmplFuncs import ampAngRep, dcmpcff, betterProposal
 import matplotlib.pyplot as _plt
 from filter import gauKer
+import scipy.stats as _ss
 
 def createFlucOsc(f0, f0VAR, N, dt0, TR, Bf=[0.99], Ba=[0.99], amp=1, amp_nz=0, stdf=None, stda=None, sig=0.1, smoothKer=0, dSF=5, dSA=5):
     """
@@ -150,6 +151,29 @@ def createModEnvelopes(TR, N, t0, t1, jitterTiming, jitterLength, gkW=0, weak=0.
 
     return out
 
+def createUpDn(TR, N, minDur, lmd, lowV=-1, upM=1):
+    """
+    upM will take time period and multiply if an upstate
+    """
+    updn = _N.empty((TR, N))
+    sz   = 10*N*TR/lmd
+    rv = _ss.expon.rvs(scale=lmd, size=sz)
+    fltrd     = rv[rv > minDur]
+    ir = 0   #  random exponential
+    vals  = _N.array([0, lowV])
+    for tr in xrange(TR):
+        iS = 0 if (_N.random.rand() > 0.5) else 1
+        t = 0
+
+        while t < N:
+            m = 1
+            if iS == 0:
+                m = upM
+            updn[tr, t:t+int(fltrd[ir]*m)] = vals[iS]
+            iS = 1 - iS
+            t += int(fltrd[ir]*m)
+            ir += 1
+    return updn
 """
 def createDataAR(N, B, err, obsnz, trim=0):
     #  a[1]^2 + 4a[0]
@@ -290,6 +314,77 @@ def createDataPPl2(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offs
         
     spks = _N.zeros(N)
     prbs = _N.zeros(N)
+    prbsNOsc = _N.zeros(N)   #  no osc.
+    fs   = _N.zeros(N)
+
+    #  initial few
+
+    lh    = len(lambda2)
+    #lh    = 300   #  at most 2000
+    ht    = -int(_N.random.rand() * 50)
+
+    for i in xrange(N):
+        e = _N.exp(u[i] + cs * etme[i] * x[i+buf]) * dt
+        prbs[i]  = (p*e) / (1 + e)
+        e = _N.exp(u[i]) * dt
+        prbsNOsc[i]  = (p*e) / (1 + e)
+
+        lmd = 1 if i - ht >= lh else lambda2[i - ht]
+        
+        prbs[i] *= lmd
+        
+        prbsNOsc[i] *= lmd
+        spks[i] = _N.random.binomial(1, prbs[i])
+        if spks[i] == 1:
+            ht = i+1    #  lambda2[0] is history 1 bin after spike
+
+    fs[:] = prbs / dt
+    return xc[:, buf:], spks, prbs, fs, prbsNOsc
+
+"""
+def createDataPPl2(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offset=None, cs=1, etme=None):
+    beta = _N.array([1., 0.])
+    #  a[1]^2 + 4a[0]
+    #  B[0] = -0.45
+    #  B[1] =  0.9
+    if type(u) != _N.ndarray:
+        u = _N.ones(N) * u
+    if etme is None:
+        etme = _N.ones(N)
+
+    buf  = 500
+    if _N.sum(stNz) == 0:
+        xc   = _N.zeros((nRhythms, N+buf))   #  components
+        x = _N.zeros(N+buf)
+    else:
+        if x == None:
+            xc   = _N.empty((nRhythms, N+buf))   #  components
+            for nr in xrange(nRhythms):
+                k = len(B[nr])
+                sstNz = _N.sqrt(stNz[nr])
+
+                rands = _N.random.randn(N+buf)
+
+                for i in xrange(k+1):
+                    xc[nr, i] = sstNz*rands[i]
+                for i in xrange(k+1, N+buf):
+                    #  for k = 2, x[i] = B[0]*x[i-2], B[1]*x[i - 1]
+                    #  B[0]   is the weight of oldest time point
+                    #  B[k-1] is weight of most recent time point
+                    #        x[i] = _N.dot(B, x[i-k:i]) + err*_N.random.randn()
+                    xc[nr, i] = _N.dot(B[nr], xc[nr, i-1:i-k-1:-1]) + sstNz*rands[i]
+        else:
+            buf  = 0
+            xc   = x
+
+        if nRhythms > 1:
+            x = _N.sum(xc, axis=0)     #  collapse
+        else:
+            x = xc.reshape(N+buf, )
+        
+    spks = _N.zeros(N)
+    prbs = _N.zeros(N)
+    prbsNOsc = _N.zeros(N)   #  no osc.
     fs   = _N.zeros(N)
 
     #  initial few
@@ -301,6 +396,8 @@ def createDataPPl2(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offs
     for i in xrange(N):
         e = _N.exp(u[i] + cs * etme[i] * x[i+buf]) * dt
         prbs[i]  = (p*e) / (1 + e)
+        e = _N.exp(u[i]) * dt
+        prbsNOsc[i]  = (p*e) / (1 + e)
 
         L  = len(hst)
         lmbd = 1
@@ -315,12 +412,14 @@ def createDataPPl2(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offs
             else:
                 hst.pop(j)
         prbs[i] *= lmbd
+        prbsNOsc[i] *= lmbd
         spks[i] = _N.random.binomial(1, prbs[i])
         if spks[i] == 1:
             hst.append(i)
 
     fs[:] = prbs / dt
-    return xc[:, buf:], spks, prbs, fs
+    return xc[:, buf:], spks, prbs, fs, prbsNOsc
+"""
 
 def createDataPPl2Simp(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offset=None, cs=1):
     beta = _N.array([1., 0.])
@@ -441,6 +540,15 @@ def savesetMT(TR, alldat, model, name):
 
     _N.savetxt(resFN("%s.dat" % bfn, dir=name, create=True), alldat, fmt=fmt)
 
+def savesetMTnosc(TR, alldat, name):   #  also save PSTH
+    #  u, B, singleFreqAR, dt, stNz, x, dN, prbs
+    bfn = "cnt_data"
+    bfn = "noscp"
+    fmt = "% .2e "
+    fmt *= TR
+
+    _N.savetxt(resFN("%s.dat" % bfn, dir=name, create=True), alldat, fmt=fmt)
+
 def savesetARpn(name):
     #  u, B, singleFreqAR, dt, stNz, x, dN, prbs
     xxlxhy = _N.empty((N + 1, 4))
@@ -547,3 +655,19 @@ def disjointSubset(_superSet, subSetA):
             print "Warning 2nd set is not a subset of the superset"
             pass
     return list(superSet)
+
+def isis(dat, COLS, spkcol=2, trials=None, t0=0, t1=None):
+    isis = []
+    if trials is None:
+        TR = (dat.shape[1] / COLS)
+        trials = range(TR)
+    if t1 is None:
+        t1 = dat.shape[0]
+
+    for tr in trials:
+        spkts = _N.where(dat[t0:t1, COLS*tr + spkcol] == 1)
+        isi   = _N.diff(spkts[0])
+        isis.extend(isi)
+
+    return isis
+        

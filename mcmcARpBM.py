@@ -75,7 +75,7 @@ class mcmcARpBM(mARp.mcmcARp):
                 for tr in xrange(oo.TR):
                     oo.Z[tr, 0] = 0;                oo.Z[tr, 1] = 1
 
-        oo.s         = _N.array([0.01, 1])
+        oo.s         = _N.array([0.1, 1])
         oo.sd        = _N.zeros((oo.TR, oo.TR))
         oo.m         = _N.array([0.5, 0.5])
         oo.alp       = _N.array([1, 1])
@@ -132,6 +132,15 @@ class mcmcARpBM(mARp.mcmcARp):
         it    = 0
 
         oo.lrn   = _N.empty((ooTR, ooN+1))
+        oo.s_lrn   = _N.empty((ooTR, ooN+1))
+        oo.sprb   = _N.empty((ooTR, ooN+1))
+        oo.lrn_scr1   = _N.empty(ooN+1)
+        oo.lrn_iscr1   = _N.empty(ooN+1)
+        oo.lrn_scr2   = _N.empty(ooN+1)
+        oo.lrn_scr3   = _N.empty(ooN+1)
+        oo.lrn_scld   = _N.empty(ooN+1)
+
+        oo.lrn   = _N.empty((ooTR, ooN+1))
         if oo.l2 is None:
             oo.lrn[:] = 1
         else:
@@ -186,6 +195,7 @@ class mcmcARpBM(mARp.mcmcARp):
                     _N.dot(sd01[tryZ], oo.smpx[..., 2:, 0], out=smpx01[tryZ])
                     #oo.build_addHistory(ARo01[tryZ], smpx01[tryZ, m], BaS, oo.us, lrnBadLoc)
                     oo.build_addHistory(ARo01[tryZ], smpx01[tryZ], BaS, oo.us, lrnBadLoc)
+                    """
                     for m in xrange(oo.TR):
                         locs = _N.where(lrnBadLoc[m] == True)
                         if locs[0].shape[0] > 0:
@@ -196,6 +206,7 @@ class mcmcARpBM(mARp.mcmcARp):
                             _plt.plot(smpx01[tryZ, m])
                             _plt.subplot(2, 1, 2)
                             _plt.plot(ARo01[tryZ, m])
+                    """
                     #print "!!!!!!!!!!!!!!!  2"
                 for m in oo.varz:
                     #print "m is %d" % m
@@ -242,6 +253,7 @@ class mcmcARpBM(mARp.mcmcARp):
                 _N.add(oo.alp, _N.sum(oo.Z[oo.varz], axis=0), out=dirArgs)
                 oo.m[:] = _N.random.dirichlet(dirArgs)
                 oo.smp_ms[it] = oo.m
+                print oo.m
             else:  #  it < startZ
                 _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
                 _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])            
@@ -251,6 +263,12 @@ class mcmcARpBM(mARp.mcmcARp):
             ######  PG generate
             for m in xrange(ooTR):
                 lw.rpg_devroye(oo.rn, zsmpx[m] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe  ####TRD change
+                nanLoc = _N.where(_N.isnan(oo.ws[m]))
+                if len(nanLoc[0]) > 0:
+                    loc = nanLoc[0][0]
+                    #print zsmpx[m, loc]
+                    #print oo.us[m]
+                    #print ARo[m]
             _N.divide(oo.kp, oo.ws, out=kpOws)
 
             ########     per trial offset sample
@@ -265,6 +283,7 @@ class mcmcARpBM(mARp.mcmcARp):
             VAR  = _N.linalg.inv(iVAR)  #
             Mn    = _N.dot(VAR, _N.dot(ilv_u, lm_u) + iD_u_u_u)
             oo.us[:]  = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
+
             oo.smp_u[:, it] = oo.us
 
             ########     PSTH sample  Do PSTH after we generate zs
@@ -292,7 +311,7 @@ class mcmcARpBM(mARp.mcmcARp):
             #  (MxM)  (MxN) = (MxN)  (Rv is MxN)
             _N.dot(_N.dot(izd, izd), 1. / oo.ws, out=oo._d.Rv)
 
-            oo._d.f_x[:, 0, :, 0]     = _N.mean(oo.SMP_x00, axis=1)
+            oo._d.f_x[:, 0, :, 0]     = oo.x00
             if it == 1:
                 for m in xrange(ooTR):
                     oo._d.f_V[m, 0]     = oo.s2_x00
@@ -309,19 +328,25 @@ class mcmcARpBM(mARp.mcmcARp):
                 oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                 oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                 oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
-                oo.SMP_x00[m, oo.nSMP_smpxC] = oo.smpx[m, 2]*0.5
-            oo.nSMP_smpxC += 1
-            oo.nSMP_smpxC %= oo.nSMP_smpx
+                oo.x00[m]      = oo.smpx[m, 2]*0.1
+                oo.smp_q2[m, it]= oo.q2[m]
+
+                #oo.SMP_x00[m, oo.nSMP_smpxC] = oo.smpx[m, 2]*0.5
+            stds = _N.std(oo.Bsmpx[:, it, 2:], axis=1)
+            mnStd = _N.mean(stds, axis=0)
+            print "mnStd  %.3f" % mnStd
+            #oo.nSMP_smpxC += 1
+            #oo.nSMP_smpxC %= oo.nSMP_smpx
                     
 
             #######  Sample AR coefficient
             if not oo.bFixF:   
-                ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord)
+                ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H) 
 
                 oo.F_alfa_rep = alpR + alpC   #  new constructed
                 prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
                 print prt
-            ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo._d)
+            ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
             oo.allalfas[it] = oo.F_alfa_rep
 
             for m in xrange(ooTR):

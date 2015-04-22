@@ -284,6 +284,7 @@ class mcmcARpETM(mARp.mcmcARp):
                     b = (b - u) / sd
 
                     oo.gam[ig] = u + sd*_ss.truncnorm.rvs(a, b)
+                    #oo.gam[ig] = u + sd*_N.random.randn()
 
                 oo.smp_gam[it] = oo.gam
                 print oo.gam

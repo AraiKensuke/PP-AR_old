@@ -32,7 +32,6 @@ import matplotlib.pyplot as _plt
 
 class mcmcARpBM(mARp.mcmcARp):
     ###########  TEMP
-    ss0           = None; ss1 = None;
     THR           = None
     startZ        = 0
 
@@ -42,6 +41,7 @@ class mcmcARpBM(mARp.mcmcARp):
     Z             = None   #  state index M x 2  [(1, 0), (0, 1), (0, 1), ...]
     m             = None   #  dim 2
     sd            = None
+    smp_ss        = None
 
     #  Do not vary these Z's
     fxdz          = None
@@ -61,6 +61,7 @@ class mcmcARpBM(mARp.mcmcARp):
 
         oo.smp_zs    = _N.zeros((oo.TR, oo.burn + oo.NMC, oo.nStates))
         oo.smp_ms    = _N.zeros((oo.burn + oo.NMC, oo.nStates))
+
         if oo.Z is None:   #  not set externally
             oo.Z         = _N.zeros((oo.TR, oo.nStates), dtype=_N.int)
             if oo.lowStates is not None:
@@ -73,9 +74,12 @@ class mcmcARpBM(mARp.mcmcARp):
                         pass
             else:
                 for tr in xrange(oo.TR):
-                    oo.Z[tr, 0] = 0;                oo.Z[tr, 1] = 1
+                    oo.Z[tr, 0] = 1;                oo.Z[tr, 1] = 0
+                    if _N.random.rand() > 0.5:
+                        oo.Z[tr, 0] = 0;                oo.Z[tr, 1] = 1
 
-        oo.s         = _N.array([0.1, 1])
+        oo.s         = _N.array([0.05, 0.95])
+        oo.smp_ss       = _N.zeros(oo.burn + oo.NMC)
         oo.sd        = _N.zeros((oo.TR, oo.TR))
         oo.m         = _N.array([0.5, 0.5])
         oo.alp       = _N.array([1, 1])
@@ -86,7 +90,7 @@ class mcmcARpBM(mARp.mcmcARp):
             oo.fxdz  = _N.array([])
         elif (oo.varz is None) and (oo.fxdz is not None):
             if type(oo.fxdz) is list:
-                oo.fxdz = _N.array(oo.fxdz)
+               oo.fxdz = _N.array(oo.fxdz)
             oo.varz  = _N.array(disjointSubset(range(oo.TR), oo.fxdz), dtype=_N.int)
         elif (oo.varz is not None) and (oo.fxdz is None):
             if type(oo.varz) is list:
@@ -156,7 +160,6 @@ class mcmcARpBM(mARp.mcmcARp):
         sd01   = _N.zeros((oo.nStates, oo.TR, oo.TR))
         _N.fill_diagonal(sd01[0], oo.s[0])
         _N.fill_diagonal(sd01[1], oo.s[1])
-        isd01  = _N.zeros((oo.TR, oo.TR))
 
         smpx01 = _N.zeros((oo.nStates, oo.TR, oo.N+1))
         ARo01  = _N.empty((oo.nStates, oo.TR, oo.N+1))
@@ -182,12 +185,15 @@ class mcmcARpBM(mARp.mcmcARp):
 
         oo.nSMP_smpxC = 0
         while (it < ooNMC + oo.burn - 1):
+            lowsts = _N.where(oo.Z[:, 0] == 1)
+            print "lowsts   %s" % str(lowsts)
             t1 = _tm.time()
             it += 1
             print "****------------  %d" % it
 
             #  generate latent AR state
 
+            
             if it > oo.startZ:
                 ######  Z
                 #print "!!!!!!!!!!!!!!!  1"
@@ -209,8 +215,6 @@ class mcmcARpBM(mARp.mcmcARp):
                     """
                     #print "!!!!!!!!!!!!!!!  2"
                 for m in oo.varz:
-                    #print "m is %d" % m
-                    #print "BEGIN"
                     for tryZ in xrange(oo.nStates):  #  only allow certain trials to change
 
                         #  calculate p0, p1  p0 = m_0 x PROD_n Ber(y_n | Z_j)
@@ -232,12 +236,16 @@ class mcmcARpBM(mARp.mcmcARp):
                     nc = oo.m[0]*_N.exp(ll[0]) + oo.m[1]*_N.exp(ll[1])
                     #print "%(nc).3e   %(m)s" % {"nc" : nc, "m" : str(oo.m)}
 
-
+                    iARo = 1
                     oo.Z[m, 0] = 0;  oo.Z[m, 1] = 1
                     THR[m] = (oo.m[0]*_N.exp(ll[0]) / nc)
+                    #print "m  %(m)d   THR %(THR).3f" % {"m" : m, "THR" : THR[m]}
                     if _N.random.rand() < THR[m]:
                         oo.Z[m, 0] = 1;  oo.Z[m, 1] = 0
+                        iARo = 0
                     oo.smp_zs[m, it] = oo.Z[m]
+                    ####  did we forget to do this?
+                    ARo[m] = ARo01[iARo, m]
                     #print "END----"
                 for m in oo.fxdz: #####  outside BM loop
                     oo.smp_zs[m, it] = oo.Z[m]
@@ -338,6 +346,59 @@ class mcmcARpBM(mARp.mcmcARp):
             #oo.nSMP_smpxC += 1
             #oo.nSMP_smpxC %= oo.nSMP_smpx
                     
+            ###  
+
+
+            lwsts = _N.where(oo.Z[:, 0] == 1)[0]
+            hists = _N.where(oo.Z[:, 1] == 1)[0]
+
+            if len(lwsts) > 0:
+                AL = 0.5*_N.sum(oo.smpx[lwsts, 2:, 0]*oo.smpx[lwsts, 2:, 0]*oo.ws[lwsts])
+                BRL = kpOws[lwsts] - BaS - oous_rs[lwsts] - ARo[lwsts] 
+                BL = _N.sum(oo.ws[lwsts]*BRL*oo.smpx[lwsts, 2:, 0])
+                UL = BL / (2*AL)
+                sgL= 1/_N.sqrt(2*AL)
+                print "UL  %(U).3f    sgL  %(s).3f" % {"U" : UL, "s" : sgL}
+            if len(hists) > 0:
+                AH = 0.5*_N.sum(oo.smpx[hists, 2:, 0]*oo.smpx[hists, 2:, 0]*oo.ws[hists])
+
+                BRH = BaS + oo.smpx[hists, 2:, 0] + oous_rs[hists] + ARo[hists] - kpOws[hists] 
+                BH = _N.sum(oo.ws[hists]*BRH*oo.smpx[hists, 2:, 0])
+                UH = BH / (2*AH)
+                sgH= 1/_N.sqrt(2*AH)
+                print "UH  %(U).3f    sgH  %(s).3f" % {"U" : UH, "s" : sgH}
+            if len(lwsts) == 0:
+                U = UH
+                sg= sgH
+            elif len(hists) == 0:
+                U = UL
+                sg= sgL
+            else:
+                U = (UL*sgH*sgH + UH*sgL*sgL) / (sgL*sgL + sgH*sgH)
+                sg2= (sgH*sgH*sgL*sgL) / (sgL*sgL + sgH*sgH)
+                sg = _N.sqrt(sg2)
+
+            a = 0
+            b = 1
+            
+            a = (a - U) / sg
+            b = (b - U) / sg
+            print "U  %(U).3f    s  %(s).3f" % {"U" : U, "s" : sg}
+
+            oo.s[0] = U + sg*_ss.truncnorm.rvs(a, b)
+            oo.s[1] = 1 - oo.s[0]
+            _N.fill_diagonal(sd01[0], oo.s[0])
+            _N.fill_diagonal(sd01[1], oo.s[1])
+            print oo.s[0]
+            oo.smp_ss[it] = oo.s[0] 
+            """
+            oo.s[0] = 0.22 + 0.07*_N.random.randn()
+            oo.s[1] = 1 - oo.s[0]
+            _N.fill_diagonal(sd01[0], oo.s[0])
+            _N.fill_diagonal(sd01[1], oo.s[1])
+            oo.smp_ss[it] = oo.s[0] 
+            """
+
 
             #######  Sample AR coefficient
             if not oo.bFixF:   

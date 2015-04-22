@@ -9,7 +9,7 @@ warnings.filterwarnings("error")
 __BNML__ = 0   # binomial
 __NBML__ = 1   # negative binomial
 
-epS      = 10
+epS      = 5
 
 #  proposal parameters
 stdu = 0.3;    
@@ -67,7 +67,7 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, xn=None, cv0=0.99):
         mns[ep]  = mp
         cvs[ep]  = cp
 
-    #cv0   = _N.mean(cvs)
+    cv0   = _N.mean(cvs)
 
     if cv0 < 1:
         dist = __BNML__
@@ -77,7 +77,8 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, xn=None, cv0=0.99):
         p0 = 1 - 1/cv0
     #p0 = 0.5
     u0 = -_N.log(1/p0 - 1)
-    xOff   = _N.empty(Npcs)   #  used only to find good initial value
+    #xOff   = _N.empty(Npcs)   #  used only to find good initial value
+    xOff   = _N.empty(N)   #  used only to find good initial value
 
     print "Initial distribution is %d" % dist
     print "cv0 is %f" % cv0
@@ -95,8 +96,11 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, xn=None, cv0=0.99):
         #     xn[ep*epS:(ep+1)*epS] = xOff[ep]
         # xn[Npcs*epS:] = xOff[Npcs-1]
     else:
-        for ep in xrange(Npcs):
-            xOff[ep] = _N.mean(xn[ep*epS:(ep+1)*epS])
+        #for ep in xrange(Npcs):
+        #    xOff[ep] = _N.mean(xn[ep*epS:(ep+1)*epS])
+        for n in xrange(N):
+            xOff[n] = xn[n]
+
     if dist == __BNML__:
         for ep in xrange(Npcs):
             rn0s[ep] = _N.mean(cts[ep*epS:(ep+1)*epS]) * (1 + _N.exp(-(u0 + xOff[ep])))
@@ -114,6 +118,13 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, xn=None, cv0=0.99):
     else:
         while rn0 < rmin:
             rn0 += 1
+    p0x = _N.exp(u0 + xOff) / (1 + _N.exp(u0+xOff))
+    lls = _N.empty(25)
+    for i in xrange(-12, 13):
+        lls[i+12] = Llklhds(dist, cts, rn0+i, p0x)
+    maxI = _N.where(_N.max(lls) == lls)[0][0]
+    rn0 += -12 + maxI
+
 
     lFlB = _N.empty(2)
     rn1rn0 = _N.empty(2)

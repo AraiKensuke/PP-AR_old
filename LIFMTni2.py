@@ -101,7 +101,10 @@ def create(setname):
 
     xprbsdN= _N.empty((N, 3*TR))
     isis  = []
-    lowQs = []
+    bGivenLowQs = True
+    if lowQs is None:
+        lowQs = []
+        bGivenLowQs = False
 
     spksPT= _N.empty(TR)
     nknts = a.shape[0]
@@ -116,10 +119,17 @@ def create(setname):
 
         if bGenOscUsingAR:
             err = nzs[0, 1]
-
-            if _N.random.rand() < lowQpc:
-                err = nzs[0, 0]
-                lowQs.append(tr)
+            
+            if not bGivenLowQs:   #  randomly gen. trials which are lowQs
+                if _N.random.rand() < lowQpc:
+                    err = nzs[0, 0]
+                    lowQs.append(tr)
+            else:
+                try:
+                    lowQs.index(tr)
+                    err = nzs[0, 0]
+                except ValueError:
+                    pass
 
             maxPwr = 0
             for i in xrange(cand):
@@ -131,9 +141,16 @@ def create(setname):
                     maxPwr = pwr
         elif bGenOscUsingSines:
             xmult = 1
-            if _N.random.rand() < lowQpc:
-                xmult = xmultLo
-                lowQs.append(tr)
+            if not bGivenLowQs:   #  randomly gen. trials which are lowQs
+                if _N.random.rand() < lowQpc:
+                    xmult = xmultLo
+                    lowQs.append(tr)
+            else:
+                try:
+                    lowQs.index(tr)
+                    xmult = xmultLo
+                except ValueError:
+                    pass
 
             x = xmult*createFlucOsc(f0, _N.array([f0VAR[tr]]), N, dt, 1, Bf=Bf, Ba=Ba, amp=amp, amp_nz=amp_nz, stdf=stdf, stda=stda, sig=sig, smoothKer=5, dSA=dSA, dSF=dSF) * etme[tr]  # sig is arbitrary, but we need to keep it same as when stdf, stda measured
             _xBest = x[0]

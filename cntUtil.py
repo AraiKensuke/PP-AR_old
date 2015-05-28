@@ -12,7 +12,6 @@ istdu2= 1./ stdu2
 pTH  = 0.01
 uTH    = _N.log(pTH / (1 - pTH))
 
-
 def Llklhds(type, ks, rn1, p1):
     try:
         if type == _cd.__BNML__:

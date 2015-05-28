@@ -45,6 +45,7 @@ class mcmcAR:
     x             = None   #  true latent state
 
     q2            = None;    q20           = None
+    us             = None;
 
     smpx          = None
     ws            = None
@@ -59,5 +60,10 @@ class mcmcAR:
     a_q2         = 1e-1;          B_q2         = 1e-6
     #  initial states
     u_x00        = None;          s2_x00       = None
+    #  u   --  Gaussian prior
+    u_u          = 0;             s2_u         = 1.5
+    #  initial states
+    u_x00        = None;          s2_x00       = None
+
 
 

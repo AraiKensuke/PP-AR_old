@@ -65,7 +65,7 @@ class mcmcARspk(mAR.mcmcAR):
     
     #  Current values of params and state
     bpsth         = False
-    B             = None;    aS            = None; us             = None;    
+    B             = None;    aS            = None; 
 
     #  coefficient sampling
     fSigMax       = 500.    #  fixed parameters
@@ -73,12 +73,6 @@ class mcmcARspk(mAR.mcmcAR):
     sig_ph0L      = -1
     sig_ph0H      = 0
 
-    #  u   --  Gaussian prior
-    u_u          = 0;             s2_u         = 1.5
-    #  q2  --  Inverse Gamma prior
-    a_q2         = 1e-1;          B_q2         = 1e-6
-    #  initial states
-    u_x00        = None;          s2_x00       = None
     # psth spline coefficient priors
     u_a          = None;             s2_a         = 0.5
 

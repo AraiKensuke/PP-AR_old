@@ -326,7 +326,11 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         t1    = _tm.time()
         tmpNOAR = oo.noAR
         oo.noAR = True
-        oo.gibbsSamp(burns=oo.psthBurns)
+        if self.__class__.__name__ == "mcmcARp":  #  
+            oo.gibbsSamp(burns=oo.psthBurns)
+        else:
+            oo.__class__.__bases__[0].gibbsSamp(self, burns=oo.psthBurns)
+
         oo.noAR = tmpNOAR
         oo.gibbsSamp()
         t2    = _tm.time()

@@ -36,8 +36,12 @@ def createFlucOsc(f0, f0VAR, N, dt0, TR, Bf=[0.99], Ba=[0.99], amp=1, amp_nz=0, 
 
             fn   = 1 + (f / (dSF*stdf))  #  going above 4 stdf very rare.  |xn| is almost < 1
 
-            if _N.min(fn) > 0:
-                bGood = True
+            bGood = True
+            lt0s = _N.where(fn < 0)
+            print "fn < 0 at %d places" % len(lt0s[0])
+
+            #if _N.min(fn) > 0:
+            #    bGood = True
 
         for i in xrange(1, N):
             dt = dt0 * fn[i]
@@ -53,8 +57,11 @@ def createFlucOsc(f0, f0VAR, N, dt0, TR, Bf=[0.99], Ba=[0.99], amp=1, amp_nz=0, 
             an   = a / (dSA*stda)   #  in limit of large N, std(xn) = 1
 
             AM   = 1 + an  #  if we get fluctuations 2 stds bigger, 
-            if _N.min(AM) > 0:
-                bGood = True
+            bGood = True
+            lt0s = _N.where(AM < 0)
+            print "AM < 0 at %d places" % len(lt0s[0])
+            #if _N.min(AM) > 0:
+            #    bGood = True
 
         if smoothKer > 0:
             out[tr] = _N.convolve(y*AM*(amp+_N.random.randn()*amp_nz),  gk, mode="same")

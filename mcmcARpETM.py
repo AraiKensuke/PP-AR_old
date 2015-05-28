@@ -41,10 +41,10 @@ class mcmcARpETM(mARp.mcmcARp):
     etme_u          = 0.5;   etme_s2_a         = 1.; etme_s2_b         = 0.1
     etme_is2_a         = None; etme_is2_b         = None
 
-    def initGibbs(self):   ################################ INITGIBBS
+    def setParams(self):   ################################ INITGIBBS
         oo   = self
 
-        mARp.mcmcARp.initGibbs(oo)
+        mARp.mcmcARp.setParams(oo)
 
         if oo.dfGAM is None:
             oo.dfGAM = 9
@@ -105,6 +105,7 @@ class mcmcARpETM(mARp.mcmcARp):
 
         it    = 0
 
+        oo.allocateSmp(oo.burn + oo.NMC)
         oo.lrn   = _N.empty((ooTR, ooN+1))
         if oo.l2 is None:
             oo.lrn[:] = 1

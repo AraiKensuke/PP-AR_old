@@ -80,9 +80,9 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, xn=None, cv0=0.99):
     #xOff   = _N.empty(Npcs)   #  used only to find good initial value
     xOff   = _N.empty(N)   #  used only to find good initial value
 
-    print "Initial distribution is %d" % dist
-    print "cv0 is %f" % cv0
-    print "p0 is %f" % p0
+    #print "Initial distribution is %d" % dist
+    #print "cv0 is %f" % cv0
+    #print "p0 is %f" % p0
 
     if xn is None:  #  once we get going, xn will 
         xnEp   = _N.empty(Npcs)
@@ -135,11 +135,11 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, xn=None, cv0=0.99):
     lFlB[1] = Llklhds(dist, cts, rn0, p0x)
 
     cross  = False
-    print "nmin is %d" %  nmin
+    #print "nmin is %d" %  nmin
     lls   = []
-    print "rn0 is %d" % rn0
+    #print "rn0 is %d" % rn0
 
-    print "uTH is %.3e" % uTH
+    #print "uTH is %.3e" % uTH
     for it in xrange(burn + NMC):
         #print "------------  it %d" % it
         if dist == __BNML__:
@@ -265,5 +265,5 @@ def MCMC(burn, NMC, cts, rns, us, dty, pcdlog, xn=None, cv0=0.99):
         dty[it] = dist
         us[it] = u0
         rns[it] = rn0    #  rn0 is the newly sampled value if accepted
-    return lls
+    return u0, rn0
 

@@ -112,6 +112,12 @@ def CtDistLogNorm(type, ks, rnM, LN):
 def CtDistLogNorm2(mdl, J, ks, rnM, LN):
     """
     Log of the normalization constant for count distributions
+    High and low states can be separate distributions
+
+    if counts are too high for a proposed binomial binomial model, 
+    we will artifically set counts to be as low as necessary, and
+    in step where we choose z occupancy, all those with too high
+    counts will automatically be disqualified to be binomial
     """
     l1gt = 0
     l1lt = 0
@@ -122,17 +128,21 @@ def CtDistLogNorm2(mdl, J, ks, rnM, LN):
         for j in xrange(J):
             rn = rnM[j]
             if mdl[j] == _cd.__BNML__:
-                # if p large, rn1-ksf small   we are not dealing with this region
+                # if p large, rn1-ksf small we are not dealing with this region
                 # if p small, ks small
                 if len(gt) > 0:
                     #print len(gt)
-                    ksf = ks[gt]
+                    ksf = ks[gt]   #  returns new array
+                    notBNML = _N.where(ksf >= rn)[0]   # ct must 1 less than n
+                    ksf[notBNML] = rn-1 #  this term not used in the end anyway
                     top = 0.5*_N.log(2*_N.pi*rn) + rn*_N.log(rn) - rn
                     b1  = 0.5*_N.log(2*_N.pi*ksf) + ksf*_N.log(ksf) - ksf
                     b2  = 0.5*_N.log(2*_N.pi*(rn-ksf)) + (rn-ksf)*_N.log(rn-ksf) - (rn-ksf)
                     LN[gt, j]  = top - b1 - b2
                 if len(lt) > 0:
                     ksf = ks[lt]
+                    notBNML = _N.where(ksf >= rn)[0]   #  
+                    ksf[notBNML] = rn-1 #  this term not used in the end anyway
                     LN[lt, j]  = _N.log(_sm.comb(rn, ksf))
             if mdl[j] == _cd.__NBML__:
                 ksrnMm1 = ks+rn-1   #  ks + rn1 -1 > ks
@@ -151,8 +161,8 @@ def CtDistLogNorm2(mdl, J, ks, rnM, LN):
                     LN[lt, j] = _N.log(_sm.comb(ksf + rn-1, ksf))
     except Warning:
         print "!!!!!!!!"
-        print "type %d" % type
-        print "rn1  %d" % rn1
+        print "type %s" % str(mdl)
+        print "rnM  %s" % str(rnM)
 
         raise
 

@@ -109,6 +109,53 @@ def CtDistLogNorm(type, ks, rnM, LN):
         raise
 
 
+def CtDistLogNorm2(mdl, J, ks, rnM, LN):
+    """
+    Log of the normalization constant for count distributions
+    """
+    l1gt = 0
+    l1lt = 0
+    gt = _N.where(ks > 10)[0]
+    lt = _N.where(ks <= 10)[0]
+
+    try:
+        for j in xrange(J):
+            rn = rnM[j]
+            if mdl[j] == _cd.__BNML__:
+                # if p large, rn1-ksf small   we are not dealing with this region
+                # if p small, ks small
+                if len(gt) > 0:
+                    #print len(gt)
+                    ksf = ks[gt]
+                    top = 0.5*_N.log(2*_N.pi*rn) + rn*_N.log(rn) - rn
+                    b1  = 0.5*_N.log(2*_N.pi*ksf) + ksf*_N.log(ksf) - ksf
+                    b2  = 0.5*_N.log(2*_N.pi*(rn-ksf)) + (rn-ksf)*_N.log(rn-ksf) - (rn-ksf)
+                    LN[gt, j]  = top - b1 - b2
+                if len(lt) > 0:
+                    ksf = ks[lt]
+                    LN[lt, j]  = _N.log(_sm.comb(rn, ksf))
+            if mdl[j] == _cd.__NBML__:
+                ksrnMm1 = ks+rn-1   #  ks + rn1 -1 > ks
+                rnMm1  = rn-1
+
+                if len(gt) > 0:  # if gt, ksrn1m1 will also be OK to use Stirling
+                    ksf = ks[gt]
+                    ksrnMm1f = ksrnMm1[gt]
+                    top = 0.5*_N.log(2*_N.pi*(ksrnMm1f)) + (ksrnMm1f)*_N.log(ksrnMm1f) - (ksrnMm1f)
+                    b1  = 0.5*_N.log(2*_N.pi*ksf) + ksf*_N.log(ksf) - ksf
+                    b2  =  0.5*_N.log(2*_N.pi*rnMm1) + rnMm1*_N.log(rnMm1) - rnMm1
+
+                    LN[gt, j]  = top - b1 - b2
+                if len(lt) > 0:
+                    ksf = ks[lt]
+                    LN[lt, j] = _N.log(_sm.comb(ksf + rn-1, ksf))
+    except Warning:
+        print "!!!!!!!!"
+        print "type %d" % type
+        print "rn1  %d" % rn1
+
+        raise
+
 def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
     if trials is not None:  # fillsmpx[trials] couldn't be passed as a pointer
         cts = cts[trials]   # fillsmpx = fillsmpx[trials] creates new array
@@ -191,7 +238,7 @@ def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
     return u0, bestRN, mdl
     #  For cv~1, r~n 
 
-def startingValuesM(cts, J, zs, fillsmpx=None):
+def startingValuesM(cts, J, zs, fillsmpx=None, indLH=False):
     epS  = 20   #  in 20 trial segments
     Nss = len(cts)  #  N same state
 
@@ -207,6 +254,9 @@ def startingValuesM(cts, J, zs, fillsmpx=None):
         zs[hiInds, 1] = 1
 
     cv0s = _N.empty(J)
+    u0s  = _N.empty(J)
+    bestRNs = _N.empty(J, dtype=_N.int)
+    models = _N.empty(J, dtype=_N.int)
 
     for j in xrange(J):
         trls = _N.where(zs[:, j] == 1)[0]
@@ -217,10 +267,14 @@ def startingValuesM(cts, J, zs, fillsmpx=None):
         cv0s[j] = (1 - p0) if (mdl == _cd.__BNML__) else 1 / (1 - p0)
         print cv0s[j]
         cv0s[j] *= float(len(trls)) / Nss    # weighted cv0
-        
+        bestRNs[j] = bestRN
+        models[j]  = mdl
+        u0s[j] = u0
+
+    if indLH:
+        return u0s, bestRNs, models
     cv0 = _N.sum(cv0s)
 
-    bestRNs = _N.empty(J, dtype=_N.int)
     for j in xrange(J):
         trls = _N.where(zs[:, j] == 1)[0]
 
@@ -255,7 +309,7 @@ def bestrn(dist, cnt, lmd0, llsV, p1x):
     return candRNs[maxI]
 
 
-def cntmdlMCMCOnlyU(iters, u0, rn0, dist, cts, rns, us, dty, xn):
+def cntmdlMCMCOnly(iters, u0, rn0, dist, cts, rns, us, dty, xn):
     """
     We need starting values for rn, u0, model
     """
@@ -408,6 +462,17 @@ def cntmdlMCMCOnlyM(iters, J, zs, u0, rn0, dist, cts, rns, us, dty, xn):
     """
     We need starting values for rn, u0, model
     """
+    #  if one of the mix categories has 0 occupancy, default to cntmdlMCMCOnly
+    emptyCats = _N.where(_N.sum(zs, axis=0) == 0)[0]
+    if len(emptyCats) > 0:
+        print "empty cats"
+        nonEmpty = 1 - emptyCats[0]
+        ru0, rrn0, rdist = cntmdlMCMCOnly(iters, u0, rn0[nonEmpty], dist, cts, rns[:, nonEmpty], us, dty, xn)
+        rn0M= _N.empty(J, dtype=_N.int)
+        rn0M[emptyCats] = rn0[emptyCats]
+        rn0M[nonEmpty] = rn0[nonEmpty]
+        return ru0, rn0M, rdist
+
     llsV = _N.empty(20)
 
     #  Pick mu.  Optimize rn for both states
@@ -444,7 +509,6 @@ def cntmdlMCMCOnlyM(iters, J, zs, u0, rn0, dist, cts, rns, us, dty, xn):
     cross  = False
     lls   = []
 
-    print "here before mcmc iters"
     for it in xrange(iters):
         #
         if dist == _cd.__BNML__:

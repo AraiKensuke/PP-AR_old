@@ -8,7 +8,6 @@ import scipy.signal as _ssig
 import myColors as mC
 import modhist2 as mh2
 
-
 def last_fsamps(mARp, tr0, tr1):
     amps    = mARp.amps[tr0:tr1, 0]
     fs      = mARp.fs[tr0:tr1, 0]

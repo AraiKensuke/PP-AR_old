@@ -56,9 +56,10 @@ def Llklhds(type, ks, rn1, p1):
             return l1lt + l1gt
 
     except Warning:
-        print "!!!!!!!!"
+        print "Warning raised:   !!!!!!!!"
         print "type %d" % type
         print "rn1  %d" % rn1
+        print ksf
 
         raise
 
@@ -292,6 +293,57 @@ def startingValuesM(cts, J, zs, fillsmpx=None, indLH=False):
         u0, bestRNs[j], mdl = startingValues(cts, fillsmpx=fillsmpx, cv0=cv0, trials=trls)
     return u0, bestRNs, mdl
 
+def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
+    epS  = 20   #  in 20 trial segments
+    Nss = cts.shape[0]
+    WNS   = cts.shape[1]
+    print "WNS   %d" % WNS
+
+    ##########################  estimate cv0, p0, u0
+    Npcs = Nss / epS   #  20 trials each
+
+    mns= _N.empty((Npcs, WNS))
+    zsW= _N.zeros((WNS, Nss, J), dtype=_N.int)
+
+    for ep in xrange(Npcs):
+        mns[ep]  = _N.mean(cts[ep*epS:(ep+1)*epS], axis=0) # overshoot OK
+        print mns[ep]
+        for w in xrange(WNS):
+            loInds = (_N.where(cts[ep*epS:(ep+1)*epS,w] < mns[ep,w])[0])  + ep*epS
+            hiInds = (_N.where(cts[ep*epS:(ep+1)*epS,w] >= mns[ep,w])[0]) + ep*epS
+        
+            zsW[w, loInds, 0] = 1
+            zsW[w, hiInds, 1] = 1
+    loInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) >= 0.5)[0]
+    hiInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) <  0.5)[0]
+    zs[loInds, 0] = 1
+    zs[hiInds, 1] = 1
+
+    cv0s = _N.empty((WNS, J))
+    u0s  = _N.empty((WNS, J))
+    bestRNs = _N.empty((WNS, J), dtype=_N.int)
+    models = _N.empty((WNS, J), dtype=_N.int)
+
+    fs   = _N.zeros((WNS, Nss))
+    for w in xrange(WNS-1, -1, -1):
+        for j in xrange(J):
+            trls = _N.where(zs[:, j] == 1)[0]
+
+            #  1 / (1-p) = c      1/c = 1-p   p = 1 - 1/c
+            u0, bestRN, mdl = startingValues(cts[:, w], fillsmpx=fs[w], trials=trls)
+            #print "mean cts %.3f" % _N.mean(cts[trls, w])
+            p0    = 1 / (1 + _N.exp(-u0))
+            cv0s[w, j] = (1 - p0) if (mdl == _cd.__BNML__) else 1 / (1 - p0)
+            #print cv0s[w, j]
+            cv0s[w, j] *= float(len(trls)) / Nss    # weighted cv0
+            bestRNs[w, j] = bestRN
+            models[w, j]  = mdl
+            u0s[w, j] = u0
+            _plt.plot(fs[w])
+    _N.mean(fs, axis=0, out=fillsmpx)
+    
+    return u0s, bestRNs, models
+
 def bestrn(dist, cnt, lmd0, llsV, p1x):
     dn   = int(lmd0*0.02)
     dn   = 1 if dn == 0 else dn
@@ -330,6 +382,10 @@ def cntmdlMCMCOnly(iters, u0, rn0, dist, cts, rns, us, dty, xn):
     # print "us=%.3f" % u0
     # print "md=%d" % dist
     # print "$$$$$$$$$$$$$$$$$$$$$$$$"
+    # print "in cntmdlMCMCOnly"
+    # print rn0
+    # print dist
+    # print cts
 
 
     Mk = _N.mean(cts)  #  1comp if nWins=1, 2comp
@@ -632,4 +688,6 @@ def cntmdlMCMCOnlyM(iters, J, zs, u0, rn0, dist, cts, rns, us, dty, xn):
 
     print "ll Bg %(b).3e   ll En %(e).3e" % {"b" : lBg, "e" : lEn}
     return u0, rn0M, dist
+
+
 

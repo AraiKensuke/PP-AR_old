@@ -12,10 +12,10 @@ import matplotlib.pyplot as _plt
 setname="oscCnts-"   #  params_XXX.py   Results/XXX/params.py
 model = _cd.__BNML__
 rn    = None
-rnM   = None
 J     = 1    # number of states
+W     = 1    # number of windows
 m     = None
-pM    = None
+p    = None
 TR    = 1
 
 ###  
@@ -32,8 +32,8 @@ ARcf     = None
 N        = None
 amp      = None
 
-def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=False):
-    global m, rn
+def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=True):
+    global m, rn, p, W, J, u, N, amp, model
     if not dontcopy:
         copyfile("%s.py" % setname, "%(s)s/%(s)s.py" % {"s" : setname, "to" : setFN("%s.py" % setname, dir=setname, create=True)})
 
@@ -43,26 +43,36 @@ def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=Fa
     #  Compared to step size <dt> of linear increase, we control the fluctuation
     #  in step size to make noisy sin
 
-    COLS= 3
-    cts = _N.empty(N)
-    data= _N.empty((N, COLS*TR))   #  x, state, spkct x
-
     #  mixture distribution
     bMix = False
-    if ((rnM is not None) and (m is None)) or \
-       ((rnM is None) and (m is not None)):
-        print "must set both rnM and m for mixture"
-        exit()
-    if (rnM is not None) and (m is not None):
-        if len(rnM) != len(m):
-            print "rnM and m length must be same for mixture"
+    #  rnM, pM, model need to have same shape
+
+    if (type(model) == _N.ndarray) and (type(rn) == _N.ndarray) and (type(p) == _N.ndarray) and (m is not None):
+        if (model.shape == rn.shape) and (rn.shape == p.shape):
+            bMix = True
+        else:
+            print "rn and m length must be same for mixture"
             exit()
         m /= _N.sum(m)
-        J = len(m)
-        bMix = True
-        uM = _N.log(pM / (1 - pM))
-    if not bMix:
+        print model.shape
+        if len(model.shape) == 1:
+            W = 1
+            J = model.shape[0]
+        else:   
+            W, J = model.shape
+        model = model.reshape(W, J)
+        rn    = rn.reshape(W, J)
+        p     = p.reshape(W, J)
+
+        print p
+        u = _N.log(p / (1 - p))
+    if not bMix:   # windows not supported in non-mix data
         u  = _N.log(p / (1 - p))
+        W  = 1
+
+    COLS= 2+W
+    cts = _N.empty((N, W))
+    data= _N.empty((N, COLS*TR))   #  x, state, spkct x
 
     for tr in xrange(TR):
         if trend is None:    #  generate x
@@ -83,35 +93,61 @@ def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=Fa
         for t in xrange(N):
             st = 0
             if bMix:
-                exM = _N.exp(uM + x[t])
-                tot = 0
-                rnd =_N.random.rand() 
-                for i in xrange(J):
-                    tot += m[i]
-                    if (rnd >= tot - m[i]) and (rnd <= tot):
-                        rn = rnM[i]
-                        ex = exM[i]
-                        st = i
-            else:
                 ex = _N.exp(u + x[t])
 
-            if model == _cd.__BNML__:
-                cts[t] = _N.random.binomial(rn, ex / (1 + ex))
+
+                tot = 0
+                rnd =_N.random.rand()
+                for j in xrange(J):
+                    tot += m[j]
+
+                    for w in xrange(W):
+                        if (rnd >= tot - m[j]) and (rnd <= tot):
+                            rnwj = rn[w, j]
+                            exwj = ex[w, j]
+                            st = j
+                            mdlwj = model[w, j]
+
+                            if mdlwj == _cd.__BNML__:
+                                cts[t, w] = _N.random.binomial(rnwj, exwj / (1 + exwj))
+                            else:
+                                cts[t, w] = _N.random.negative_binomial(rnwj, 1-(exwj / (1 + exwj)))
             else:
-                cts[t] = _N.random.negative_binomial(rn, 1-(ex / (1 + ex)))
+                ex = _N.exp(u + x[t])
+                mdl = model
+
+                if mdl == _cd.__BNML__:
+                    cts[t] = _N.random.binomial(rn, ex / (1 + ex))
+                else:
+                    cts[t] = _N.random.negative_binomial(rn, 1-(ex / (1 + ex)))
             data[t, tr*COLS] = x[t]
             data[t, tr*COLS+1] = st
-            data[t, tr*COLS+2]  = cts[t]
+            for w in xrange(W):
+                data[t, tr*COLS+2+w]  = cts[t, w]
 
-    fmtstr = "% .5f %d %d " * TR
+    print cts
+    ctstr = ""
+    for w in xrange(W):
+        ctstr += "%d "
+
+    fmtstr = ("% .5f %d " + ctstr) * TR
+
+    #return fmtstr, data, cts
+
     _N.savetxt(resFN("%s.dat" % basefn, dir=setname, create=True, env_dirname=env_dirname), data, fmt=fmtstr)
 
-    fig =_plt.figure(figsize=(13, 3.5*2))
-    _plt.subplot2grid((2, 8), (0, 0), colspan=4)
-    _plt.plot(cts, color="black")
-    _plt.subplot2grid((2, 8), (1, 0), colspan=4)
-    _plt.plot(x, color="black")
-    _plt.subplot2grid((2, 8), (0, 5), rowspan=3, colspan=4)
-    _plt.hist(cts, bins=_N.linspace(0, 1.05*max(cts), 40), color="black")
-    _plt.savefig(resFN("cts_%s.png" % basefn, dir=setname, env_dirname=env_dirname, create=True))
-    _plt.close()
+    for w in xrange(W):
+        print cts[:, w]
+        print 
+        fig =_plt.figure(figsize=(13, 3.5*2))
+        _plt.subplot2grid((2, 8), (0, 0), colspan=4)
+        _plt.plot(cts[:, w], color="black")
+        _plt.subplot2grid((2, 8), (1, 0), colspan=4)
+        _plt.plot(x, color="black")
+        _plt.subplot2grid((2, 8), (0, 5), rowspan=3, colspan=4)
+        _plt.hist(cts[:, w], bins=_N.linspace(0, 1.05*max(cts[:, w]), int(1.1*max(cts[:, w]))), color="black")
+        fnSF = ("_%d" % w) if (W > 1) else ""
+        _plt.savefig(resFN("cts_%(fn)s%(sf)s.png" % {"fn" : basefn, "sf" : fnSF}, dir=setname, env_dirname=env_dirname, create=True))
+        _plt.close()
+
+

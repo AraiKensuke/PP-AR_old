@@ -2,8 +2,6 @@ import pickle
 import numpy as _N
 import re as _re
 
-from kassdirs import resFN, datFN
-
 from mcmcARpFuncs import loadL2, runNotes
 import kfardat as _kfardat
 
@@ -22,6 +20,8 @@ class mcmcAR:
     #  Simulation params
     processes     = 1
     setname       = None
+    env_dirname   = None
+    datafn        = None
     rs            = -1
     bFixF         = False
     burn          = None;    NMC           = None

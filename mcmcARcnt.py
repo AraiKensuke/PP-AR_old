@@ -12,7 +12,7 @@ from kassdirs import resFN, datFN
 import re as _re
 import matplotlib.pyplot as _plt
 import scipy.stats as _ss
-from cntUtil import Llklhds, cntmdlMCMCOnlyU, startingValues
+from cntUtil import Llklhds, cntmdlMCMCOnly, startingValues
 
 class mcmcARcnt(mAR.mcmcAR):
     ###  prior on F0 truncated normal
@@ -29,7 +29,7 @@ class mcmcARcnt(mAR.mcmcAR):
         oo     = self    #  call self oo.  takes up less room on line
         #  READ parameters of generative model from file
         #  contains N, k, singleFreqAR, u, beta, dt, stNz
-        x_st_cnts = _N.loadtxt(resFN("cnt_data.dat", dir=oo.setname))
+        x_st_cnts = _N.loadtxt(resFN("cnt_data.dat", dir=oo.setname, env_dirname=oo.env_dirname))
 
         oo.N   = x_st_cnts.shape[0] - 1
         if oo.t1 == None:
@@ -101,16 +101,12 @@ class mcmcARcnt(mAR.mcmcAR):
         oo   = self
         #  F, q2, u, rn, model
 
-        mL      = 20000
-        pcdlog  = _N.empty(mL)        #precomputed logs
-        pcdlog[1:mL] = _N.log(_N.arange(1, mL))
-
         print oo.model
         print oo.rn
         print oo.us
         oo.kp   = (oo.y - oo.rn) *0.5 if oo.model==_cd.__NBML__ else oo.y - oo.rn*0.5
 
-        cntMCMCiters = 80
+        cntMCMCiters = 30
         oo.mrns = _N.empty(cntMCMCiters, dtype=_N.int)
         oo.mus  = _N.empty(cntMCMCiters)
         oo.mdty = _N.empty(cntMCMCiters, dtype=_N.int)
@@ -118,13 +114,7 @@ class mcmcARcnt(mAR.mcmcAR):
         for it in xrange(oo.burn+oo.NMC):
             print "iter %d" % it
 
-            oo.us, oo.rn, oo.model = cntmdlMCMCOnlyU(cntMCMCiters, oo.us, oo.rn, oo.model, oo.y, oo.mrns, oo.mus, oo.mdty, pcdlog, oo.smpx)
-            # print "^^^^------------"
-            # print "rn=%d" % oo.rn
-            # print "us=%.3f" % oo.us
-            # print "md=%d" % oo.model
-            # print oo.mrns
-            # print "****"
+            oo.us, oo.rn, oo.model = cntmdlMCMCOnly(cntMCMCiters, oo.us, oo.rn, oo.model, oo.y, oo.mrns, oo.mus, oo.mdty, oo.smpx)
             ##  IMPORTANT.  update oo.kp right after getting new BN/NB params
             oo.kp   = (oo.y - oo.rn) *0.5 if oo.model==_cd.__NBML__ else oo.y - oo.rn*0.5
 
@@ -136,7 +126,7 @@ class mcmcARcnt(mAR.mcmcAR):
             oo._d.copyParams(_N.array([oo.F0]), oo.q2, onetrial=True)
 
             #  generate latent AR state
-            oo._d.f_x[0, 0, 0]     = oo.x00
+            oo._d.f_x[0, 0, 0]     = (0.5*(1+_N.random.randn()))*oo.smpx[0]
             oo._d.f_V[0, 0, 0]     = oo.V00
             oo._d.y[:]             = oo.kp/oo.ws - oo.us
             oo._d.Rv[:] = 1 / oo.ws   #  time dependent noise
@@ -160,15 +150,6 @@ class mcmcARcnt(mAR.mcmcAR):
             rsd_stp = oo.smpx[1:] - oo.F0*oo.smpx[0:-1]
             BB = oo.B_q2 + 0.5 * _N.dot(rsd_stp, rsd_stp)
             oo.q2 = _ss.invgamma.rvs(a, scale=BB)
-            # # #####################    sample x00
-            # mn  = (oo.u_x00*oo.V00 + oo.s2_x00*oo.x00) / (oo.V00 + oo.s2_x00)
-            # vr = (oo.V00*oo.s2_x00) / (oo.V00 + oo.s2_x00)
-            # oo.x00 = mn + _N.sqrt(vr)*_N.random.randn()
-            # #####################    sample V00
-            # aa = oo.a_V00 + 0.5
-            # BB = oo.B_V00 + 0.5*(oo.smpx[0] - oo.x00)*(oo.smpx[0] - oo.x00)
-            # oo.V00 = _ss.invgamma.rvs(aa, scale=BB)
-
 
             oo.smp_F[it]       = oo.F0
             oo.smp_q2[it]      = oo.q2
@@ -179,9 +160,10 @@ class mcmcARcnt(mAR.mcmcAR):
             oo.smp_dty[it]     = oo.model
 
     
-    def run(self): ###########  RUN
+    def run(self, env_dirname=None): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line
         oo.setname = os.getcwd().split("/")[-1]
+        oo.env_dirname=env_dirname
         oo.u_x00        = _N.zeros(1)
         oo.s2_x00       = 0.3
 

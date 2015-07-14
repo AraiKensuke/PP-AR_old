@@ -12,10 +12,10 @@ from kassdirs import resFN, datFN
 import re as _re
 import matplotlib.pyplot as _plt
 import scipy.stats as _ss
-from cntUtil import Llklhds, cntmdlMCMCOnly, startingValues, startingValuesM, CtDistLogNorm2
+from cntUtil import Llklhds, cntmdlMCMCOnly, startingValues, startingValuesMw, CtDistLogNorm2
 import time as _tm
 
-class mcmcARcntM(mAR.mcmcAR):
+class mcmcARcntMW(mAR.mcmcAR):
     ###  prior on F0 truncated normal
     alp       = None
     F0        = None;
@@ -31,6 +31,8 @@ class mcmcARcntM(mAR.mcmcAR):
 
     LN        = None
 
+    W      = 1
+
     ###################################   RUN   #########
     def loadDat(self):
         oo     = self    #  call self oo.  takes up less room on line
@@ -45,35 +47,33 @@ class mcmcARcntM(mAR.mcmcAR):
         
         cols= x_st_cnts.shape[1]
         nWinsInData = cols - 2   #  latent x, true state, win 1, win 2, ...
+        oo.W = nWinsInData
+
         oo.xT  = x_st_cnts[oo.t0:oo.t1, 0]
         #######  Initialize z
         mH  = x_st_cnts[oo.t0:oo.t1, 1]
         stCol = 1   #  column containing counts
         ctCol = 2   #  column containing counts
 
-        oo.y   = x_st_cnts[oo.t0:oo.t1, ctCol]
+        oo.y   = x_st_cnts[oo.t0:oo.t1, ctCol:ctCol+oo.W]
         oo.st  = x_st_cnts[oo.t0:oo.t1, stCol]
         oo.x   = x_st_cnts[oo.t0:oo.t1, 0]
         oo.zs  = _N.zeros((oo.N+1, oo.J), dtype=_N.int)
         oo.m   = _N.empty(oo.J)
-
-        if nWinsInData == 1:
-            oo.nWins = 1
-            oo.y   = x_st_cnts[oo.t0:oo.t1, ctCol]
 
     #  when we don't have xn
     def initGibbs(self):
         oo     = self    #  call self oo.  takes up less room on line
         #  INITIAL samples
 
-        oo.smpx = _N.empty(oo.N+1)
-        oo.us, oo.rnM, oo.model = startingValuesM(oo.y, oo.J, oo.zs, fillsmpx=oo.smpx, indLH=True)
+        oo.smpx = _N.zeros(oo.N+1)
+        oo.us, oo.rn, oo.model = startingValuesMw(oo.y, oo.J, oo.zs, fillsmpx=oo.smpx, indLH=True)
         _N.mean(oo.zs, axis=0, out=oo.m)
         print "initial  m  %s" % str(oo.m)
 
         print "^^^^STARTING VALUES"
         print "datafn=%s" % oo.datafn
-        print "rn=%s" % str(oo.rnM)
+        print "rn=%s" % str(oo.rn)
         print "us=%s" % str(oo.us)
         print "md=%s" % str(oo.model)
         print "****"
@@ -91,13 +91,14 @@ class mcmcARcntM(mAR.mcmcAR):
 
         oo.smp_F        = _N.zeros(oo.NMC + oo.burn)
         oo.smp_zs       = _N.zeros((oo.NMC + oo.burn, oo.N+1, oo.J), dtype=_N.int)
-        oo.smp_rnM       = _N.zeros((oo.NMC + oo.burn, oo.J), dtype=_N.int)
+        oo.smp_rn       = _N.zeros((oo.NMC + oo.burn, oo.W, oo.J), dtype=_N.int)
         oo.smp_u        = _N.zeros((oo.NMC + oo.burn, oo.J))
         oo.smp_dty      = _N.zeros((oo.NMC + oo.burn, oo.J), dtype=_N.int)
         oo.smp_q2       = _N.zeros(oo.NMC + oo.burn)
         oo.smp_m        = _N.zeros((oo.NMC + oo.burn, oo.J))
 
-        oo.ws   = _N.ones(oo.N + 1)*0.1   #  start at 0 + u
+        oo.ws   = _N.ones((oo.N + 1, oo.W))*0.1   #  start at 0 + u
+        oo.wsTEST   = _N.ones(oo.N + 1)*0.1   #  start at 0 + u
         oo.Bsmpx= _N.zeros((oo.burn+oo.NMC, oo.N + 1))
 
 
@@ -122,65 +123,74 @@ class mcmcARcntM(mAR.mcmcAR):
         oo   = self
         #  F, q2, u, rn, model
 
-        rns = _N.empty(oo.N+1, dtype=_N.int)  #  an rn for each trial
-        oo.LN  = _N.empty((oo.N+1, oo.J))  #  an rn for each trial
+        rns = _N.empty((oo.N+1, oo.W), dtype=_N.int)  #  an rn for each trial
+        oo.LN  = _N.empty((oo.N+1, oo.W, oo.J))  #  an rn for each trial
         lht = [_N.where(oo.zs[:, 0] == 1)[0], _N.where(oo.zs[:, 1] == 1)[0]]
-        oo.kp = _N.empty(oo.N+1)
-        for j in xrange(oo.J):
-            trls = lht[j]
-            rns[trls] = oo.rnM[j]
-            oo.kp[trls]   = (oo.y[trls] - oo.rnM[j]) *0.5 if oo.model[j]==_cd.__NBML__ else oo.y[trls] - oo.rnM[j]*0.5
 
-        cts     = _N.array(oo.y).reshape(oo.N+1, 1)
-        rnM     = _N.array(oo.rnM).reshape(1, oo.J)
+        oo.kp = _N.empty((oo.N+1, oo.W))
+        for w in xrange(oo.W):
+            for j in xrange(oo.J):
+                trls = lht[j]
+                rns[trls, w] = oo.rn[w, j]
+                oo.kp[trls, w]   = (oo.y[trls, w] - oo.rn[w, j]) *0.5 if oo.model[w, j]==_cd.__NBML__ else oo.y[trls, w] - oo.rn[w, j]*0.5
+
+        cts     = _N.array(oo.y).reshape(oo.N+1, oo.W, 1)
+        rn     = _N.array(oo.rn).reshape(1, oo.W, oo.J)
 
         cntMCMCiters = 20
-        oo.mrns = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.J), dtype=_N.int)
-        oo.mus  = _N.empty((oo.burn+oo.NMC, cntMCMCiters))
-        oo.mdty = _N.empty((oo.burn+oo.NMC, cntMCMCiters), dtype=_N.int)
+        oo.mrns = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W, oo.J), dtype=_N.int)
+        oo.mus  = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W))
+        oo.mdty = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W), dtype=_N.int)
 
-        los = _N.where(oo.st == 0)[0]
-        oo.zs[los, 0] = 1;         oo.zs[los, 1] = 0; 
-        his = _N.where(oo.st == 1)[0]
-        oo.zs[his, 0] = 0;         oo.zs[his, 1] = 1; 
+        p   = _N.empty((oo.N+1, oo.W, oo.J))
+        lp1p= _N.empty((oo.N+1, oo.W, oo.J))
+        dlp1p= _N.empty((oo.N+1, oo.W))
+        ppd = _N.empty((oo.N+1, oo.W))
+        rnsy= _N.empty((oo.N+1, oo.W), dtype=_N.int)
+        rnsyC= _N.empty(oo.N+1, dtype=_N.int)  #  for giving to devryoe
+        usJ = _N.empty((oo.N+1, oo.W))
 
-        p   = _N.empty((oo.N+1, oo.J))
-        p1p = _N.empty((oo.N+1, oo.J))
-        rnsy= _N.empty(oo.N+1, dtype=_N.int)
-        usJ = _N.empty(oo.N+1)
         if oo.smpxOff:
             oo.smpx[:] = 0
+        susJC = _N.empty(oo.N+1)   #  for giving to devroye, can't handle slices
+        wsTST = _N.empty(oo.N+1)   #  for giving to devroye, can't handle slices
 
         trms = _N.empty((oo.N+1, oo.J))
         rats  = _N.empty((oo.N+1, oo.J))
         crats= _N.zeros((oo.N+1, oo.J+1))  # cumulative rat
+        dirArgs = _N.empty(oo.J, dtype=_N.int)
+
+        wAw = _N.empty((oo.N+1, oo.W))
+        wA  = _N.empty(oo.N+1)
+
 
         for it in xrange(oo.burn+oo.NMC):
-            print "iter %d" % it
+            print "---   iter %d" % it
 
-            for j in xrange(oo.J):
-                oo.us[j], oo.rnM[j], oo.model[j] = cntmdlMCMCOnly(cntMCMCiters, oo.us[j], oo.rnM[j], oo.model[j], oo.y[lht[j]], oo.mrns[it], oo.mus[it], oo.mdty[it], oo.smpx[lht[j]])
-                p[:, j] = 1 / (1 + _N.exp(-(oo.us[j] + oo.smpx)))        
-
-            oo.smp_dty[it] = oo.model
-            oo.smp_rnM[it] = oo.rnM
-            oo.smp_u[it]   = oo.us
+            for w in xrange(oo.W):
+                for j in xrange(oo.J):
+                    oo.us[w, j], oo.rn[w, j], oo.model[w, j] = cntmdlMCMCOnly(cntMCMCiters, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
+                    p[:, w, j] = 1 / (1 + _N.exp(-(oo.us[w, j] + oo.smpx)))
             rands= _N.random.rand(oo.N+1)
 
             z = _N.zeros(oo.J, dtype=_N.int)
             zrs = _N.where(oo.m == 0)[0]
-            
+
             if len(zrs) == 0:
-                CtDistLogNorm2(oo.model, oo.J, oo.y, oo.rnM, oo.LN)
-                for j in xrange(oo.J):  #  for ratio of this state
-                    if oo.model[j] == _cd.__BNML__:
-                        p1p[:, j] = p[:, j]**oo.y * (1 - p[:, j])**(oo.rnM[j] - oo.y)
-                    else:
-                        p1p[:, j] = p[:, j]**oo.y * (1 - p[:, j])**oo.rnM[j]
+                for w in xrange(oo.W):
+                    CtDistLogNorm2(oo.model[w], oo.J, oo.y[:, w], oo.rn[w], oo.LN[:, w])
+
+                    for j in xrange(oo.J):  #  for ratio of this state
+                        if oo.model[w, j] == _cd.__BNML__:
+                            lp1p[:, w, j] = oo.y[:, w]*_N.log(p[:, w, j]) + (oo.rn[w, j] - oo.y[:, w]) * _N.log(1 - p[:, w, j])
+                        else:
+                            lp1p[:, w, j] = oo.y[:, w]*_N.log(p[:, w, j]) + oo.rn[w, j] * _N.log(1 - p[:, w, j])
 
                 for j in xrange(oo.J):  #  for ratio of this state
                     for jo in xrange(oo.J):
-                        trms[:, jo] = _N.exp(oo.LN[:, jo] - oo.LN[:, j]) * ((oo.m[jo] * p1p[:, jo])/(oo.m[j]* p1p[:, j]))
+                        _N.subtract(lp1p[:, :, jo], lp1p[:, :, j], out=dlp1p)
+                        _N.exp(dlp1p, out=ppd)  # p1p*p1p may be small
+                        trms[:, jo] = _N.exp(_N.sum(oo.LN[:, :, jo], axis=1) - _N.sum(oo.LN[:, :, j], axis=1)) * ((oo.m[jo]/oo.m[j]) * _N.product(ppd, axis=1))
 
                     rats[:, j] = 1 / _N.sum(trms, axis=1)
 
@@ -191,33 +201,32 @@ class mcmcARcntM(mAR.mcmcAR):
 
                 #  do regular assigning to zs
                 rs = _N.random.rand(oo.N+1).reshape(oo.N+1, 1)
+                #  we need to do something about p1p.  Log it.
                 x, y = _N.where((crats[:, 1:] >= rs) & (crats[:, 0:-1] <= rs))
                 #  x is [0, N+1].  
                 oo.zs[x, y] = 1;     oo.zs[x, 1-y] = 0
 
                 #  in cases where BNML, cts must at most be rn-1.  
                 #  Find those trials that can't be from proposed binomial
-                for j in xrange(oo.J):
-                    if (oo.model[j] == _cd.__BNML__):
-                        notBNML =  _N.where(oo.rnM[j] <= oo.y)[0]
-                        if len(notBNML) > 0:
-                            oo.zs[notBNML, j] = 0
-                            oo.zs[notBNML, 1-j] = 1
-                dirArgs = _N.empty(oo.J, dtype=_N.int)
+                for w in xrange(oo.W):
+                    for j in xrange(oo.J):
+                        if (oo.model[w, j] == _cd.__BNML__):
+                            notBNML =  _N.where(oo.rn[w, j] <= oo.y[:, w])[0]
+                            if len(notBNML) > 0:
+                                oo.zs[notBNML, j] = 0
+                                oo.zs[notBNML, 1-j] = 1
             else:
                 oo.zs[:, 1 - zrs[0]] = 1
                 oo.zs[:, zrs[0]] = 0
                 print "hit zero"
             oo.smp_zs[it] = oo.zs
 
-            """
             for j in xrange(oo.J):
                 trls = _N.where(oo.zs[:, j] == 1)[0]
                 if len(trls) > 0:
                     u    = _N.mean(oo.y[trls])
                     s    = _N.std(oo.y[trls])
                     print "mean counts for st %(j)d   %(ct).1f   %(tr)d    %(cv).3f" % {"j" : j, "ct" : u, "tr" : len(trls), "cv" : ((s*s)/u)}
-            """
 
             _N.add(oo.alp, _N.sum(oo.zs, axis=0), out=dirArgs)
 
@@ -226,28 +235,46 @@ class mcmcARcntM(mAR.mcmcAR):
 
             oo.Bsmpx[it, :] = oo.smpx
 
-            print _N.mean(oo.zs, axis=0)
-
             lht = [_N.where(oo.zs[:, 0] == 1)[0], _N.where(oo.zs[:, 1] == 1)[0]]
             for j in xrange(oo.J):
                 trls = lht[j]
-                rns[trls] = oo.rnM[j]
-                oo.kp[trls]   = (oo.y[trls] - oo.rnM[j]) *0.5 if oo.model[j]==_cd.__NBML__ else oo.y[trls] - oo.rnM[j]*0.5
+                for w in xrange(oo.W):
+                    rns[trls, w] = oo.rn[w, j]    
+                    oo.kp[trls, w]   = (oo.y[trls, w] - oo.rn[w, j]) *0.5 if oo.model[w, j]==_cd.__NBML__ else oo.y[trls, w] - oo.rn[w, j]*0.5
                 
-                if oo.model[j] == _cd.__NBML__:
-                    rnsy[trls] = oo.rnM[j] + oo.y[trls]
-                else:
-                    rnsy[trls] = oo.rnM[j]
-                usJ[trls]  = oo.us[j]
+                    if oo.model[w, j] == _cd.__NBML__:
+                        rnsy[trls, w] = oo.rn[w, j] + oo.y[trls, w]
+                    else:
+                        rnsy[trls, w] = oo.rn[w, j]
+                    usJ[trls, w]  = oo.us[w, j]
 
-            lw.rpg_devroye(rnsy, oo.smpx + usJ, num=(oo.N + 1), out=oo.ws)
+            for w in xrange(oo.W):
+                wsTST[:]    = oo.ws[:, w]
+                susJC[:]    = oo.smpx + usJ[:, w]
+                rnsyC[:]    = rnsy[:, w]
+
+                lw.rpg_devroye(rnsyC, susJC, num=(oo.N + 1), out=wsTST)
+                oo.ws[:, w] = wsTST
+
+
+                _N.savetxt("rnsy%d" % w, rnsy[:, w], fmt="%d")
             oo._d.copyParams(_N.array([oo.F0]), oo.q2, onetrial=True)
 
             #  generate latent AR state
             oo._d.f_x[0, 0, 0]     = oo.x00
             oo._d.f_V[0, 0, 0]     = oo.V00
-            oo._d.y[:]             = oo.kp/oo.ws - usJ
-            oo._d.Rv[:] = 1 / oo.ws   #  time dependent noise
+
+            #  wA  (M x 1)
+            _N.product(oo.ws, axis=1, out=wA)
+            wAr  = wA.reshape(oo.N+1, 1)
+
+            wAw[:] = wAr
+
+            for iw in xrange(oo.W):
+                wAw[:, iw] /= oo.ws[:, iw]
+
+            oo._d.y[:]             = (_N.sum((oo.kp/oo.ws - usJ)*wAw, axis=1) / _N.sum(wAw, axis=1))
+            oo._d.Rv[:] = _N.sum(wAw, axis=1) / wA    #  time dependent noise
 
             if not oo.smpxOff:
                 oo.smpx = _kfar.armdl_FFBS_1itr(oo._d)
@@ -271,6 +298,10 @@ class mcmcARcntM(mAR.mcmcAR):
                 oo.smp_F[it]       = oo.F0
                 oo.smp_q2[it]      = oo.q2
 
+        _plt.plot(usJ[:, 0])
+        _plt.plot(usJ[:, 1])
+        _plt.plot(usJ[:, 2])
+
 
     def run(self, env_dirname=None, datafn="cnt_data.dat", batch=False): ###########  RUN    
         """
@@ -287,11 +318,7 @@ class mcmcARcntM(mAR.mcmcAR):
         oo.loadDat()
         oo.initGibbs()
         # t1    = _tm.time()
-        # tmpNOAR = oo.noAR
-        # oo.noAR = True
         oo.gibbsSamp()
-        # oo.noAR = tmpNOAR
-        #oo.gibbsSamp()
         # t2    = _tm.time()
         # print (t2-t1)
 

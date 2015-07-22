@@ -2,7 +2,7 @@ from mcmcARpFuncs import loadL2, runNotes
 from filter import bpFilt, lpFilt, gauKer
 import mcmcAR as mAR
 import ARlib as _arl
-import LogitWrapper as lw
+import pyPG as lw
 import kfardat as _kfardat
 import logerfc as _lfc
 import commdefs as _cd
@@ -187,6 +187,8 @@ class mcmcARspk(mAR.mcmcAR):
         oo.pgs          = _N.empty((oo.TR, iters, oo.N+1))
         oo.fs           = _N.empty((iters, oo.C))
         oo.amps         = _N.empty((iters, oo.C))
+
+        oo.mnStds       = _N.empty(iters)
 
     def setParams(self):
         oo = self

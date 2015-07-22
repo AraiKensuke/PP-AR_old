@@ -53,14 +53,15 @@ def armdl_FFBS_1itrMP(args):   #  approximation
     GQGT[0, 0] = q2
 
     ##########  FF
-    t1 = _tm.time()
+    #t1 = _tm.time()
     FFdv(y, Rv, N, k, F, GQGT, fx, fV)
-    t2 = _tm.time()
+    #t2 = _tm.time()
     #print "FFdv  %.3f" % (t2-t1)
     ##########  BS
     smXN = _N.random.multivariate_normal(fx[N,:,0], fV[N], size=1)
     #t1 = _tm.time()
-    smpls = _kfcom.BSvecChol(F, N, k, GQGT, fx, fV, smXN)
+    #smpls = _kfcom.BSvecChol(F, N, k, GQGT, fx, fV, smXN)
+    smpls = _kfcom.BSvecSVD(F, N, k, GQGT, fx, fV, smXN)
     #t2 = _tm.time()
     #print (t2-t1)
     return [smpls, fx, fV]
@@ -75,8 +76,6 @@ def FFdv(y, Rv, N, k, F, GQGT, fx, fV):   #  approximate KF    #  k==1,dynamic v
     Ik      = _N.identity(k)
     px = _N.empty((N + 1, k, 1))
     pV = _N.empty((N + 1, k, k))
-    #cdef _N.ndarray[dDTYPE_t, ndim=3] px = _N.empty((N + 1, k, 1))
-    #cdef _N.ndarray[dDTYPE_t, ndim=3] pV = _N.empty((N + 1, k, k))
 
     K     = _N.empty((N + 1, k, 1))
     """
@@ -113,20 +112,10 @@ def FFdv(y, Rv, N, k, F, GQGT, fx, fV):   #  approximate KF    #  k==1,dynamic v
         _N.dot(fV[n - 1], F.T, out=VFT)
         _N.dot(F, VFT, out=pV[n])
         pVmv[n, 0, 0]    += q2
-        #_N.add(FVFT, GQGT, out=pV[n])
-
         mat  = 1 / (pVmv[n, 0, 0] + Rvmv[n])  #  scalar
-        #_N.dot(pV[n], mat*H.T, out=K[n])   #  vector
+
         K[n, :, 0] = pV[n, :, 0] * mat
 
-        # px + K(y - o - Hpx)  K column vec, (y-o-Hpx) is scalar
-        #KyHpx = K[n]* (y[n] - pxmv[n, 0, 0])
-        """
-        print "!!!"
-        print K.shape
-        print y.shape
-        print KyHpx.shape
-        """
         _N.multiply(K[n], y[n] - pxmv[n, 0, 0], out=KyHpx)
         _N.add(px[n], KyHpx, out=fx[n])
 

@@ -130,20 +130,19 @@ def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, TR, ac
 
         # #  If posterior valid Gaussian    q2 x H - oNZ * prH00
 
-        if rprior == _cd.__COMP_REF__:
-            try:
-                ph1j1, ph1j2 = _N.random.multivariate_normal(U[:, 0], J, size=1)[0, :]
-            except ValueError:
-                print "Nans, infs"
-                print U
-                print J
-                raise
+        try:
+            ph1j1, ph1j2 = _N.random.multivariate_normal(U[:, 0], J, size=1)[0, :]
+        except ValueError:
+            print "Nans, infs"
+            print U
+            print J
+            raise
 
             #  sampled points lie in stationary region
-            if ((ph1j2 < ph0H) and (ph1j2 > ph0L)) and \
-               ((ph1j1 > p1a*_N.sqrt(-1*ph1j2)) and (ph1j1 < p1b*_N.sqrt(-1*ph1j2))):
-                A[0] = ph1j1; A[1] = ph1j2
-                bSimpOK = True
+        if ((ph1j2 < ph0H) and (ph1j2 > ph0L)) and \
+           ((ph1j1 > p1a*_N.sqrt(-1*ph1j2)) and (ph1j1 < p1b*_N.sqrt(-1*ph1j2))):
+            A[0] = ph1j1; A[1] = ph1j2
+            bSimpOK = True
 
         if not bSimpOK:
             ###  This case is still fairly inexpensive.  

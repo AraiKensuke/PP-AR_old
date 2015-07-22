@@ -67,13 +67,13 @@ class mcmcARcntM(mAR.mcmcAR):
         #  INITIAL samples
 
         oo.smpx = _N.empty(oo.N+1)
-        oo.us, oo.rnM, oo.model = startingValuesM(oo.y, oo.J, oo.zs, fillsmpx=oo.smpx, indLH=True)
+        oo.us, oo.rn, oo.model = startingValuesM(oo.y, oo.J, oo.zs, fillsmpx=oo.smpx, indLH=True)
         _N.mean(oo.zs, axis=0, out=oo.m)
         print "initial  m  %s" % str(oo.m)
 
         print "^^^^STARTING VALUES"
         print "datafn=%s" % oo.datafn
-        print "rn=%s" % str(oo.rnM)
+        print "rn=%s" % str(oo.rn)
         print "us=%s" % str(oo.us)
         print "md=%s" % str(oo.model)
         print "****"
@@ -128,11 +128,11 @@ class mcmcARcntM(mAR.mcmcAR):
         oo.kp = _N.empty(oo.N+1)
         for j in xrange(oo.J):
             trls = lht[j]
-            rns[trls] = oo.rnM[j]
-            oo.kp[trls]   = (oo.y[trls] - oo.rnM[j]) *0.5 if oo.model[j]==_cd.__NBML__ else oo.y[trls] - oo.rnM[j]*0.5
+            rns[trls] = oo.rn[j]
+            oo.kp[trls]   = (oo.y[trls] - oo.rn[j]) *0.5 if oo.model[j]==_cd.__NBML__ else oo.y[trls] - oo.rn[j]*0.5
 
         cts     = _N.array(oo.y).reshape(oo.N+1, 1)
-        rnM     = _N.array(oo.rnM).reshape(1, oo.J)
+        rnM     = _N.array(oo.rn).reshape(1, oo.J)
 
         cntMCMCiters = 20
         oo.mrns = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.J), dtype=_N.int)
@@ -159,11 +159,13 @@ class mcmcARcntM(mAR.mcmcAR):
             print "iter %d" % it
 
             for j in xrange(oo.J):
-                oo.us[j], oo.rnM[j], oo.model[j] = cntmdlMCMCOnly(cntMCMCiters, oo.us[j], oo.rnM[j], oo.model[j], oo.y[lht[j]], oo.mrns[it], oo.mus[it], oo.mdty[it], oo.smpx[lht[j]])
+                if len(lht[j]) > 0:  #  
+                    oo.us[j], oo.rn[j], oo.model[j] = cntmdlMCMCOnly(cntMCMCiters, oo.us[j], oo.rn[j], oo.model[j], oo.y[lht[j]], oo.mrns[it], oo.mus[it], oo.mdty[it], oo.smpx[lht[j]])
+
                 p[:, j] = 1 / (1 + _N.exp(-(oo.us[j] + oo.smpx)))        
 
             oo.smp_dty[it] = oo.model
-            oo.smp_rnM[it] = oo.rnM
+            oo.smp_rnM[it] = oo.rn
             oo.smp_u[it]   = oo.us
             rands= _N.random.rand(oo.N+1)
 
@@ -171,12 +173,12 @@ class mcmcARcntM(mAR.mcmcAR):
             zrs = _N.where(oo.m == 0)[0]
             
             if len(zrs) == 0:
-                CtDistLogNorm2(oo.model, oo.J, oo.y, oo.rnM, oo.LN)
+                CtDistLogNorm2(oo.model, oo.J, oo.y, oo.rn, oo.LN)
                 for j in xrange(oo.J):  #  for ratio of this state
                     if oo.model[j] == _cd.__BNML__:
-                        p1p[:, j] = p[:, j]**oo.y * (1 - p[:, j])**(oo.rnM[j] - oo.y)
+                        p1p[:, j] = p[:, j]**oo.y * (1 - p[:, j])**(oo.rn[j] - oo.y)
                     else:
-                        p1p[:, j] = p[:, j]**oo.y * (1 - p[:, j])**oo.rnM[j]
+                        p1p[:, j] = p[:, j]**oo.y * (1 - p[:, j])**oo.rn[j]
 
                 for j in xrange(oo.J):  #  for ratio of this state
                     for jo in xrange(oo.J):
@@ -199,7 +201,7 @@ class mcmcARcntM(mAR.mcmcAR):
                 #  Find those trials that can't be from proposed binomial
                 for j in xrange(oo.J):
                     if (oo.model[j] == _cd.__BNML__):
-                        notBNML =  _N.where(oo.rnM[j] <= oo.y)[0]
+                        notBNML =  _N.where(oo.rn[j] <= oo.y)[0]
                         if len(notBNML) > 0:
                             oo.zs[notBNML, j] = 0
                             oo.zs[notBNML, 1-j] = 1
@@ -231,13 +233,13 @@ class mcmcARcntM(mAR.mcmcAR):
             lht = [_N.where(oo.zs[:, 0] == 1)[0], _N.where(oo.zs[:, 1] == 1)[0]]
             for j in xrange(oo.J):
                 trls = lht[j]
-                rns[trls] = oo.rnM[j]
-                oo.kp[trls]   = (oo.y[trls] - oo.rnM[j]) *0.5 if oo.model[j]==_cd.__NBML__ else oo.y[trls] - oo.rnM[j]*0.5
+                rns[trls] = oo.rn[j]
+                oo.kp[trls]   = (oo.y[trls] - oo.rn[j]) *0.5 if oo.model[j]==_cd.__NBML__ else oo.y[trls] - oo.rn[j]*0.5
                 
                 if oo.model[j] == _cd.__NBML__:
-                    rnsy[trls] = oo.rnM[j] + oo.y[trls]
+                    rnsy[trls] = oo.rn[j] + oo.y[trls]
                 else:
-                    rnsy[trls] = oo.rnM[j]
+                    rnsy[trls] = oo.rn[j]
                 usJ[trls]  = oo.us[j]
 
             lw.rpg_devroye(rnsy, oo.smpx + usJ, num=(oo.N + 1), out=oo.ws)
@@ -296,12 +298,11 @@ class mcmcARcntM(mAR.mcmcAR):
         # print (t2-t1)
 
 
-    def getZs(self):
+    def getZs(self, lowst=0):
         oo = self
-        lst = 0
-        occ = _N.mean(oo.smp_zs[oo.burn:, :, lst], axis=0)
+        occ = _N.mean(oo.smp_zs[oo.burn:, :, lowst], axis=0)
         ms  = _N.mean(oo.smp_m[oo.burn:], axis=0)
-        li  = _N.where(occ < ms[lst])
+        li  = _N.where(occ < ms[lowst])
 
         zFt = _N.zeros(oo.N+1, dtype=_N.int)
         zFt[li] = 1

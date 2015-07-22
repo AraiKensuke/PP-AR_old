@@ -206,11 +206,15 @@ def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
     rn0 = int(_N.mean(rns))
 
     if mdl == _cd.__BNML__:
-        rn0 = max(cts) if rn0 < max(cts) else rn0
+        rn0 = (max(cts)+1) if rn0 <= max(cts) else rn0
+    print "rn0  %d" % rn0
 
     ##########################  estimate xn
     xn     = _N.array(mns)
-    #print rn0
+    print "cts*******"
+    print cts
+    print "mns-------"
+    print mns
 
     xoff   = _N.empty(Nss)
 
@@ -219,6 +223,7 @@ def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
 
     xoff   -= _N.mean(xoff)
     xn        -= _N.mean(xn)
+
     xoff   /= _N.std(xoff)   #  normalized
 
     #  for 
@@ -228,6 +233,7 @@ def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
     j    = 0
 
     for mag in _N.linspace(0, 1, magStps):
+        print "mag %f" % mag
         p1x = 1 / (1 + _N.exp(-(u0 + mag*xoff)))
         lls[j] = Llklhds(mdl, cts, rn0, p1x)
         j += 1

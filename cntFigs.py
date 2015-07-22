@@ -3,20 +3,18 @@ import myColors as mC
 import numpy as _N
 import commdefs as _cd
 
-def lowhis(mARp, bfn="low_high"):
-    zTr, zFt, pctCrct = mARp.getZs()
-    lst = 0   # low state
-    occ = _N.mean(mARp.smp_zs[mARp.burn:, :, lst], axis=0)
+def lowhis(mARp, bfn="low_high", lowst=0):
+    zTr, zFt, pctCrct = mARp.getZs(lowst=lowst)
+    occ = _N.mean(mARp.smp_zs[mARp.burn:, :, lowst], axis=0)
     ms  = _N.mean(mARp.smp_m[mARp.burn:], axis=0)
-    li  = _N.where(occ > ms[lst])
+    li  = _N.where(occ > ms[lowst])
 
     zFt = _N.zeros(mARp.N+1, dtype=_N.int)
     zFt[li] = 1
 
     zTr = _N.zeros(mARp.N+1, dtype=_N.int)
-    li  = _N.where(mARp.st == lst)[0]
+    li  = _N.where(mARp.st == lowst)[0]
     zTr[li] = 1
-
 
     fig, ax = _plt.subplots(figsize=(13, 4.5))
     _plt.plot(zFt, lw=4, color=mC.grndTruth, marker="o", ms=5)
@@ -42,14 +40,14 @@ def lowhis(mARp, bfn="low_high"):
     fig.subplots_adjust(bottom=0.2, left=0.15, right=0.9, top=0.86)
     _plt.xlim(-1, mARp.N+2)
 
-
-    missed = _N.where(zFt != zTr)
-    gotit  = _N.where(zFt == zTr)
+    missed = _N.where(zFt == zTr)
+    gotit  = _N.where(zFt != zTr)
     _plt.plot(missed[0], _N.ones(len(missed[0]))*-0.2, ls="", ms=6, marker="v", color="black", markerfacecolor="black", markeredgecolor="black")
     _plt.plot(gotit[0], _N.ones(len(gotit[0]))*1.2, ls="", ms=6, marker="^", color="black", markerfacecolor="black", markeredgecolor="black")
 
     _plt.suptitle("correct  %.3f" % pctCrct, fontsize=28)
-    _plt.savefig("%s.eps" % bfn, transparent=True)
+    fn = "%(bfn)s,lowst=%(lowst)d" % {"bfn" : bfn, "lowst" : lowst}
+    _plt.savefig("%s.eps" % fn, transparent=True)
 
 
 

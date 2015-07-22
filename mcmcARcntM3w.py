@@ -298,11 +298,6 @@ class mcmcARcntMW(mAR.mcmcAR):
                 oo.smp_F[it]       = oo.F0
                 oo.smp_q2[it]      = oo.q2
 
-        _plt.plot(usJ[:, 0])
-        _plt.plot(usJ[:, 1])
-        _plt.plot(usJ[:, 2])
-
-
     def run(self, env_dirname=None, datafn="cnt_data.dat", batch=False): ###########  RUN    
         """
         many datafiles in each directory
@@ -323,12 +318,11 @@ class mcmcARcntMW(mAR.mcmcAR):
         # print (t2-t1)
 
 
-    def getZs(self):
+    def getZs(self, lowst=0):
         oo = self
-        lst = 0
-        occ = _N.mean(oo.smp_zs[oo.burn:, :, lst], axis=0)
+        occ = _N.mean(oo.smp_zs[oo.burn:, :, lowst], axis=0)
         ms  = _N.mean(oo.smp_m[oo.burn:], axis=0)
-        li  = _N.where(occ < ms[lst])
+        li  = _N.where(occ < ms[lowst])
 
         zFt = _N.zeros(oo.N+1, dtype=_N.int)
         zFt[li] = 1

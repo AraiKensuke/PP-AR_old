@@ -23,7 +23,7 @@ import numpy.polynomial.polynomial as _Npp
 import time as _tm
 import ARlib as _arl
 import kfARlibMPmv as _kfar
-import LogitWrapper as lw
+import pyPG as lw
 from ARcfSmpl import ARcfSmpl, FilteredTimeseries
 
 import commdefs as _cd
@@ -51,6 +51,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
     fs            = None
     amps          = None
     dt            = None
+    mnStds        = None
 
     ####  TEMPORARY
     Bi            = None
@@ -132,12 +133,13 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             _N.dot(oo.B.T, oo.aS, out=BaS)
             ###  PG latent variable sample
 
-            #tPG1 = _tm.time()
+            t2 = _tm.time()
+
             oo.build_addHistory(ARo, oo.smpx[:, 2:, 0], BaS, oo.us)
 
             for m in xrange(ooTR):
                 lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe
-                    
+            t3 = _tm.time()
             if ooTR == 1:
                 oo.ws   = oo.ws.reshape(1, ooN+1)
             _N.divide(oo.kp, oo.ws, out=kpOws)
@@ -185,6 +187,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.us[:]  = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
                 oo.smp_u[:, it] = oo.us
 
+            t4 = _tm.time()
+            t5 = t4
             if not oo.noAR:
             #  _d.F, _d.N, _d.ks, 
                 tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
@@ -195,9 +199,9 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                     oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                     oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
                 stds = _N.std(oo.Bsmpx[:, it, 2:], axis=1)
-                mnStd = _N.mean(stds, axis=0)
-                print "mnStd  %.3f" % mnStd
-
+                oo.mnStds[it] = _N.mean(stds, axis=0)
+                print "mnStd  %.3f" % oo.mnStds[it]
+                t5 = _tm.time()
                 if not oo.bFixF:   
                     ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H)  
                     oo.F_alfa_rep = alpR + alpC   #  new constructed
@@ -244,8 +248,13 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.smp_q2[:, it]= oo.q2
 
 
-            t2 = _tm.time()
-            print "gibbs iter %.3f" % (t2-t1)
+            t6 = _tm.time()
+            print "t2-t1 %.3f" % (t2-t1)
+            print "t3-t2 %.3f" % (t3-t2)
+            print "t4-t3 %.3f" % (t4-t3)
+            print "t5-t4 %.3f" % (t5-t4)
+            print "t6-t5 %.3f" % (t6-t5)
+            print "gibbs iter %.3f" % (t6-t1)
 
     def build_lrnLambda2(self, tr):
         oo = self

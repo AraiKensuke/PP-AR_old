@@ -280,6 +280,10 @@ def createDataPP(N, B, beta, u, stNz, p=1, trim=0, x=None, absrefr=0):
     return x[trim:N], spks[trim:N], prbs[trim:N], fs[trim:N]
 
 def createDataPPl2(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offset=None, cs=1, etme=None):
+    """
+    stNz   innovation variance.  stNz == 0.  flat state.
+    stNz == None   use x
+    """
     beta = _N.array([1., 0.])
     #  a[1]^2 + 4a[0]
     #  B[0] = -0.45
@@ -290,7 +294,7 @@ def createDataPPl2(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offs
         etme = _N.ones(N)
 
     buf  = 500
-    if _N.sum(stNz) == 0:
+    if (stNz is not None) and (_N.sum(stNz) == 0):
         xc   = _N.zeros((nRhythms, N+buf))   #  components
         x = _N.zeros(N+buf)
     else:
@@ -326,7 +330,12 @@ def createDataPPl2(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offs
 
     #  initial few
 
-    lh    = len(lambda2)
+    lh = 0
+    if lambda2 is not None:
+        lh    = len(lambda2)
+    else:
+        lh = 1
+        lambda2 = _N.ones(1)
     #lh    = 300   #  at most 2000
     ht    = -int(_N.random.rand() * 50)
 

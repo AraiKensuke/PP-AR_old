@@ -111,6 +111,7 @@ def create(setname):
 
     currentsOth = _N.empty((N+buff, TR))
     currentsOsc = _N.empty((N+buff, TR))
+    currentsUpDn = _N.empty((N+buff, TR))
 
     for tr in xrange(TR):
         V[0]  = 0.1*_N.random.randn()
@@ -170,6 +171,7 @@ def create(setname):
         for n in xrange(N-1+buff):
             currentsOth[n, tr] = Is[tr] + psth[n]
             currentsOsc[n, tr] = xBest[n]
+            currentsUpDn[n, tr] = updn[tr, n]
 
             dV[n] = -V[n] / tau + eps[n] + currentsOth[n, tr] + oscCS[tr]*currentsOsc[n, tr] + updn[tr, n]
 
@@ -190,6 +192,8 @@ def create(setname):
 
     fmt = "%.2f  " * TR
     _N.savetxt(resFN("currentsOth.dat", dir=setname, create=True), currentsOth[buff:], fmt=fmt)
+    fmt = "%.2f  " * TR
+    _N.savetxt(resFN("currentsUpDn.dat", dir=setname, create=True), currentsUpDn[buff:], fmt=fmt)
     fmt = "%.2f  " * TR
     _N.savetxt(resFN("currentsOsc.dat", dir=setname, create=True), currentsOsc[buff:], fmt=fmt)
 

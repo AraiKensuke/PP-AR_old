@@ -178,3 +178,18 @@ def runNotes(setname, ID_q2, TR0, TR1):
 
     #  ID_q2
     #  Trials using
+
+def loadKnown(setname, trials=None, fn="known.dat"):
+    fn = resFN(fn, dir=setname)
+    if os.access(fn, os.F_OK):
+        print "***  loaded known signal \"%s\" ***" % fn
+        a = _N.loadtxt(fn)
+        if trials is None:
+            return a.T
+        else:
+            return a.T[trials]
+    print "!!!  NO known signal loaded !!!"
+    if fn is not None:
+        print "!!!  Couldn't find \"%s\" !!!" % fn
+        
+    return None

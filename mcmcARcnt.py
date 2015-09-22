@@ -126,7 +126,8 @@ class mcmcARcnt(mAR.mcmcAR):
             oo._d.copyParams(_N.array([oo.F0]), oo.q2, onetrial=True)
 
             #  generate latent AR state
-            oo._d.f_x[0, 0, 0]     = (0.5*(1+_N.random.randn()))*oo.smpx[0]
+            #oo._d.f_x[0, 0, 0]     = (0.5*(1+_N.random.randn()))*oo.smpx[0]
+            oo._d.f_x[0, 0, 0]     = oo.smpx[0]
             oo._d.f_V[0, 0, 0]     = oo.V00
             oo._d.y[:]             = oo.kp/oo.ws - oo.us
             oo._d.Rv[:] = 1 / oo.ws   #  time dependent noise

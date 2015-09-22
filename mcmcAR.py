@@ -64,6 +64,3 @@ class mcmcAR:
     u_u          = 0;             s2_u         = 1.5
     #  initial states
     u_x00        = None;          s2_x00       = None
-
-
-

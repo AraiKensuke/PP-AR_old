@@ -345,7 +345,37 @@ def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
             bestRNs[w, j] = bestRN
             models[w, j]  = mdl
             u0s[w, j] = u0
-            _plt.plot(fs[w])
+            #_plt.plot(fs[w])
+    _N.mean(fs, axis=0, out=fillsmpx)
+    
+    return u0s, bestRNs, models
+
+def startingValuesW(cts, fillsmpx=None):
+    epS  = 20   #  in 20 trial segments
+    Nss = cts.shape[0]
+    WNS   = cts.shape[1]
+    print "WNS   %d" % WNS
+
+    ##########################  estimate cv0, p0, u0
+    Npcs = Nss / epS   #  20 trials each
+
+    mns= _N.empty((Npcs, WNS))
+
+    cv0s = _N.empty(WNS)
+    u0s  = _N.empty(WNS)
+    bestRNs = _N.empty((WNS), dtype=_N.int)
+    models = _N.empty((WNS), dtype=_N.int)
+
+    fs   = _N.zeros((WNS, Nss))
+    for w in xrange(WNS-1, -1, -1):
+        #  1 / (1-p) = c      1/c = 1-p   p = 1 - 1/c
+        u0, bestRN, mdl = startingValues(cts[:, w], fillsmpx=fs[w])
+        #print "mean cts %.3f" % _N.mean(cts[trls, w])
+        p0    = 1 / (1 + _N.exp(-u0))
+        cv0s[w] = (1 - p0) if (mdl == _cd.__BNML__) else 1 / (1 - p0)
+        bestRNs[w] = bestRN
+        models[w]  = mdl
+        u0s[w] = u0
     _N.mean(fs, axis=0, out=fillsmpx)
     
     return u0s, bestRNs, models

@@ -68,6 +68,14 @@ class mcmcARcntMW(mAR.mcmcAR):
 
         oo.smpx = _N.zeros(oo.N+1)
         oo.us, oo.rn, oo.model = startingValuesMw(oo.y, oo.J, oo.zs, fillsmpx=oo.smpx, indLH=True)
+        # oo.us = _N.array([[-1.734, -1.734],
+        #                   [-1.734, -1.734]])
+        # oo.rn = _N.array([[130, 250],
+        #                   [130, 250]])
+        # oo.model = _N.array([[_cd.__BNML__, _cd.__BNML__],
+        #                      [_cd.__BNML__, _cd.__BNML__]])
+
+        print "smpx mean  %.3f" % _N.mean(oo.smpx)
         _N.mean(oo.zs, axis=0, out=oo.m)
         print "initial  m  %s" % str(oo.m)
 
@@ -92,13 +100,12 @@ class mcmcARcntMW(mAR.mcmcAR):
         oo.smp_F        = _N.zeros(oo.NMC + oo.burn)
         oo.smp_zs       = _N.zeros((oo.NMC + oo.burn, oo.N+1, oo.J), dtype=_N.int)
         oo.smp_rn       = _N.zeros((oo.NMC + oo.burn, oo.W, oo.J), dtype=_N.int)
-        oo.smp_u        = _N.zeros((oo.NMC + oo.burn, oo.J))
+        oo.smp_u        = _N.zeros((oo.NMC + oo.burn, oo.W, oo.J))
         oo.smp_dty      = _N.zeros((oo.NMC + oo.burn, oo.J), dtype=_N.int)
         oo.smp_q2       = _N.zeros(oo.NMC + oo.burn)
         oo.smp_m        = _N.zeros((oo.NMC + oo.burn, oo.J))
 
         oo.ws   = _N.ones((oo.N + 1, oo.W))*0.1   #  start at 0 + u
-        oo.wsTEST   = _N.ones(oo.N + 1)*0.1   #  start at 0 + u
         oo.Bsmpx= _N.zeros((oo.burn+oo.NMC, oo.N + 1))
 
 
@@ -167,9 +174,23 @@ class mcmcARcntMW(mAR.mcmcAR):
         for it in xrange(oo.burn+oo.NMC):
             print "---   iter %d" % it
 
+            # oo.us = _N.array([[-1.734, -1.734],
+            #                   [-1.734, -1.734]])
+            # oo.rn = _N.array([[130, 250],
+            #                   [130, 250]])
+            # oo.model = _N.array([[_cd.__BNML__, _cd.__BNML__],
+            #                      [_cd.__BNML__, _cd.__BNML__]])
+
             for w in xrange(oo.W):
                 for j in xrange(oo.J):
                     oo.us[w, j], oo.rn[w, j], oo.model[w, j] = cntmdlMCMCOnly(cntMCMCiters, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
+
+            oo.us[0] = oo.us[1]
+            oo.rn[0] = oo.rn[1]
+            oo.model[0] = oo.model[1]
+
+            for w in xrange(oo.W):
+                for j in xrange(oo.J):
                     p[:, w, j] = 1 / (1 + _N.exp(-(oo.us[w, j] + oo.smpx)))
             rands= _N.random.rand(oo.N+1)
 
@@ -226,7 +247,7 @@ class mcmcARcntMW(mAR.mcmcAR):
                 if len(trls) > 0:
                     u    = _N.mean(oo.y[trls])
                     s    = _N.std(oo.y[trls])
-                    print "mean counts for st %(j)d   %(ct).1f   %(tr)d    %(cv).3f" % {"j" : j, "ct" : u, "tr" : len(trls), "cv" : ((s*s)/u)}
+                    #print "mean counts for st %(j)d   %(ct).1f   %(tr)d    %(cv).3f" % {"j" : j, "ct" : u, "tr" : len(trls), "cv" : ((s*s)/u)}
 
             _N.add(oo.alp, _N.sum(oo.zs, axis=0), out=dirArgs)
 
@@ -256,8 +277,7 @@ class mcmcARcntMW(mAR.mcmcAR):
                 lw.rpg_devroye(rnsyC, susJC, num=(oo.N + 1), out=wsTST)
                 oo.ws[:, w] = wsTST
 
-
-                _N.savetxt("rnsy%d" % w, rnsy[:, w], fmt="%d")
+                #_N.savetxt("rnsy%d" % w, rnsy[:, w], fmt="%d")
             oo._d.copyParams(_N.array([oo.F0]), oo.q2, onetrial=True)
 
             #  generate latent AR state
@@ -274,10 +294,13 @@ class mcmcARcntMW(mAR.mcmcAR):
                 wAw[:, iw] /= oo.ws[:, iw]
 
             oo._d.y[:]             = (_N.sum((oo.kp/oo.ws - usJ)*wAw, axis=1) / _N.sum(wAw, axis=1))
-            oo._d.Rv[:] = _N.sum(wAw, axis=1) / wA    #  time dependent noise
+            #_plt.plot(oo._d.y)
+            ###  As it stands now, 2 identical windows increases the obs. nise
+            oo._d.Rv[:] = _N.sum(wAw, axis=1) / wA  # Rv is inverse variance
 
             if not oo.smpxOff:
                 oo.smpx = _kfar.armdl_FFBS_1itr(oo._d)
+                print "smpx mean  %.3f" % _N.mean(oo.smpx)
 
                 #  p3 --  samp u here
 
@@ -297,6 +320,7 @@ class mcmcARcntMW(mAR.mcmcAR):
                 oo.q2 = _ss.invgamma.rvs(a, scale=BB)
                 oo.smp_F[it]       = oo.F0
                 oo.smp_q2[it]      = oo.q2
+                oo.smp_u[it]      = oo.us
 
     def run(self, env_dirname=None, datafn="cnt_data.dat", batch=False): ###########  RUN    
         """

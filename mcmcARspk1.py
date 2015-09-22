@@ -1,4 +1,4 @@
-from mcmcARpFuncs import loadL2, runNotes, loadKnown
+from mcmcARpFuncs import loadL2, runNotes
 from filter import bpFilt, lpFilt, gauKer
 import mcmcAR as mAR
 import ARlib as _arl
@@ -15,7 +15,7 @@ import numpy.polynomial.polynomial as _Npp
 from kflib import createDataAR
 import patsy
 
-class mcmcARspk(mAR.mcmcAR):
+class mcmcARspk1(mAR.mcmcAR):
     ##  
     psthBurns     = 30
     Cn            = None;    Cs            = None;    C             = None
@@ -75,10 +75,6 @@ class mcmcARspk(mAR.mcmcAR):
 
     # psth spline coefficient priors
     u_a          = None;             s2_a         = 0.5
-
-    #  knownSig
-    knownSigFN      = None
-    knownSig        = None
 
     def __init__(self):
         if (self.noAR is not None) or (self.noAR == False):
@@ -150,7 +146,7 @@ class mcmcARspk(mAR.mcmcAR):
         oo.TR    = len(oo.useTrials)
         oo.N     = N
 
-        oo.smpx        = _N.zeros((oo.TR, (oo.N + 1) + 2, oo.k))   #  start at 0 + u
+        oo.smpx        = _N.zeros((oo.TR, oo.N + 1))   #  start at 0 + u
         oo.ws          = _N.empty((oo.TR, oo.N+1), dtype=_N.float)
         oo.lrn   = _N.empty((oo.TR, oo.N+1))
 
@@ -166,61 +162,46 @@ class mcmcARspk(mAR.mcmcAR):
         oo.mean_isi_1st2spks = float(tot_isi) / nisi
         #####  LOAD spike history
         oo.l2 = loadL2(oo.setname, fn=oo.histFN)
-        oo.knownSig = loadKnown(oo.setname, trials=oo.useTrials, fn=oo.knownSigFN)
         if oo.l2 is None:
             oo.lrn[:] = 1
         else:
             #  assume ISIs near beginning of data are exponentially 
             #  distributed estimate
             for tr in xrange(oo.TR):
+                print tr
                 oo.lrn[tr] = oo.build_lrnLambda2(tr)
-        if oo.knownSig is None:
-            oo.knownSig = _N.zeros((oo.TR, oo.N+1))
 
     def allocateSmp(self, iters):
         oo = self
         print "^^^^^^   allocateSmp  %d" % iters
         ####  initialize
-        oo.Bsmpx        = _N.zeros((oo.TR, iters, (oo.N+1) + 2))
+        oo.Bsmpx        = _N.zeros((oo.TR, iters, oo.N+1))
         oo.smp_u        = _N.zeros((oo.TR, iters))
         if oo.bpsth:
             oo.smp_aS        = _N.zeros((iters, oo.dfPSTH))
         oo.smp_q2       = _N.zeros((oo.TR, iters))
-        oo.smp_x00      = _N.empty((oo.TR, iters, oo.k))
+        oo.smp_x00      = _N.empty((oo.TR, iters))
         #  store samples of
-        oo.allalfas     = _N.empty((iters, oo.k), dtype=_N.complex)
-        oo.uts          = _N.empty((oo.TR, iters, oo.R, oo.N+2))
-        oo.wts          = _N.empty((oo.TR, iters, oo.C, oo.N+3))
-        oo.ranks        = _N.empty((iters, oo.C), dtype=_N.int)
         oo.pgs          = _N.empty((oo.TR, iters, oo.N+1))
-        oo.fs           = _N.empty((iters, oo.C))
-        oo.amps         = _N.empty((iters, oo.C))
 
         oo.mnStds       = _N.empty(iters)
 
     def setParams(self):
         oo = self
         # #generate initial values of parameters
-        oo._d = _kfardat.KFARGauObsDat(oo.TR, oo.N, oo.k)
+        oo._d = _kfardat.KFARGauObsDat(oo.TR, oo.N, 1)
         oo._d.copyData(oo.y)
 
         #  baseFN_inter   baseFN_comps   baseFN_comps
 
-        radians      = buildLims(oo.Cn, oo.freq_lims, nzLimL=1.)
-        oo.AR2lims      = 2*_N.cos(radians)
-
-        oo.smpx        = _N.zeros((oo.TR, (oo.N + 1) + 2, oo.k))   #  start at 0 + u
+        oo.smpx        = _N.zeros((oo.TR, oo.N + 1))   #  start at 0 + u
         oo.ws          = _N.empty((oo.TR, oo._d.N+1), dtype=_N.float)
 
-        if oo.F_alfa_rep is None:
-            oo.F_alfa_rep  = initF(oo.R, oo.Cs, oo.Cn, ifs=oo.ifs).tolist()   #  init F_alfa_rep
-
-        print ampAngRep(oo.F_alfa_rep)
         if oo.q20 is None:
             oo.q20         = 0.00077
         oo.q2          = _N.ones(oo.TR)*oo.q20
 
-        oo.F0          = (-1*_Npp.polyfromroots(oo.F_alfa_rep)[::-1].real)[1:]
+        oo.F0          = _N.array([0.9])
         ########  Limit the amplitude to something reasonable
         xE, nul = createDataAR(oo.N, oo.F0, oo.q20, 0.1)
         mlt  = _N.std(xE) / 0.5    #  we want amplitude around 0.5
@@ -239,16 +220,10 @@ class mcmcARspk(mAR.mcmcAR):
             fgk[m, :] /= 2*_N.std(fgk[m, :])
 
             if oo.noAR:
-                oo.smpx[m, 2:, 0] = 0
+                oo.smpx[m, 0] = 0
             else:
-                oo.smpx[m, 2:, 0] = fgk[m, :]
+                oo.smpx[m] = fgk[m]
 
-            for n in xrange(2+oo.k-1, oo.N+1+2):  # CREATE square smpx
-                oo.smpx[m, n, 1:] = oo.smpx[m, n-oo.k+1:n, 0][::-1]
-            for n in xrange(2+oo.k-2, -1, -1):  # CREATE square smpx
-                oo.smpx[m, n, 0:oo.k-1] = oo.smpx[m, n+1, 1:oo.k]
-                oo.smpx[m, n, oo.k-1] = _N.dot(oo.F0, oo.smpx[m, n:n+oo.k, oo.k-2]) # no noise
-            
         oo.s_lrn   = _N.empty((oo.TR, oo.N+1))
         oo.sprb   = _N.empty((oo.TR, oo.N+1))
         oo.lrn_scr1   = _N.empty(oo.N+1)
@@ -257,9 +232,7 @@ class mcmcARspk(mAR.mcmcAR):
         oo.lrn_scr3   = _N.empty(oo.N+1)
         oo.lrn_scld   = _N.empty(oo.N+1)
 
-        print "!!!!!!!!!!!!!!!!!!"
         if oo.bpsth:
-            print "IS bpsth"
             oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), df=oo.dfPSTH, knots=oo.kntsPSTH, include_intercept=True)    #  spline basis
 
             if oo.dfPSTH is None:
@@ -300,6 +273,9 @@ class mcmcARspk(mAR.mcmcAR):
         #    some virtual observation, and set
         bDone = False
 
+        #print "!!!!!!!!!!!!!!!!!"
+        #print oo.mean_isi_1st2spks
+
         times = -1
         while (not bDone) and (times < 50):
             times += 1
@@ -321,10 +297,10 @@ class mcmcARspk(mAR.mcmcAR):
 
         return lrn
 
-    def build_addHistory(self, ARo, smpx, BaS, us, knownSig):
+    def build_addHistory(self, ARo, smpx, BaS, us):
         oo = self
         for m in xrange(oo.TR):
-            _N.exp(smpx[m] + BaS + us[m] + knownSig[m], out=oo.lrn_scr1) #ex
+            _N.exp(smpx[m] + BaS + us[m], out=oo.lrn_scr1) #ex
             _N.add(1, oo.lrn_scr1, out=oo.lrn_scr2)     # 1 + ex
 
             _N.divide(oo.lrn_scr1, oo.lrn_scr2, out=oo.lrn_scr3)  #ex / (1+ex)
@@ -345,34 +321,6 @@ class mcmcARspk(mAR.mcmcAR):
             #     _plt.plot(oo.s_lrn[m], lw=2)
 
             _N.log(oo.s_lrn[m] / (1 + (1 - oo.s_lrn[m])*oo.lrn_scr1), out=ARo[m])   #  history Offset   ####TRD change
-
-    def getComponents(self):
-        oo    = self
-        TR    = oo.TR
-        NMC   = oo.NMC
-        burn  = oo.burn
-        R     = oo.R
-        C     = oo.C
-        ddN   = oo.N
-
-        oo.rts = _N.empty((TR, burn+NMC, ddN+2, R))    #  real components   N = ddN
-        oo.zts = _N.empty((TR, burn+NMC, ddN+2, C))    #  imag components 
-
-        for tr in xrange(TR):
-            for it in xrange(1, burn + NMC):
-                b, c = dcmpcff(alfa=oo.allalfas[it])
-
-                for r in xrange(R):
-                    oo.rts[tr, it, :, r] = b[r] * oo.uts[tr, it, r, :]
-
-                for z in xrange(C):
-                    #print "z   %d" % z
-                    cf1 = 2*c[2*z].real
-                    gam = oo.allalfas[it, R+2*z]
-                    cf2 = 2*(c[2*z].real*gam.real + c[2*z].imag*gam.imag)
-                    oo.zts[tr, it, 0:ddN+2, z] = cf1*oo.wts[tr, it, z, 1:ddN+3] - cf2*oo.wts[tr, it, z, 0:ddN+2]
-
-        oo.zts0 = _N.array(oo.zts[:, :, 1:, 0], dtype=_N.float16)
 
     def dump(self):
         oo    = self
@@ -402,8 +350,8 @@ class mcmcARspk(mAR.mcmcAR):
         ARo   = _N.empty((oo.TR, oo.N+1))
 
         BaS = _N.dot(oo.B.T, alps)
-        oo.build_addHistory(ARo, osc, BaS, us, knownSig)
+        oo.build_addHistory(ARo, osc, BaS, us)
 
-        cif = _N.exp(us + ARo + osc + BaS + knownSig) / (1 + _N.exp(us + ARo + osc + BaS + knownSig))
+        cif = _N.exp(us + ARo + osc + BaS) / (1 + _N.exp(us + ARo + osc + BaS))
 
         return cif

@@ -31,21 +31,17 @@ def timeRescaleTest(fr, spkts, dt, TR, m, nohist=False, loP=0.00001):
     zs = []
     Nm1 = 0
 
-    nn  = 0
-
     for tr in xrange(TR):
         N  = len(mspkts[tr])
         rt = _N.empty(N)    #  rescaled time
         for i in xrange(N):
-            rt[i] = _N.trapz(frm[tr, 0:mspkts[tr][i]]+1)*dtm
+            rt[i] = _N.trapz(frm[tr, 0:mspkts[tr][i]])*dtm
 
         #  this means that small ISIs are underrepresented
         taus = _N.diff(rt)
         zs.extend((1 - _N.exp(-taus)).tolist())
-        nn += len(taus)
-        #print "%(tr)d     %(1)d   %(2)d" % {"1" : (N-1), "2" : len(taus), "tr" : tr}
-        Nm1 += N - 1
-    #print nn
+        if N > 0:   #  this trial has spikes
+            Nm1 += N - 1
 
     zss  = _N.sort(_N.array(zs))
     ks  = _N.arange(1, Nm1 + 1)

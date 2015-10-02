@@ -90,7 +90,7 @@ def initF(nR, nCS, nCN, ifs=None):
 
     #iRs[0:nR] = -0.6 - 0.4*_N.random.rand(nR)
     #iRs[0:nR] = 0.1*_N.random.rand(nR)
-    iRs[0:nR] = 0.99
+    iRs[0:nR] = 0.
 
     if (ifs == None):
         ifs  = []

@@ -57,9 +57,9 @@ class spikeHist:
         yr  = y.reshape(TR*Ldf)
         Xr  = X.reshape(TR*Ldf, oo.LHbin + oo.nLHBins + 1)
         est = _sm.GLM(yr, Xr, family=_sm.families.Poisson()).fit()
-        offs  = est.params[0]
-        shrtH = est.params[1:oo.LHbin+1]
-        oscH  = est.params[oo.LHbin+1:]
+        oo.offs  = est.params[0]
+        oo.shrtH = est.params[1:oo.LHbin+1]
+        oo.oscH  = est.params[oo.LHbin+1:]
 
         cfi = est.conf_int()
         oscCI = cfi[oo.LHbin+1:]
@@ -68,7 +68,7 @@ class spikeHist:
         xlab = _N.arange(oo.LHbin, (oo.nLHBins+1)*oo.LHbin, oo.LHbin)
         _plt.fill_between(xlab, _N.exp(oscCI[:, 0]), _N.exp(oscCI[:, 1]), color="blue", alpha=0.2)
 
-        _plt.plot(xlab, _N.exp(oscH), lw=2, color="black")
+        _plt.plot(xlab, _N.exp(oo.oscH), lw=2, color="black")
         _plt.xticks(xlab, fontsize=20)
         _plt.yticks(fontsize=20)
         _plt.xlabel("lags (ms)", fontsize=22)
@@ -77,3 +77,5 @@ class spikeHist:
         fig.subplots_adjust(left=0.1, bottom=0.15, top=0.94)
         _plt.savefig(resFN("glmfit_LHBins=%(LHBins)d_%(binsz)d_strt=%(trS)d_%(trE)d_t0=%(t0)d_t1=%(t1)d" % {"trS" : oo.startTR, "trE" : oo.endTR, "t0" : oo.t0, "t1" : oo.t1, "LHBins" : oo.nLHBins, "binsz" : oo.LHbin}, dir=oo.setname))
         _plt.close()
+
+        return est, X, y

@@ -88,6 +88,51 @@ def suggestHistKnots(dt, TR, bindat, tsclPct=0.85, outfn="fittedL2.dat"):
 
     return bstKnts, lmd2, nhaz, tscl
 
+def suggestHistKnotsFromLam(xs, nhaz, outfn="fittedL2.dat"):
+    global v, c
+
+    ITERS   = 1000
+    allKnts = _N.empty((ITERS, 6))
+    r2s    = _N.empty(ITERS)
+
+    ac = _N.zeros(c)
+    for tr in xrange(ITERS):
+        bGood = False
+        while not bGood:
+            knts = genKnts(tscl, xs[-1]*0.9)
+
+            B  = patsy.bs(xs[0:-1], knots=knts, include_intercept=True)
+
+            Bc = B[:, v:];   Bv = B[:, 0:v]
+
+            try:
+                iBvTBv = _N.linalg.inv(_N.dot(Bv.T, Bv))
+                bGood = True
+            except _N.linalg.linalg.LinAlgError:
+                print "Linalg Error"
+
+        av = _N.dot(iBvTBv, _N.dot(Bv.T, _N.log(nhaz) - _N.dot(Bc, ac)))
+        a = _N.array(av.tolist() + ac.tolist())
+
+        #  Now fit where the last few nots are fixed
+        splFt          = _N.exp(_N.dot(B, a))
+        df             = nhaz - splFt
+        r2s[tr]        = _N.dot(df[0:int(tscl)], df[0:int(tscl)])
+        allKnts[tr, :] = knts
+
+    bstKnts = allKnts[_N.where(r2s == r2s.min())[0][0], :]
+
+    B  = patsy.bs(xs[0:-1], knots=bstKnts, include_intercept=True)
+    Bc = B[:, v:];   Bv = B[:, 0:v]
+    iBvTBv = _N.linalg.inv(_N.dot(Bv.T, Bv))
+    av = _N.dot(iBvTBv, _N.dot(Bv.T, _N.log(nhaz) - _N.dot(Bc, ac)))
+    a = _N.array(av.tolist() + ac.tolist())
+    #  Now fit where the last few nots are fixed
+    lmd2          = _N.exp(_N.dot(B, a))
+
+    return bstKnts, lmd2, nhaz, tscl
+
+
 def suggestPSTHKnots(dt, TR, N, bindat, bnsz=50, iknts=2):
     """
     bnsz   binsize used to calculate approximate PSTH
@@ -285,3 +330,100 @@ def reasonableHistory2(lmd, maxH=1.2, strT=1, cutoff=100, dcyTS=60):
         cmpLmd[i] = maxH -  (i - ihiest) * dy
 
     return cmpLmd
+
+
+def findAndSaturateHist(cl, refrT=30, MAXcl=2):
+    """
+    how high
+    """
+    ITERS = 1000
+
+    dgr   = 2
+    ktl   = _N.empty(dgr+1)
+    cktl  = _N.zeros(dgr+2)
+    xs    = _N.linspace(0, 1, refrT)
+    scr   = _N.empty(ITERS)
+
+    aS    = _N.empty((ITERS, dgr+4))
+    kts   = _N.empty((ITERS, dgr))
+
+    lcl   = _N.log(cl)
+    for it in xrange(ITERS):
+        bOK = False
+        while not bOK:
+            try:
+                ktl = _N.random.rand(dgr+1) 
+
+                for d in xrange(1, dgr+2):
+                    cktl[d] = cktl[d-1] + ktl[d-1]
+                cktl /= cktl[-1]
+
+                B  = patsy.bs(xs, knots=cktl[1:-1], include_intercept=True)
+
+                iBvTBv = _N.linalg.inv(_N.dot(B.T, B))
+
+                a  = _N.dot(iBvTBv, _N.dot(B.T, lcl))
+
+                ftd = _N.exp(_N.dot(B, a))
+                scr[it] = _N.sum((ftd - cl)**2)
+
+                aS[it] = a
+                kts[it] = cktl[1:-1]
+                bOK = True
+            except _N.linalg.linalg.LinAlgError:
+                print "LinAlgError in findAndSaturateHist part 1"
+
+    bI      = _N.where(scr == _N.min(scr))[0][0]
+
+    bestKts = kts[bI]
+    bestAs  = aS[bI]
+
+    ######
+    B  = patsy.bs(xs, knots=bestKts, include_intercept=True)
+    ftdC = _N.exp(_N.dot(B, bestAs))
+
+    #  now compress, and 
+    MAX = _N.max(ftdC[0:refrT])
+    maxInd = _N.where(ftdC == MAX)[0][0]
+    ftdC[maxInd:] = _N.linspace(MAX, 1, refrT-maxInd)
+
+    bg1Inds = _N.where(ftdC > 1)[0]
+
+    print (MAXcl - 1)
+    ftdC[bg1Inds] = (((ftdC[bg1Inds] - 1) / (MAX - 1)) * (MAXcl-1)) +1
+    lt1Inds = _N.where(ftdC[refrT:] < 1)[0]
+    ftdC[refrT+lt1Inds] = 1
+    
+    lftdC = _N.log(ftdC)
+    for it in xrange(ITERS):
+        bOK = False
+        while not bOK:
+            try:
+                ktl = _N.random.rand(dgr+1) 
+
+                for d in xrange(1, dgr+2):
+                    cktl[d] = cktl[d-1] + ktl[d-1]
+                cktl /= cktl[-1]
+
+                B  = patsy.bs(xs, knots=cktl[1:-1], include_intercept=True)
+
+                iBvTBv = _N.linalg.inv(_N.dot(B.T, B))
+
+                a  = _N.dot(iBvTBv, _N.dot(B.T, lftdC))
+
+                ftd = _N.exp(_N.dot(B, a))
+                scr[it] = _N.sum((ftd - ftdC)**2)
+
+                aS[it] = a
+                kts[it] = cktl[1:-1]
+                bOK = True
+            except _N.linalg.linalg.LinAlgError:
+                print "LinAlgError in findAndSaturateHist part 2"
+
+
+    bI      = _N.where(scr == _N.min(scr))[0][0]
+
+    bestKts = kts[bI]
+    bestAs  = aS[bI]
+    
+    return xs, bestKts, bestAs

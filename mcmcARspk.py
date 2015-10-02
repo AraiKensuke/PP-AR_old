@@ -402,8 +402,8 @@ class mcmcARspk(mAR.mcmcAR):
         ARo   = _N.empty((oo.TR, oo.N+1))
 
         BaS = _N.dot(oo.B.T, alps)
-        oo.build_addHistory(ARo, osc, BaS, us, knownSig)
+        oo.build_addHistory(ARo, osc, BaS, us, oo.knownSig)
 
-        cif = _N.exp(us + ARo + osc + BaS + knownSig) / (1 + _N.exp(us + ARo + osc + BaS + knownSig))
+        cif = _N.exp(us + ARo + osc + BaS + oo.knownSig) / (1 + _N.exp(us + ARo + osc + BaS + oo.knownSig))
 
         return cif

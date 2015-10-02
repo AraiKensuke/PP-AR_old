@@ -331,11 +331,13 @@ def plotFsAmp(mARp, tr0=None, tr1=None):
         tr0 = 1
     if tr1 is None:
         tr1 = mARp.burn + mARp.NMC
-    fig = _plt.figure(figsize=(5, 6))
-    fig.add_subplot(2, 1, 1)
+    fig = _plt.figure(figsize=(5, 8.5))
+    fig.add_subplot(3, 1, 1)
     _plt.plot(mARp.fs[tr0:tr1, 0])
-    fig.add_subplot(2, 1, 2)
+    fig.add_subplot(3, 1, 2)
     _plt.plot(mARp.amps[tr0:tr1, 0])
+    fig.add_subplot(3, 1, 3)
+    _plt.plot(mARp.mnStds[tr0:tr1])
     _plt.savefig("fs_amps")
     _plt.close()
 

@@ -168,7 +168,6 @@ class mcmcARspk1(mAR.mcmcAR):
             #  assume ISIs near beginning of data are exponentially 
             #  distributed estimate
             for tr in xrange(oo.TR):
-                print tr
                 oo.lrn[tr] = oo.build_lrnLambda2(tr)
 
     def allocateSmp(self, iters):
@@ -239,19 +238,16 @@ class mcmcARspk1(mAR.mcmcAR):
                 oo.dfPSTH = oo.B.shape[1] 
             oo.B = oo.B.T    #  My convention for beta
 
-            print "CCCCCCC"
             if oo.aS is None:
                 oo.aS = _N.linalg.solve(_N.dot(oo.B, oo.B.T), _N.dot(oo.B, _N.ones(oo.t1 - oo.t0)*0.01))   #  small amplitude psth at first
             oo.u_a            = _N.zeros(oo.dfPSTH)
         else:
             oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), df=4, include_intercept=True)    #  spline basis
 
-            print "DDDDDDDD"
             oo.B = oo.B.T    #  My convention for beta
             oo.aS = _N.zeros(4)
 
             #oo.u_a            = _N.ones(oo.dfPSTH)*_N.mean(oo.us)
-            print "~^^^^^^^^^^^^^^^^^^^^"
             oo.u_a            = _N.zeros(oo.dfPSTH)
 
     def build_lrnLambda2(self, tr):
@@ -284,14 +280,11 @@ class mcmcARspk1(mAR.mcmcAR):
             if (ivrtISI > 2) and (ivrtISI > spkts[0]):
                 bDone = True
 
-        print ivrtISI
         if not bDone:
             ivrtISI = 1  #  spkts[0] is SO large, don't even worry about history
         #  if vrtISI == oo.y[tr, 0] + 2, put virtual 2 bins back in time
 
         bckwds = ivrtISI - spkts[0]
-        print "bckwds   %d" % bckwds
-        #if bckwds < lh:
         if (bckwds >= 0) and (bckwds < lh) :
             lrn[0:lh-bckwds] = oo.l2[bckwds:]
 

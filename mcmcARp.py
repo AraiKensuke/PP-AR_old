@@ -13,6 +13,7 @@ from kflib import createDataAR
 import numpy as _N
 import patsy
 import re as _re
+import matplotlib.pyplot as _plt
 
 import scipy.stats as _ss
 from kassdirs import resFN, datFN
@@ -334,7 +335,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oo.zts   = None
 
         dmp = open("mARp.dump", "wb")
-        pickle.dump(pcklme, dmp)
+        pickle.dump(pcklme, dmp, -1)
         dmp.close()
 
         # import pickle
@@ -379,6 +380,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         print (t2-t1)
 
     def runLatent(self, pckl, trials=None): ###########  RUN
+        """
+        """
         oo     = self    #  call self oo.  takes up less room on line
         oo.setname = os.getcwd().split("/")[-1]
 
@@ -393,8 +396,58 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oo.loadDat(trials)
         oo.setParams()
         oo.us = pckl[0]
-        oo.q2 = _N.ones(len(trials))*pckl[1]
-        oo.F0 = (-1*_Npp.polyfromroots(pckl[2])[::-1].real)[1:]
+        oo.q2 = _N.ones(oo.TR)*pckl[1]
+        oo.F0 = _N.zeros(oo.k)
+        print len(pckl[2])
+        for l in xrange(len(pckl[2])):
+            oo.F0 += (-1*_Npp.polyfromroots(pckl[2][l])[::-1].real)[1:]
+        oo.F0 /= len(pckl[2])
+        oo.aS = pckl[3]
         
         oo.latentState()
-        print (t2-t1)
+
+    def findMode(self, startIt=None, NB=20, NeighB=1):
+        oo  = self
+        startIt = oo.burn if startIt == None else startIt
+        aus = _N.mean(oo.smp_u[:, startIt:], axis=1)
+        aSs = _N.mean(oo.smp_aS[startIt:], axis=0)
+
+        L   = oo.burn + oo.NMC - startIt
+
+        hist, bins = _N.histogram(oo.fs[startIt:, 0], _N.linspace(_N.min(oo.fs[startIt:, 0]), _N.max(oo.fs[startIt:, 0]), NB))
+        indMfs =  _N.where(hist == _N.max(hist))[0][0]
+        indMfsL =  max(indMfs - NeighB, 0)
+        indMfsH =  min(indMfs + NeighB+1, NB-1)
+        loF, hiF = bins[indMfsL], bins[indMfsH]
+
+        hist, bins = _N.histogram(oo.amps[startIt:, 0], _N.linspace(_N.min(oo.amps[startIt:, 0]), _N.max(oo.amps[startIt:, 0]), NB))
+        indMamps  =  _N.where(hist == _N.max(hist))[0][0]
+        indMampsL =  max(indMamps - NeighB, 0)
+        indMampsH =  min(indMamps + NeighB+1, NB)
+        loA, hiA = bins[indMampsL], bins[indMampsH]
+
+        fig = _plt.figure(figsize=(8, 8))
+        fig.add_subplot(2, 1, 1)
+        _plt.hist(oo.fs[startIt:, 0], bins=_N.linspace(_N.min(oo.fs[startIt:, 0]), _N.max(oo.fs[startIt:, 0]), NB), color="black")
+        _plt.axvline(x=loF, color="red")
+        _plt.axvline(x=hiF, color="red")
+        fig.add_subplot(2, 1, 2)
+        _plt.hist(oo.amps[startIt:, 0], bins=_N.linspace(_N.min(oo.amps[startIt:, 0]), _N.max(oo.amps[startIt:, 0]), NB), color="black")
+        _plt.axvline(x=loA, color="red")
+        _plt.axvline(x=hiA, color="red")
+        _plt.savefig(resFN("chosenFsAmps", dir=oo.setname))
+        _plt.close()
+
+        indsFs = _N.where((oo.fs[startIt:, 0] >= loF) & (oo.fs[startIt:, 0] <= hiF))
+        indsAs = _N.where((oo.amps[startIt:, 0] >= loA) & (oo.amps[startIt:, 0] <= hiA))
+
+        asfsInds = _N.intersect1d(indsAs[0], indsFs[0]) + startIt
+        q = _N.mean(oo.smp_q2[0, startIt:])
+
+
+        #alfas = _N.mean(oo.allalfas[asfsInds], axis=0)
+        pcklme = [aus, q, oo.allalfas[asfsInds], aSs]
+        
+        dmp = open(resFN("bestParams.pkl", dir=oo.setname), "wb")
+        pickle.dump(pcklme, dmp, -1)
+        dmp.close()

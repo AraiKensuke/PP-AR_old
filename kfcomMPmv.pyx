@@ -122,7 +122,8 @@ def BSvecChol(F, N, _N.intp_t k, GQGT, fx, fV, smXN):
 
     cdef _N.intp_t t, i, n
 
-    for n in xrange(N - 1, -1, -1):
+    #for n in xrange(N - 1, -1, -1):
+    for n from N > n >= 0:
         _N.dot(A[n], smX[n+1], out=Asx)
         smXmv[n, k-1] = zrmnmv[n, k-1] + Asxmv[k-1] + INAFfxmv[n]
         for i from 0 <= i < k-1:
@@ -146,12 +147,62 @@ def BSvecSVD(F, N, _N.intp_t k, GQGT, fx, fV, smXN):
     fFT     = _N.empty((N+1, k, k))    
     _N.dot(fV, F.T, out=fFT)  # dot([N+1 x k x k], [k, k])
     FfFTr     = _N.empty((k, k, N+1))
-    _N.dot(F, fFT.T, out=FfFTr)
+    _N.dot(F, fFT.T, out=FfFTr)  #  FfFTr[:, :, n]  is symmetric
     iv     = _N.linalg.inv(FfFTr.T + _N.tile(GQGT, (N+1,1,1)))
 
     A      = _N.empty((N+1, k, k))# "nik,nkj->nij", fFT, iv
     for j in xrange(N+1):
        _N.dot(fFT[j], iv[j], out=A[j])
+
+    INAF   = IkN - _N.dot(A, F)
+    PtN = _N.einsum("nj,nj->n", INAF[:, k-1], fV[:,k-1])
+
+    #print PtN
+
+    mvn1   = _N.random.randn(N+1)  #  
+    zrmn     = _N.sqrt(PtN)*mvn1
+
+    #  out of order calculation.  one of the terms can be calculated
+    INAFfx = _N.einsum("nj,nj->n", INAF[:, k-1], fx[:, :, 0])  #  INAF last row only
+    cdef double[::1] INAFfxmv = INAFfx
+    last   = _N.zeros(k)
+    last[k-1] = 1
+
+    #  temp storage
+    Asx = _N.empty(k)
+    cdef double[::1] Asxmv = Asx
+
+    cdef _N.intp_t t, i, n
+
+    for n in xrange(N - 1, -1, -1):
+        _N.dot(A[n], smX[n+1], out=smX[n])
+        smXmv[n, k-1] += zrmn[n] + INAFfxmv[n]
+
+
+    return smX
+
+
+
+###  Most expensive operation here is the SVD
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def BSvecSVD_new(F, N, _N.intp_t k, GQGT, fx, fV, smXN):
+    #print "SVD"
+    #global Ik, IkN
+    Ik      = _N.identity(k)
+    IkN   =  _N.tile(Ik, (N+1, 1, 1))
+    smX   = _N.empty((N+1, k))   #  where to store our samples
+    cdef double[:, ::1] smXmv = smX   #  memory view
+    smX[N] = smXN[:]
+
+    fFT     = _N.empty((N+1, k, k))    
+    _N.dot(fV, F.T, out=fFT)  # dot([N+1 x k x k], [k, k])
+    FfFTr     = _N.empty((k, k, N+1))
+    _N.dot(F, fFT.T, out=FfFTr)  #  FfFTr[:, :, n]  is symmetric
+
+    ##  was doing B^{-1}, but we only want result of operation on B^{-1}.
+    B      = FfFTr.T + _N.tile(GQGT, (N+1,1,1))
+    A = _N.transpose(_N.linalg.solve(B, _N.transpose(fFT, axes=(0, 2, 1))), axes=(0, 2, 1))
 
     INAF   = IkN - _N.dot(A, F)
     PtN = _N.einsum("nj,nj->n", INAF[:, k-1], fV[:,k-1])

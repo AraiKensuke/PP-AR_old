@@ -73,6 +73,9 @@ class mcmcARp(mcmcARspk.mcmcARspk):
     sig_ph0L      = -1
     sig_ph0H      = 0
 
+    #  1 offset for all trials
+    bIndOffset    = True
+
     def gibbsSamp(self, burns=None):  ###########################  GIBBSSAMPH
         oo          = self
         ooTR        = oo.TR
@@ -164,9 +167,17 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 lm_f  = _N.dot(lv_f, smWimOm)  #  nondiag of 1./Bi are inf
                 #  now sample
                 iVAR = _N.dot(oo.B, _N.dot(ilv_f, oo.B.T)) + iD_f
+                t4a = _tm.time()
                 VAR  = _N.linalg.inv(iVAR)  #  knots x knots
-                iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
-                Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
+                t4b = _tm.time()
+                #iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
+                #Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
+
+                Mn = oo.u_a + _N.dot(DB, _N.linalg.solve(BDB + lv_f, lm_f - BTua))
+
+                t4c = _tm.time()
+
+
 
                 oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
                 oo.smp_aS[it, :] = oo.aS
@@ -186,6 +197,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 VAR  = _N.linalg.inv(iVAR)  #
                 Mn    = _N.dot(VAR, _N.dot(ilv_u, lm_u) + iD_u_u_u)
                 oo.us[:]  = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
+                if not oo.bIndOffset:
+                    oo.us[:] = _N.mean(oo.us)
                 oo.smp_u[:, it] = oo.us
 
             t4 = _tm.time()
@@ -252,11 +265,16 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             print "t2-t1 %.3f" % (t2-t1)
             print "t3-t2 %.3f" % (t3-t2)
             print "t4-t3 %.3f" % (t4-t3)
-            print "t5-t4 %.3f" % (t5-t4)
+            print "t4a-t4 %.3f" % (t4a-t4)
+            print "t4b-t4a %.3f" % (t4b-t4a)
+            print "t4c-t4b %.3f" % (t4c-t4b)
+            #print "***t4d-t4c %.3f" % (t4d-t4c)
+
+            print "t5-t4b %.3f" % (t5-t4b)
             print "t6-t5 %.3f" % (t6-t5)
             print "gibbs iter %.3f" % (t6-t1)
 
-    def latentState(self, burns=None):  ###########################  GIBBSSAMPH
+    def latentState(self, burns=None, useMeanOffset=False):  ###########################  GIBBSSAMPH
         oo          = self
         ooTR        = oo.TR
         ook         = oo.k
@@ -270,7 +288,10 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         
         it    = -1
 
+        if useMeanOffset:
+            oo.us[:] = _N.mean(oo.us)
         oous_rs = oo.us.reshape((ooTR, 1))
+        
         runTO = ooNMC + oo.burn - 1 if (burns is None) else (burns - 1)
         oo.allocateSmp(runTO+1)
 
@@ -325,7 +346,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
     def dump(self):
         oo    = self
         pcklme = [oo]
-        oo.Bsmpx = None
+        #oo.Bsmpx = None
         oo.smpx  = None
         oo.wts   = None
         oo.uts   = None
@@ -379,7 +400,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         t2    = _tm.time()
         print (t2-t1)
 
-    def runLatent(self, pckl, trials=None): ###########  RUN
+    def runLatent(self, pckl, trials=None, useMeanOffset=False): ###########  RUN
         """
         """
         oo     = self    #  call self oo.  takes up less room on line
@@ -404,7 +425,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oo.F0 /= len(pckl[2])
         oo.aS = pckl[3]
         
-        oo.latentState()
+        oo.latentState(useMeanOffset=useMeanOffset)
 
     def findMode(self, startIt=None, NB=20, NeighB=1):
         oo  = self

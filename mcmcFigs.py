@@ -7,6 +7,7 @@ from filter import gauKer, lpFilt
 import scipy.signal as _ssig
 import myColors as mC
 import modhist2 as mh2
+from tmrsclTest import timeRescaleTest, zoom
 
 def last_fsamps(mARp, tr0, tr1):
     amps    = mARp.amps[tr0:tr1, 0]
@@ -26,7 +27,7 @@ def last_fsamps(mARp, tr0, tr1):
     _plt.hist(amps, bins=_N.linspace(minamps, maxamps, nbins))
     _plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
     _plt.title("tr0=%(1)d  tr1=%(2)d" % {"1" : tr0, "2" : tr1})
-    _plt.savefig("last_fsamps")
+    _plt.savefig("last_fsamps.eps")
     _plt.close()
 
 def showFsHist(mARp, low, hi, nbins=100):
@@ -193,6 +194,8 @@ def histPhase0_phaseInfrd(mARp, _mdn, t0=None, t1=None, bRealDat=False, trials=N
     fig.subplots_adjust(left=0.17, bottom=0.17, right=0.95, top=0.9)
     if fn is None:
         fn = "fxPhase1_phaseInfrd,R=%.3f.eps" % _N.sqrt(R2)
+    else:
+        fn = "%(1)s,R=%(2).3f.eps" % {"1" : fn, "2" : _N.sqrt(R2)}
 
     _plt.savefig(fn, transparent=True)
     _plt.close()
@@ -285,7 +288,6 @@ def plotWFandSpks(mARp, zts0, sFilename="latnt,GrdTr,Spks", tMult=1, intv=None, 
         #_plt.yticks(fontsize=20)
         _plt.yticks([])
 
-
         tcks = _plt.xticks()
         ot   = _N.array(tcks[0], dtype=_N.int)
         mt   = _N.array(tcks[0] * tMult, dtype=_N.int)
@@ -318,6 +320,24 @@ def plotWFandSpks(mARp, zts0, sFilename="latnt,GrdTr,Spks", tMult=1, intv=None, 
 
     return mdn
 
+def plotSingleCIFwSpikes(y, cifs, trl, filename="singleTrialCIF", ylim=None, xlim=None, yticks=None, xticks=None):
+    fig = _plt.figure(figsize=(13, 4))
+    ax  = fig.add_subplot(1, 1, 1)
+    _plt.plot(cifs[trl]*1000, color=mC.smpld, lw=2)
+
+    spkts = _N.where(y[trl] == 1)[0]
+    sky   = _N.mean(cifs[trl])*1000 * 0.2
+    for ts in spkts:
+        _plt.plot([ts, ts], [0, sky], color="black", lw=2)
+
+    bottomLeftAxes(ax)
+    setTicksAndLims(xlabel="time (ms)", ylabel="Hz", xticks=xticks, yticks=yticks, xlim=xlim, ylim=ylim, tickFS=26, labelFS=28)
+
+    fig.subplots_adjust(left=0.08, bottom=0.25, top=0.95, right=0.95)
+    if filename != None:
+        _plt.savefig("%(fn)s,tr=%(tr)d.eps" % {"fn" : filename, "tr" : trl}, transparent=True)
+    _plt.close()
+
 def plotPSTH(mARp):
     fig = _plt.figure(figsize=(6, 4))
     meanPSTH = _N.mean(_N.dot(mARp.B.T, mARp.smp_aS[mARp.burn:mARp.burn+mARp.NMC].T), axis=1)
@@ -326,19 +346,28 @@ def plotPSTH(mARp):
     _plt.close()
     return meanPSTH
 
-def plotFsAmp(mARp, tr0=None, tr1=None):
+def plotFsAmp(mARp, tr0=None, tr1=None, xticks=None, yticksFrq=None, yticksMod=None, yticksAmp=None, fMult=1):
     if tr0 is None:
         tr0 = 1
     if tr1 is None:
         tr1 = mARp.burn + mARp.NMC
-    fig = _plt.figure(figsize=(5, 8.5))
-    fig.add_subplot(3, 1, 1)
-    _plt.plot(mARp.fs[tr0:tr1, 0])
-    fig.add_subplot(3, 1, 2)
-    _plt.plot(mARp.amps[tr0:tr1, 0])
-    fig.add_subplot(3, 1, 3)
-    _plt.plot(mARp.mnStds[tr0:tr1])
-    _plt.savefig("fs_amps")
+    fig = _plt.figure(figsize=(12, 3))
+    ax  = fig.add_subplot(1, 3, 1)
+    _plt.plot((mARp.fs[tr0:tr1, 0]/fMult)*1000, color=mC.msurd)
+    setTicksAndLims(xlabel="iterations", ylabel="Hz", xticks=xticks, yticks=yticksFrq, xlim=tr1, tickFS=20, labelFS=20)
+    bottomLeftAxes(ax)
+    ######
+    ax = fig.add_subplot(1, 3, 2)
+    _plt.plot(mARp.amps[tr0:tr1, 0], color=mC.msurd)
+    setTicksAndLims(xlabel="iterations", ylabel="modulus", xticks=xticks, yticks=yticksMod, xlim=tr1, tickFS=20, labelFS=20)
+    bottomLeftAxes(ax)
+    ######
+    ax = fig.add_subplot(1, 3, 3)
+    _plt.plot(mARp.mnStds[tr0:tr1], color=mC.msurd)
+    setTicksAndLims(xlabel="iterations", ylabel="amplitude", xticks=xticks, yticks=yticksAmp, xlim=tr1, tickFS=20, labelFS=20)
+    bottomLeftAxes(ax)
+    fig.subplots_adjust(left=0.1, bottom=0.25, top=0.95, right=0.95, wspace=0.4, hspace=0.4)
+    _plt.savefig("fs_amps.eps", transparent=True)
     _plt.close()
 
 def corrcoeffs(mARp, mdn, bRealDat=False):
@@ -476,3 +505,210 @@ def findStationaryMCMCIters(mARp, win=30):
         print "use from trial=%(1)d  to %(2)d" % {"1" : firstTR, "2" : lastTR}
 
     return firstTR, lastTR
+
+
+def smplLatentFitTest(mARp, trSt=50, trEn=200, trSkp=5, fontsize=22, uo=None):
+    us = _N.array(mARp.us)
+    if uo is not None:
+        us += uo
+    osc = mARp.Bsmpx[:, ((trEn+trSt)/2), 2:]
+    us = us.reshape(mARp.TR, 1)
+
+    cif = mARp.CIF(us, mARp.aS, osc)
+    fr       = cif/mARp.dt
+    m        = 10
+    dtm      = mARp.dt / m
+    x, zss, bs, bsp, bsn = timeRescaleTest(fr, mARp.y, mARp.dt, mARp.TR, m, nohist=False)
+
+    fig, ax = _plt.subplots(figsize=(5, 5))
+    _plt.fill_between(x, bsn, bsp, color="darkgrey", alpha=0.8)
+    ax.set_aspect("equal", "datalim")
+    _plt.xlim(-0.02, 1.02)
+    _plt.ylim(-0.02, 1.02)
+
+    iii=0
+
+    pvDs   = _N.empty(((trEn-trSt)/trSkp, 2))
+    for ii in xrange(trSt, trEn, trSkp):
+        us = _N.array(mARp.us)
+        if uo is not None:
+            us += uo
+        osc = mARp.Bsmpx[:, ii, 2:]
+        us = us.reshape(mARp.TR, 1)
+
+        cif = mARp.CIF(us, mARp.aS, osc)
+
+        fr       = cif/mARp.dt
+
+        m        = 10
+        dtm      = mARp.dt / m
+        x, zss, bs, bsp, bsn = timeRescaleTest(fr, mARp.y, mARp.dt, mARp.TR, m, nohist=False)
+        #allzsss[iii] = zss
+        _plt.plot(x, zss, color=mC.smpld, lw=0.8)
+
+        KS_D, pv = _ss.kstest(zss, "uniform")
+        pvDs[iii, :] = KS_D, pv
+
+        iii+=1
+
+    _plt.plot(x, bs, ls="--", color="black", lw=2)
+    _plt.xticks([0, 0.25, 0.5, 0.75, 1], ["0", "0.25", "0.5", "0.75", "1"], fontsize=fontsize)
+    _plt.yticks([0, 0.25, 0.5, 0.75, 1], ["0", "0.25", "0.5", "0.75", "1"], fontsize=fontsize)
+    fig.subplots_adjust(left=0.18, bottom=0.18, right=0.95, top=0.95)
+    
+    if uo is None:
+        _plt.savefig("AR-KS.eps", transparent=True)
+    else:
+        _plt.savefig("AR-KS%.3f.eps" % uo, transparent=True)
+    
+    return pvDs
+
+def cmpAR2GLM(pvDs, bestD, bestpv, xticksD=None, xtickspv=None, fontsize=20, uo=None):
+    fig = _plt.figure(figsize=(10, 3))
+
+    DMax  = max(_N.max(pvDs[:, 0]), bestD)
+    DMin  = min(_N.min(pvDs[:, 0]), bestD)
+
+    lpvMax = max(_N.max(_N.log10(pvDs[:, 1])), _N.log10(bestpv))
+    lpvMin = min(_N.min(_N.log10(pvDs[:, 1])), _N.log10(bestpv))
+    #
+    sbp = fig.add_subplot(1, 2, 1)
+    ax     = sbp.get_axes()
+    _plt.hist(pvDs[:, 0], bins=_N.linspace(0.9*DMin, 1.1*DMax, 20), color=mC.hist1)
+    _plt.axvline(x=bestD, color="red", lw=2)
+    if xticksD is None:
+        _plt.xticks(fontsize=fontsize);  _plt.yticks(fontsize=fontsize)
+    else:
+        _plt.xticks(xticksD, fontsize=fontsize);  _plt.yticks(fontsize=fontsize)
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+    ax.yaxis.set_ticks_position("left")
+    ax.xaxis.set_ticks_position("bottom")
+
+    sbp    = fig.add_subplot(1, 2, 2)
+    ax     = sbp.get_axes()
+    _plt.hist(_N.log10(pvDs[:, 1]), bins=_N.linspace(lpvMin-0.5, lpvMax+0.5, 20), color=mC.hist1)
+    _plt.axvline(x=_N.log10(bestpv), color="red", lw=2)
+    if xtickspv is None:
+        _plt.xticks(fontsize=fontsize);  _plt.yticks(fontsize=fontsize)
+    else:
+        _plt.xticks(xtickspv, fontsize=fontsize);  _plt.yticks(fontsize=fontsize)
+    fig.subplots_adjust(left=0.13, bottom=0.13, top=0.95, right=0.95)
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+    ax.yaxis.set_ticks_position("left")
+    ax.xaxis.set_ticks_position("bottom")
+
+    if uo is None:
+        _plt.savefig("histD-pv.eps", transparent=True)
+    else:
+        _plt.savefig("histD-pv%.3f.eps" % uo, transparent=True)
+    _plt.close()
+
+def setTicksAndLims(xlabel=None, ylabel=None, xticks=None, yticks=None, xlim=None, ylim=None, tickFS=26, labelFS=28):
+    if xticks is not None:
+        _plt.xticks(xticks, fontsize=tickFS)
+    else:
+        _plt.xticks(fontsize=tickFS)
+    if yticks is not None:
+        _plt.yticks(yticks, fontsize=tickFS)
+    else:
+        _plt.yticks(fontsize=tickFS)
+
+    if xlim is not None:
+        _plt.xlim(0, xlim)
+    if ylim is not None:
+        _plt.ylim(0, ylim)
+
+    if xlabel is not None:
+        _plt.xlabel(xlabel, fontsize=labelFS)
+    if ylabel is not None:
+        _plt.ylabel(ylabel, fontsize=labelFS)
+
+def bottomLeftAxes(ax, bottomVis=True, leftVis=True):
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+    ax.spines["bottom"].set_visible(bottomVis)
+    ax.spines["left"].set_visible(leftVis)
+
+    ax.yaxis.set_ticks_position("left")
+    ax.xaxis.set_ticks_position("bottom")
+    ax.spines["right"].axis.axes.tick_params(direction="outward", width=2)
+    ax.spines["top"].axis.axes.tick_params(direction="outward", width=2)
+
+def arbitaryAxes(ax, axesVis=[True, True, True, True], x_tick_positions="bottom", y_tick_positions="left"):
+    """
+    Left, Bottom, Right, Top
+    "bottom", "top", "both", "none"
+    "left", "right", "both", "none"
+    """
+    ax.spines["left"].set_visible(axesVis[0])
+    ax.spines["bottom"].set_visible(axesVis[1])
+    ax.spines["right"].set_visible(axesVis[2])
+    ax.spines["top"].set_visible(leftVis)
+
+    ax.xaxis.set_ticks_position(x_tick_positions)
+    ax.yaxis.set_ticks_position(y_tick_positions)
+
+    ax.spines["right"].axis.axes.tick_params(direction="outward", width=2)
+    ax.spines["top"].axis.axes.tick_params(direction="outward", width=2)
+
+
+def vstackedPlots(ax, bottom=False):
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+    if not bottom:
+        ax.spines["bottom"].set_visible(False)
+        _plt.xticks([])
+    else:
+        ax.xaxis.set_ticks_position("bottom")
+    ax.yaxis.set_ticks_position("left")
+
+    ax.spines["right"].axis.axes.tick_params(direction="outward", width=2)
+    if bottom:
+        ax.spines["top"].axis.axes.tick_params(direction="outward", width=2)
+
+def arbitraryAxes(ax, axesVis=[True, True, True, True], xtpos="bottom", ytpos="left"):
+    """
+    Left, Bottom, Right, Top        Axes line itself
+    xtpos               "bottom", "top", "both", "none"
+    "left", "right", "both", "none"
+    """
+    ax.spines["left"].set_visible(axesVis[0])
+    ax.spines["bottom"].set_visible(axesVis[1])
+    ax.spines["right"].set_visible(axesVis[2])
+    ax.spines["top"].set_visible(axesVis[3])
+
+    ax.xaxis.set_ticks_position(xtpos)
+    ax.yaxis.set_ticks_position(ytpos)
+
+    ax.spines["left"].axis.axes.tick_params(direction="inward", width=2)
+    ax.spines["bottom"].axis.axes.tick_params(direction="outward", width=2)
+    ax.spines["right"].axis.axes.tick_params(direction="outward", width=2)
+    ax.spines["top"].axis.axes.tick_params(direction="outward", width=2)
+
+
+def setLabelTicks(plt, xticks=None, xticksDsp=None, yticks=None, yticksDsp=None, xlabel=None, ylabel=None, xtickFntSz=None, ytickFntSz=None, xlabFntSz=None, ylabFntSz=None):
+    xtickFntSz = 20 if (xtickFntSz is None) else xtickFntSz
+    ytickFntSz = 20 if (ytickFntSz is None) else ytickFntSz
+    xlabFntSz  = 20 if (xlabFntSz is None)  else xlabFntSz
+    ylabFntSz  = 20 if (ylabFntSz is None)  else ylabFntSz
+
+    if (xticks is not None) and (xticksDsp is not None):
+        plt.xticks(xticks, xticksDsp, fontsize=xtickFntSz)
+    elif (xticks is not None):
+        plt.xticks(xticks, fontsize=xtickFntSz)
+    elif (xticks is None):
+        plt.xticks(fontsize=xtickFntSz)
+
+    if (yticks is not None) and (yticksDsp is not None):
+        plt.yticks(yticks, yticksDsp, fontsize=ytickFntSz)
+    elif (yticks is not None):
+        plt.yticks(yticks, fontsize=ytickFntSz)
+    elif (yticks is None):
+        plt.yticks(fontsize=ytickFntSz)
+
+    if xlabel is not None:
+        plt.xlabel(xlabel, fontsize=xlabFntSz)
+    if ylabel is not None:
+        plt.ylabel(ylabel, fontsize=ylabFntSz)

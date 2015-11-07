@@ -14,6 +14,7 @@ from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
 import numpy.polynomial.polynomial as _Npp
 from kflib import createDataAR
 import patsy
+import pickle
 
 class mcmcARspk(mAR.mcmcAR):
     ##  
@@ -79,6 +80,7 @@ class mcmcARspk(mAR.mcmcAR):
     #  knownSig
     knownSigFN      = None
     knownSig        = None
+    xknownSig       = 1   #  multiply knownSig by...
 
     def __init__(self):
         if (self.noAR is not None) or (self.noAR == False):
@@ -154,7 +156,8 @@ class mcmcARspk(mAR.mcmcAR):
         oo.ws          = _N.empty((oo.TR, oo.N+1), dtype=_N.float)
         oo.lrn   = _N.empty((oo.TR, oo.N+1))
 
-        oo.us    = _N.zeros(oo.TR)
+        if oo.us is None:
+            oo.us    = _N.zeros(oo.TR)
 
         tot_isi = 0
         nisi    = 0
@@ -166,7 +169,7 @@ class mcmcARspk(mAR.mcmcAR):
         oo.mean_isi_1st2spks = float(tot_isi) / nisi
         #####  LOAD spike history
         oo.l2 = loadL2(oo.setname, fn=oo.histFN)
-        oo.knownSig = loadKnown(oo.setname, trials=oo.useTrials, fn=oo.knownSigFN)
+        oo.knownSig = loadKnown(oo.setname, trials=oo.useTrials, fn=oo.knownSigFN) 
         if oo.l2 is None:
             oo.lrn[:] = 1
         else:
@@ -176,12 +179,14 @@ class mcmcARspk(mAR.mcmcAR):
                 oo.lrn[tr] = oo.build_lrnLambda2(tr)
         if oo.knownSig is None:
             oo.knownSig = _N.zeros((oo.TR, oo.N+1))
+        else:
+            oo.knownSig *= oo.xknownSig
 
     def allocateSmp(self, iters):
         oo = self
         print "^^^^^^   allocateSmp  %d" % iters
         ####  initialize
-        oo.Bsmpx        = _N.zeros((oo.TR, iters, (oo.N+1) + 2))
+        #oo.Bsmpx        = _N.zeros((oo.TR, iters, (oo.N+1) + 2))
         oo.smp_u        = _N.zeros((oo.TR, iters))
         if oo.bpsth:
             oo.smp_aS        = _N.zeros((iters, oo.dfPSTH))
@@ -189,8 +194,8 @@ class mcmcARspk(mAR.mcmcAR):
         oo.smp_x00      = _N.empty((oo.TR, iters, oo.k))
         #  store samples of
         oo.allalfas     = _N.empty((iters, oo.k), dtype=_N.complex)
-        oo.uts          = _N.empty((oo.TR, iters, oo.R, oo.N+2))
-        oo.wts          = _N.empty((oo.TR, iters, oo.C, oo.N+3))
+        #oo.uts          = _N.empty((oo.TR, iters, oo.R, oo.N+2))
+        #oo.wts          = _N.empty((oo.TR, iters, oo.C, oo.N+3))
         oo.ranks        = _N.empty((iters, oo.C), dtype=_N.int)
         oo.pgs          = _N.empty((oo.TR, iters, oo.N+1))
         oo.fs           = _N.empty((iters, oo.C))
@@ -330,7 +335,7 @@ class mcmcARspk(mAR.mcmcAR):
             _N.divide(oo.lrn_scr1, oo.lrn_scr2, out=oo.lrn_scr3)  #ex / (1+ex)
             _N.multiply(oo.lrn_scr3, oo.lrn[m], out=oo.sprb[m])#(lam ex)/(1+ex)
 
-            _N.exp(-smpx[m] - BaS - us[m], out=oo.lrn_iscr1)  #e{-x}
+            _N.exp(-smpx[m] - BaS - us[m] - knownSig[m], out=oo.lrn_iscr1)  #e{-x}
             _N.add(0.99, 0.99*oo.lrn_iscr1, out=oo.lrn_scld)  # 0.99(1 + e-x)
             sat = _N.where(oo.sprb[m] > 0.99)
             if len(sat[0]) > 0:
@@ -345,6 +350,7 @@ class mcmcARspk(mAR.mcmcAR):
             #     _plt.plot(oo.s_lrn[m], lw=2)
 
             _N.log(oo.s_lrn[m] / (1 + (1 - oo.s_lrn[m])*oo.lrn_scr1), out=ARo[m])   #  history Offset   ####TRD change
+            #print ARo[m]
 
     def getComponents(self):
         oo    = self
@@ -394,6 +400,17 @@ class mcmcARspk(mAR.mcmcAR):
         # with open("mARp.dump", "rb") as f:
         # lm = pickle.load(f)
 
+
+    def readdump(self):
+        oo    = self
+
+        with open("mARp.dump", "rb") as f:
+            lm = pickle.load(f)
+        f.close()
+        oo.F_alfa_rep = lm[0].allalfas[-1].tolist()
+        oo.q20 = lm[0].q2[0]
+        oo.aS  = lm[0].aS
+        oo.us  = lm[0].us
 
     def CIF(self, us, alps, osc):
         oo = self

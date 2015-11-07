@@ -17,7 +17,7 @@ import numpy.polynomial.polynomial as _Npp
 import time as _tm
 import ARlib as _arl
 import kfARlibMPmv as _kfar
-import LogitWrapper as lw
+import pyPG as lw
 from ARcfSmpl import ARcfSmpl, FilteredTimeseries
 
 import commdefs as _cd
@@ -26,11 +26,13 @@ from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
 from multiprocessing import Pool
 
 import os
-import mcmcARp as mARp
+import mcmcARspk as mARspk
+
+from multiprocessing import Pool
 
 import matplotlib.pyplot as _plt
 
-class mcmcARpBM(mARp.mcmcARp):
+class mcmcARpBM(mARspk.mcmcARspk):
     ###########  TEMP
     THR           = None
     startZ        = 0
@@ -54,10 +56,13 @@ class mcmcARpBM(mARp.mcmcARp):
     #  initial value
     lowStates     = None   #  
 
-    def initGibbs(self):   ################################ INITGIBBS
+    def allocateSmp(self, iters):   ################################ INITGIBBS
         oo   = self
 
-        mARp.mcmcARp.initGibbs(oo)
+        if oo.processes > 1:
+            os.system("taskset -p 0xff %d" % os.getpid())
+
+        oo.__class__.__bases__[0].allocateSmp(oo, iters)
 
         oo.smp_zs    = _N.zeros((oo.TR, oo.burn + oo.NMC, oo.nStates))
         oo.smp_ms    = _N.zeros((oo.burn + oo.NMC, oo.nStates))
@@ -103,6 +108,8 @@ class mcmcARpBM(mARp.mcmcARp):
         ook         = oo.k
         ooNMC       = oo.NMC
         ooN         = oo.N
+
+        oo.allocateSmp(oo.burn + oo.NMC)
         oo.x00         = _N.array(oo.smpx[:, 2])
         oo.V00         = _N.zeros((ooTR, ook, ook))
 
@@ -182,11 +189,15 @@ class mcmcARpBM(mARp.mcmcARp):
         dirArgs = _N.empty(oo.nStates)  #  dirichlet distribution args
         expT= _N.empty(ooN+1)
         BaS = _N.dot(oo.B.T, oo.aS)
+        print BaS
 
         oo.nSMP_smpxC = 0
+        if oo.processes > 1:
+            pool = Pool(processes=oo.processes)
+
         while (it < ooNMC + oo.burn - 1):
             lowsts = _N.where(oo.Z[:, 0] == 1)
-            print "lowsts   %s" % str(lowsts)
+            #print "lowsts   %s" % str(lowsts)
             t1 = _tm.time()
             it += 1
             print "****------------  %d" % it
@@ -269,14 +280,16 @@ class mcmcARpBM(mARp.mcmcARp):
             oo.build_addHistory(ARo, zsmpx, BaS, oo.us, lrnBadLoc)
 
             ######  PG generate
+            nanLoc = _N.where(_N.isnan(BaS))
+
             for m in xrange(ooTR):
                 lw.rpg_devroye(oo.rn, zsmpx[m] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe  ####TRD change
                 nanLoc = _N.where(_N.isnan(oo.ws[m]))
                 if len(nanLoc[0]) > 0:
                     loc = nanLoc[0][0]
-                    #print zsmpx[m, loc]
-                    #print oo.us[m]
-                    #print ARo[m]
+                    # print zsmpx[m, loc]
+                    # print oo.us[m]
+                    # print ARo[m]
             _N.divide(oo.kp, oo.ws, out=kpOws)
 
             ########     per trial offset sample
@@ -331,21 +344,30 @@ class mcmcARpBM(mARp.mcmcARp):
             #  _d.F, _d.N, _d.ks, 
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
 
-            for m in xrange(ooTR):
-                oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
-                oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
-                oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
-                oo.x00[m]      = oo.smpx[m, 2]*0.1
-                oo.smp_q2[m, it]= oo.q2[m]
 
-                #oo.SMP_x00[m, oo.nSMP_smpxC] = oo.smpx[m, 2]*0.5
+
+            if oo.processes == 1:
+                for m in xrange(ooTR):
+                    oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
+                    oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                    oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
+                    oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+                    #oo.x00[m]      = oo.smpx[m, 2]*0.1
+                    oo.smp_q2[m, it]= oo.q2[m]
+
+            else:
+                sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
+                for m in xrange(ooTR):
+                    oo.smpx[m, 2:] = sxv[m][0]
+                    oo._d.f_x[m] = sxv[m][1]
+                    oo._d.f_V[m] = sxv[m][2]
+                    oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                    oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
+                    oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+
             stds = _N.std(oo.Bsmpx[:, it, 2:], axis=1)
             mnStd = _N.mean(stds, axis=0)
             print "mnStd  %.3f" % mnStd
-            #oo.nSMP_smpxC += 1
-            #oo.nSMP_smpxC %= oo.nSMP_smpx
-                    
             ###  
 
 
@@ -430,7 +452,42 @@ class mcmcARpBM(mARp.mcmcARp):
             oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)
 
             oo.smp_q2[:, it]= oo.q2
+            t2 = _tm.time()
+            print "gibbs iter %.3f" % (t2-t1)
 
-        t2 = _tm.time()
-        print "gibbs iter %.3f" % (t2-t1)
 
+    def run(self, runDir=None, trials=None, minSpkCnt=0): ###########  RUN
+        oo     = self    #  call self oo.  takes up less room on line
+        if oo.processes > 1:
+            os.system("taskset -p 0xff %d" % os.getpid())
+        oo.setname = os.getcwd().split("/")[-1]
+
+        oo.Cs          = len(oo.freq_lims)
+        oo.C           = oo.Cn + oo.Cs
+        oo.R           = 1
+        oo.k           = 2*oo.C + oo.R
+        #  x0  --  Gaussian prior
+        oo.u_x00        = _N.zeros(oo.k)
+        oo.s2_x00       = _arl.dcyCovMat(oo.k, _N.ones(oo.k), 0.4)
+
+        oo.rs=-1
+        if runDir == None:
+            runDir="%(sn)s/AR%(k)d_[%(t0)d-%(t1)d]" % \
+                {"sn" : oo.setname, "ar" : oo.k, "t0" : oo.t0, "t1" : oo.t1}
+
+        if oo.rs >= 0:
+            unpickle(runDir, oo.rs)
+        else:   #  First run
+            oo.restarts = 0
+
+        oo.loadDat(trials)
+        oo.setParams()
+        t1    = _tm.time()
+        tmpNOAR = oo.noAR
+        oo.noAR = True
+        oo.gibbsSamp()
+
+        oo.noAR = tmpNOAR
+        oo.gibbsSamp()
+        t2    = _tm.time()
+        print (t2-t1)

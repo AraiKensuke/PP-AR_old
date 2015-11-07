@@ -30,10 +30,11 @@ from ARcfSmpl import ARcfSmpl, FilteredTimeseries
 import commdefs as _cd
 
 from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
-
 import os
 
 import mcmcARspk as mcmcARspk
+
+from multiprocessing import Pool
 
 class mcmcARp(mcmcARspk.mcmcARspk):
     #  Description of model
@@ -119,6 +120,9 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oo.allocateSmp(runTO+1)
 
         BaS = _N.empty(oo.N+1)
+
+        if oo.processes > 1:
+            pool = Pool(processes=oo.processes)
 
         while (it < runTO):
             t1 = _tm.time()
@@ -207,12 +211,23 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             #  _d.F, _d.N, _d.ks, 
                 tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
 
-                for m in xrange(ooTR):
-                    oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
-                    oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
-                    oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                    oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
-                stds = _N.std(oo.Bsmpx[:, it, 2:], axis=1)
+                if oo.processes == 1:
+                    for m in xrange(ooTR):
+                        oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
+                        oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                        oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
+                        #oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+                else:
+                    sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
+                    for m in xrange(ooTR):
+                        oo.smpx[m, 2:] = sxv[m][0]
+                        oo._d.f_x[m] = sxv[m][1]
+                        oo._d.f_V[m] = sxv[m][2]
+                        oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                        oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
+                        #oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+                        
+                stds = _N.std(oo.smpx[:, 2:, 0], axis=1)
                 oo.mnStds[it] = _N.mean(stds, axis=0)
                 print "mnStd  %.3f" % oo.mnStds[it]
                 t5 = _tm.time()
@@ -221,13 +236,13 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                     oo.F_alfa_rep = alpR + alpC   #  new constructed
                     prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
                     print prt
-                ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
+                #ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
                 #ranks[it]    = rank
                 oo.allalfas[it] = oo.F_alfa_rep
 
                 for m in xrange(ooTR):
-                    oo.wts[m, it, :, :]   = wt[m, :, :, 0]
-                    oo.uts[m, it, :, :]   = ut[m, :, :, 0]
+                    #oo.wts[m, it, :, :]   = wt[m, :, :, 0]
+                    #oo.uts[m, it, :, :]   = ut[m, :, :, 0]
                     if not oo.bFixF:
                         oo.amps[it, :]  = amp
                         oo.fs[it, :]    = f
@@ -365,6 +380,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
     def run(self, runDir=None, trials=None, minSpkCnt=0): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line
+        if oo.processes > 1:
+            os.system("taskset -p 0xffffffff %d" % os.getpid())
         oo.setname = os.getcwd().split("/")[-1]
 
         oo.Cs          = len(oo.freq_lims)

@@ -182,11 +182,12 @@ class mcmcARspk(mAR.mcmcAR):
         else:
             oo.knownSig *= oo.xknownSig
 
-    def allocateSmp(self, iters):
+    def allocateSmp(self, iters, Bsmpx=False):
         oo = self
         print "^^^^^^   allocateSmp  %d" % iters
         ####  initialize
-        #oo.Bsmpx        = _N.zeros((oo.TR, iters, (oo.N+1) + 2))
+        if Bsmpx:
+            oo.Bsmpx        = _N.zeros((oo.TR, iters, (oo.N+1) + 2))
         oo.smp_u        = _N.zeros((oo.TR, iters))
         if oo.bpsth:
             oo.smp_aS        = _N.zeros((iters, oo.dfPSTH))

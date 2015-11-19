@@ -507,7 +507,7 @@ def findStationaryMCMCIters(mARp, win=30):
     return firstTR, lastTR
 
 
-def smplLatentFitTest(mARp, trSt=50, trEn=200, trSkp=5, fontsize=22, uo=None):
+def smplLatentFitTest(mARp, trSt=50, trEn=200, trSkp=5, fontsize=22, uo=None, useKnownSig=False):
     us = _N.array(mARp.us)
     if uo is not None:
         us += uo
@@ -534,6 +534,8 @@ def smplLatentFitTest(mARp, trSt=50, trEn=200, trSkp=5, fontsize=22, uo=None):
         if uo is not None:
             us += uo
         osc = mARp.Bsmpx[:, ii, 2:]
+        if useKnownSig:
+            osc += mARp.knownSig
         us = us.reshape(mARp.TR, 1)
 
         cif = mARp.CIF(us, mARp.aS, osc)
@@ -556,10 +558,13 @@ def smplLatentFitTest(mARp, trSt=50, trEn=200, trSkp=5, fontsize=22, uo=None):
     _plt.yticks([0, 0.25, 0.5, 0.75, 1], ["0", "0.25", "0.5", "0.75", "1"], fontsize=fontsize)
     fig.subplots_adjust(left=0.18, bottom=0.18, right=0.95, top=0.95)
     
-    if uo is None:
-        _plt.savefig("AR-KS.eps", transparent=True)
+    fn = "AR-KS"
+    if useKnownSig:
+        fn += "-knownSig"
+    if uo is not None:
+        fn += "%.3f"  % uo
     else:
-        _plt.savefig("AR-KS%.3f.eps" % uo, transparent=True)
+        _plt.savefig(fn, transparent=True)
     
     return pvDs
 
@@ -645,7 +650,7 @@ def arbitaryAxes(ax, axesVis=[True, True, True, True], x_tick_positions="bottom"
     ax.spines["left"].set_visible(axesVis[0])
     ax.spines["bottom"].set_visible(axesVis[1])
     ax.spines["right"].set_visible(axesVis[2])
-    ax.spines["top"].set_visible(leftVis)
+    ax.spines["top"].set_visible(axesVis[3])
 
     ax.xaxis.set_ticks_position(x_tick_positions)
     ax.yaxis.set_ticks_position(y_tick_positions)

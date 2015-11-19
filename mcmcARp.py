@@ -300,7 +300,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
         ARo   = _N.empty((ooTR, oo._d.N+1))
         kpOws = _N.empty((ooTR, ooN+1))
-        
+
         it    = -1
 
         if useMeanOffset:
@@ -308,10 +308,13 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oous_rs = oo.us.reshape((ooTR, 1))
         
         runTO = ooNMC + oo.burn - 1 if (burns is None) else (burns - 1)
-        oo.allocateSmp(runTO+1)
+        oo.allocateSmp(runTO+1, Bsmpx=True)
 
         BaS = _N.empty(oo.N+1)
         _N.dot(oo.B.T, oo.aS, out=BaS)
+
+        if oo.processes > 1:
+            pool = Pool(processes=oo.processes)
 
         while (it < runTO):
             t1 = _tm.time()
@@ -347,12 +350,23 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             #  cov matrix, prior of aS 
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
 
-            for m in xrange(ooTR):
-                oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
-                oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
-                oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
-            stds = _N.std(oo.Bsmpx[:, it, 2:], axis=1)
+            if oo.processes == 1:
+                for m in xrange(ooTR):
+                    oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
+                    oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                    oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
+                    oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+            else:
+                sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
+                for m in xrange(ooTR):
+                    oo.smpx[m, 2:] = sxv[m][0]
+                    oo._d.f_x[m] = sxv[m][1]
+                    oo._d.f_V[m] = sxv[m][2]
+                    oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                    oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
+                    oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+
+            stds = _N.std(oo.smpx[:, 2:, 0], axis=1)
             oo.mnStds[it] = _N.mean(stds, axis=0)
             print "mnStd  %.3f" % oo.mnStds[it]
             t6 = _tm.time()

@@ -20,7 +20,8 @@ import time as _tm
 import ARlib as _arl
 import kfARlibMPmv as _kfar
 #import kfARlibMP as _kfar
-import LogitWrapper as lw
+import pyPG as lw
+
 #import pyPG as lw
 from ARcfSmpl import ARcfSmpl, FilteredTimeseries
 
@@ -34,8 +35,6 @@ import os
 
 import mcmcARp as mARp
 
-#os.system("taskset -p 0xff %d" % os.getpid())
-
 class mcmcARpTCS(mARp.mcmcARp):
     #  Current values of params and state
     s             = 0.0        #  trend.  
@@ -44,6 +43,8 @@ class mcmcARpTCS(mARp.mcmcARp):
     
     def run(self, runDir=None, trials=None): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line
+        if oo.processes > 1:
+            os.system("taskset -p 0xffffffff %d" % os.getpid())
         oo.setname = os.getcwd().split("/")[-1]
 
         oo.Cs          = len(oo.freq_lims)
@@ -65,6 +66,7 @@ class mcmcARpTCS(mARp.mcmcARp):
             oo.restarts = 0
 
         oo.loadDat(trials)
+        oo.setParams()
         oo.initGibbs()
         t1    = _tm.time()
         oo.gibbsSamp()
@@ -109,7 +111,7 @@ class mcmcARpTCS(mARp.mcmcARp):
 
         ###############
 
-        oo.Bsmpx        = _N.zeros((oo.TR, oo.NMC+oo.burn, (oo.N+1) + 2))
+        #oo.Bsmpx        = _N.zeros((oo.TR, oo.NMC+oo.burn, (oo.N+1) + 2))
         oo.smp_u        = _N.zeros((oo.TR, oo.burn + oo.NMC))
         oo.smp_ss       = _N.zeros(oo.burn + oo.NMC)
         oo.smp_q2       = _N.zeros((oo.TR, oo.burn + oo.NMC))
@@ -197,7 +199,7 @@ class mcmcARpTCS(mARp.mcmcARp):
                     oo.smpx[m, n, 0:oo.k-1] = oo.smpx[m, n+1, 1:oo.k]
                     oo.smpx[m, n, oo.k-1] = _N.dot(oo.F0, oo.smpx[m, n:n+oo.k, oo.k-2]) # no noise
 
-                oo.Bsmpx[m, 0, :] = oo.smpx[m, :, 0]
+                #oo.Bsmpx[m, 0, :] = oo.smpx[m, :, 0]
 
     def gibbsSamp(self):  ###########################  GIBBSSAMP
         oo          = self
@@ -254,6 +256,10 @@ class mcmcARpTCS(mARp.mcmcARp):
         oous_rs = oo.us.reshape((ooTR, 1))   #  done for broadcasting rules
         lrnBadLoc = _N.empty(oo.N+1, dtype=_N.bool)
 
+        if oo.processes > 1:
+            pool = Pool(processes=oo.processes)
+
+
         while (it < ooNMC + oo.burn - 1):
             print "value of oo.s   %.3f" % oo.s
             for tr in xrange(ooTR):        ###  TREND in modulation strength
@@ -276,20 +282,22 @@ class mcmcARpTCS(mARp.mcmcARp):
             BaS = _N.dot(oo.B.T, oo.aS)
             ###  PG latent variable sample
 
+            oo.build_addHistory(ARo, trSMPX, BaS, oo.us, oo.knownSig)
+
             #tPG1 = _tm.time()
             for m in xrange(ooTR):
                 #_N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(oo.smpx[m, 2:, 0] + BaS + oo.us[m])), out=ARo[m])   #  history Offset    
-                _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(trSMPX[m] + BaS + oo.us[m])), out=ARo[m])   #  history Offset   ####TRD change
-                nani = _N.isnan(ARo[m], out=lrnBadLoc)
-                locs = _N.where(lrnBadLoc == True)
-                if locs[0].shape[0] > 0:
-                    L = locs[0].shape[0]
-                    print "ARo locations bad tr %(m)d  %(L) d" % {"m" : m, "L" : L}
-                    for l in xrange(L):  #  fill with reasonable value
-                        ARo[m, locs[0][l]] = ARo[m, locs[0][l] - 1]
+                # _N.log(oo.lrn[m] / (1 + (1 - oo.lrn[m])*_N.exp(trSMPX[m] + BaS + oo.us[m])), out=ARo[m])   #  history Offset   ####TRD change
+                # nani = _N.isnan(ARo[m], out=lrnBadLoc)
+                # locs = _N.where(lrnBadLoc == True)
+                # if locs[0].shape[0] > 0:
+                #     L = locs[0].shape[0]
+                #     print "ARo locations bad tr %(m)d  %(L) d" % {"m" : m, "L" : L}
+                #     for l in xrange(L):  #  fill with reasonable value
+                #         ARo[m, locs[0][l]] = ARo[m, locs[0][l] - 1]
 
                 #lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe
-                lw.rpg_devroye(oo.rn, trSMPX[m] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe  ####TRD change
+                lw.rpg_devroye(oo.rn, trSMPX[m] + oo.us[m] + BaS + ARo[m] + oo.knownSig[m], out=oo.ws[m])  ######  devryoe  ####TRD change
                     
             if ooTR == 1:
                 oo.ws   = oo.ws.reshape(1, ooN+1)
@@ -299,7 +307,7 @@ class mcmcARpTCS(mARp.mcmcARp):
             #  ws(it+1)    using u(it), F0(it), smpx(it)
 
             #oo._d.y = kpOws - BaS - ARo - oous_rs     ####TRD change
-            oo._d.y = _N.dot(itrd, kpOws - BaS - ARo - oous_rs)
+            oo._d.y = _N.dot(itrd, kpOws - BaS - ARo - oous_rs - oo.knownSig)
             #print _N.std(oo._d.y, axis=1)
             oo._d.copyParams(oo.F0, oo.q2)
             #oo._d.Rv[:, :] =1 / oo.ws[:, :]   #  time dependent noise
@@ -310,7 +318,8 @@ class mcmcARpTCS(mARp.mcmcARp):
 
             ########     per trial offset sample
             #Ons  = kpOws - oo.smpx[..., 2:, 0] - ARo - BaS
-            Ons  = kpOws - trSMPX - ARo - BaS  ####TRD change
+            Ons  = kpOws - trSMPX - ARo - BaS - oo.knownSig
+            #Ons  = kpOws - trSMPX - ARo - BaS  ####TRD change
             _N.einsum("mn,mn->m", oo.ws, Ons, out=smWinOn)  #  sum over trials
             ilv_u  = _N.diag(_N.sum(oo.ws, axis=1))  #  var  of LL
             #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
@@ -326,7 +335,7 @@ class mcmcARpTCS(mARp.mcmcARp):
             ########     PSTH sample
             if oo.bpsth:
                 #Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo - oous_rs
-                Oms  = kpOws - trSMPX - ARo - oous_rs  ####TRD change
+                Oms  = kpOws - trSMPX - ARo - oous_rs - oo.knownSig  ####TRD change
                 #Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo
                 _N.einsum("mn,mn->n", oo.ws, Oms, out=smWimOm)   #  sum over 
                 ilv_f  = _N.diag(_N.sum(oo.ws, axis=0))
@@ -345,28 +354,34 @@ class mcmcARpTCS(mARp.mcmcARp):
 
             #######  DATA AUGMENTATION.  If we update 's' before, we need to update _d.y right after, _d.y depends on 's'
             #  _d.F, _d.N, _d.ks, 
+
+
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
+            
+            if oo.processes == 1:
+                for m in xrange(ooTR):
+                    oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
+                    oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                    oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
+                        #oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+            else:
+                sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
+                for m in xrange(ooTR):
+                    oo.smpx[m, 2:] = sxv[m][0]
+                    oo._d.f_x[m] = sxv[m][1]
+                    oo._d.f_V[m] = sxv[m][2]
+                    oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                    oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
+                    #oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
 
-            """
-            #tkf1  = _tm.time()
-            sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
-            #tkf2  = _tm.time()
-
-            for m in xrange(ooTR):
-                oo.smpx[m, 2:] = sxv[m][0]
-                oo._d.f_x[m] = sxv[m][1]
-                oo._d.f_V[m] = sxv[m][2]
-                oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
-                oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
             """
             for m in xrange(ooTR):
                 oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
                 oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                 oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
-
-            stds = _N.std(oo.Bsmpx[:, it, 2:], axis=1)
+                #oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+            """
+            stds = _N.std(oo.smpx[:, 2:, 0], axis=1)
             mnStd = _N.mean(stds, axis=0)
             print "mnStd  %.3f" % mnStd
 
@@ -405,8 +420,8 @@ class mcmcARpTCS(mARp.mcmcARp):
             oo.allalfas[it] = oo.F_alfa_rep
 
             for m in xrange(ooTR):
-                oo.wts[m, it, :, :]   = wt[m, :, :, 0]
-                oo.uts[m, it, :, :]   = ut[m, :, :, 0]
+                #oo.wts[m, it, :, :]   = wt[m, :, :, 0]
+                #oo.uts[m, it, :, :]   = ut[m, :, :, 0]
                 if not oo.bFixF:
                     oo.amps[it, :]  = amp
                     oo.fs[it, :]    = f

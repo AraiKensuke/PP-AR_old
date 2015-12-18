@@ -507,7 +507,7 @@ def findStationaryMCMCIters(mARp, win=30):
     return firstTR, lastTR
 
 
-def smplLatentFitTest(mARp, trSt=50, trEn=200, trSkp=5, fontsize=22, uo=None, useKnownSig=False):
+def smplLatentFitTest(mARp, trSt=50, trEn=200, trSkp=5, fontsize=22, uo=None):
     us = _N.array(mARp.us)
     if uo is not None:
         us += uo
@@ -534,8 +534,6 @@ def smplLatentFitTest(mARp, trSt=50, trEn=200, trSkp=5, fontsize=22, uo=None, us
         if uo is not None:
             us += uo
         osc = mARp.Bsmpx[:, ii, 2:]
-        if useKnownSig:
-            osc += mARp.knownSig
         us = us.reshape(mARp.TR, 1)
 
         cif = mARp.CIF(us, mARp.aS, osc)
@@ -558,13 +556,10 @@ def smplLatentFitTest(mARp, trSt=50, trEn=200, trSkp=5, fontsize=22, uo=None, us
     _plt.yticks([0, 0.25, 0.5, 0.75, 1], ["0", "0.25", "0.5", "0.75", "1"], fontsize=fontsize)
     fig.subplots_adjust(left=0.18, bottom=0.18, right=0.95, top=0.95)
     
-    fn = "AR-KS"
-    if useKnownSig:
-        fn += "-knownSig"
-    if uo is not None:
-        fn += "%.3f"  % uo
+    if uo is None:
+        _plt.savefig("AR-KS.eps", transparent=True)
     else:
-        _plt.savefig(fn, transparent=True)
+        _plt.savefig("AR-KS%.3f.eps" % uo, transparent=True)
     
     return pvDs
 
@@ -610,20 +605,32 @@ def cmpAR2GLM(pvDs, bestD, bestpv, xticksD=None, xtickspv=None, fontsize=20, uo=
         _plt.savefig("histD-pv%.3f.eps" % uo, transparent=True)
     _plt.close()
 
-def setTicksAndLims(xlabel=None, ylabel=None, xticks=None, yticks=None, xlim=None, ylim=None, tickFS=26, labelFS=28):
+def setTicksAndLims(xlabel=None, ylabel=None, xticks=None, yticks=None, xticksD=None, yticksD=None, xlim=None, ylim=None, tickFS=26, labelFS=28):
     if xticks is not None:
-        _plt.xticks(xticks, fontsize=tickFS)
+        if xticksD is None:
+            _plt.xticks(xticks, fontsize=tickFS)
+        else:
+            _plt.xticks(xticks, xticksD, fontsize=tickFS)
     else:
         _plt.xticks(fontsize=tickFS)
     if yticks is not None:
-        _plt.yticks(yticks, fontsize=tickFS)
+        if yticksD is None:
+            _plt.yticks(yticks, fontsize=tickFS)
+        else:
+            _plt.yticks(yticks, yticksD, fontsize=tickFS)
     else:
         _plt.yticks(fontsize=tickFS)
 
     if xlim is not None:
-        _plt.xlim(0, xlim)
+        if type(xlim) == list:
+            _plt.xlim(xlim[0], xlim[1])
+        else:
+            _plt.xlim(0, xlim)
     if ylim is not None:
-        _plt.ylim(0, ylim)
+        if type(ylim) == list:
+            _plt.ylim(ylim[0], ylim[1])
+        else:
+            _plt.ylim(0, ylim)
 
     if xlabel is not None:
         _plt.xlabel(xlabel, fontsize=labelFS)

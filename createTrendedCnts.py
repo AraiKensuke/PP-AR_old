@@ -6,6 +6,7 @@ import commdefs as _cd
 import numpy as _N
 import kflib as _kfl
 import matplotlib.pyplot as _plt
+import mcmcFigs as mF
 
 ####   
 #  _N.sin(t_orw)    #  t is an offseted random walk
@@ -32,7 +33,7 @@ ARcf     = None
 N        = None
 amp      = None
 
-def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=True):
+def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=True, epspng="png"):
     global m, rn, p, W, J, u, N, amp, model
     if not dontcopy:
         copyfile("%s.py" % setname, "%(s)s/%(s)s.py" % {"s" : setname, "to" : setFN("%s.py" % setname, dir=setname, create=True)})
@@ -89,6 +90,7 @@ def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=Tr
                 x = trend[tr]
             else:
                 x = trend
+            x *= amp
 
         for t in xrange(N):
             st = 0
@@ -137,17 +139,23 @@ def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=Tr
     _N.savetxt(resFN("%s.dat" % basefn, dir=setname, create=True, env_dirname=env_dirname), data, fmt=fmtstr)
 
     for w in xrange(W):
-        print cts[:, w]
-        print 
         fig =_plt.figure(figsize=(13, 3.5*2))
-        _plt.subplot2grid((2, 8), (0, 0), colspan=4)
+        ax = _plt.subplot2grid((2, 8), (0, 0), colspan=4)
         _plt.plot(cts[:, w], color="black")
-        _plt.subplot2grid((2, 8), (1, 0), colspan=4)
-        _plt.plot(x, color="black")
-        _plt.subplot2grid((2, 8), (0, 5), rowspan=3, colspan=4)
-        _plt.hist(cts[:, w], bins=_N.linspace(0, 1.05*max(cts[:, w]), int(1.1*max(cts[:, w]))), color="black")
-        fnSF = ("_%d" % w) if (W > 1) else ""
-        _plt.savefig(resFN("cts_%(fn)s%(sf)s.png" % {"fn" : basefn, "sf" : fnSF}, dir=setname, env_dirname=env_dirname, create=True))
-        _plt.close()
+        mF.arbitaryAxes(ax, axesVis=[True, True, False, False], x_tick_positions="bottom", y_tick_positions="left")
+        mF.setTicksAndLims(xlabel="trials", ylabel="spk counts", tickFS=18, labelFS=20)
 
+        ax = _plt.subplot2grid((2, 8), (1, 0), colspan=4)
+        _plt.plot(x, color="black")
+        mF.arbitaryAxes(ax, axesVis=[True, True, False, False], x_tick_positions="bottom", y_tick_positions="left")
+        mF.setTicksAndLims(xlabel="trials", ylabel="trend", tickFS=18, labelFS=20, yticks=[])
+        ax = _plt.subplot2grid((2, 8), (0, 5), rowspan=3, colspan=4)
+        _plt.hist(cts[:, w], bins=_N.linspace(0, 1.05*max(cts[:, w]), int(1.1*max(cts[:, w]))), color="black")
+        mF.arbitaryAxes(ax, axesVis=[True, True, False, False], x_tick_positions="bottom", y_tick_positions="left")
+        mF.setTicksAndLims(xlabel="counts", ylabel="freq.", tickFS=18, labelFS=20)
+        fnSF = ("_%d" % w) if (W > 1) else ""
+        fig.subplots_adjust(left=0.11, bottom=0.15, top=0.93, right=0.93, wspace=0.2, hspace=0.2)
+        _plt.savefig(resFN("cts_%(fn)s%(sf)s.%(ep)s" % {"fn" : basefn, "sf" : fnSF, "ep" : epspng}, dir=setname, env_dirname=env_dirname, create=True), transparent=True)
+
+        _plt.close()
 

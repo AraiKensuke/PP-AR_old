@@ -5,6 +5,7 @@ grndTruth =  "black"
 infrdM    =  "red"   #  mean inferred
 infrd95   =  "#AAAAFF"   #  95 percentile    shading color
 smpld     =  "#AAAAFF"   #  smpld
+smpld2    =  "grey"   #  smpld
 
 #  
 msurd     =  "brown"

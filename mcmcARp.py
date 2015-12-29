@@ -277,17 +277,17 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.smp_q2[:, it]= oo.q2
 
             t6 = _tm.time()
-            print "t2-t1 %.3f" % (t2-t1)
-            print "t3-t2 %.3f" % (t3-t2)
-            print "t4-t3 %.3f" % (t4-t3)
-            print "t4a-t4 %.3f" % (t4a-t4)
-            print "t4b-t4a %.3f" % (t4b-t4a)
-            print "t4c-t4b %.3f" % (t4c-t4b)
+            # print "t2-t1 %.3f" % (t2-t1)
+            # print "t3-t2 %.3f" % (t3-t2)
+            # print "t4-t3 %.3f" % (t4-t3)
+            # print "t4a-t4 %.3f" % (t4a-t4)
+            # print "t4b-t4a %.3f" % (t4b-t4a)
+            # print "t4c-t4b %.3f" % (t4c-t4b)
             #print "***t4d-t4c %.3f" % (t4d-t4c)
 
-            print "t5-t4b %.3f" % (t5-t4b)
-            print "t6-t5 %.3f" % (t6-t5)
-            print "gibbs iter %.3f" % (t6-t1)
+            # print "t5-t4b %.3f" % (t5-t4b)
+            # print "t6-t5 %.3f" % (t6-t5)
+            # print "gibbs iter %.3f" % (t6-t1)
 
     def latentState(self, burns=None, useMeanOffset=False):  ###########################  GIBBSSAMPH
         oo          = self

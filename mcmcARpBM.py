@@ -211,7 +211,7 @@ class mcmcARpBM(mARspk.mcmcARspk):
                 for tryZ in xrange(oo.nStates):
                     _N.dot(sd01[tryZ], oo.smpx[..., 2:, 0], out=smpx01[tryZ])
                     #oo.build_addHistory(ARo01[tryZ], smpx01[tryZ, m], BaS, oo.us, lrnBadLoc)
-                    oo.build_addHistory(ARo01[tryZ], smpx01[tryZ], BaS, oo.us, lrnBadLoc)
+                    oo.build_addHistory(ARo01[tryZ], smpx01[tryZ], BaS, oo.us, oo.knownSig)
                     """
                     for m in xrange(oo.TR):
                         locs = _N.where(lrnBadLoc[m] == True)
@@ -261,7 +261,8 @@ class mcmcARpBM(mARspk.mcmcARspk):
                 for m in oo.fxdz: #####  outside BM loop
                     oo.smp_zs[m, it] = oo.Z[m]
 
-                #print THR
+                #print THR[0:50]
+                #print THR[50:]
                 #  Z  set
                 _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
                 _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])
@@ -277,7 +278,7 @@ class mcmcARpBM(mARspk.mcmcARspk):
                 _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
                 _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])            
                 _N.dot(zd, oo.smpx[..., 2:, 0], out=zsmpx)
-            oo.build_addHistory(ARo, zsmpx, BaS, oo.us, lrnBadLoc)
+            oo.build_addHistory(ARo, zsmpx, BaS, oo.us, oo.knownSig)
 
             ######  PG generate
             nanLoc = _N.where(_N.isnan(BaS))
@@ -307,23 +308,27 @@ class mcmcARpBM(mARspk.mcmcARspk):
 
             oo.smp_u[:, it] = oo.us
 
+            print "gibbsSamp 5"
             ########     PSTH sample  Do PSTH after we generate zs
             if oo.bpsth:
                 Oms  = kpOws - zsmpx - ARo - oous_rs
+                print "gibbsSamp 5a"
                 _N.einsum("mn,mn->n", oo.ws, Oms, out=smWimOm)   #  sum over 
                 ilv_f  = _N.diag(_N.sum(oo.ws, axis=0))
                 _N.fill_diagonal(lv_f, 1./_N.diagonal(ilv_f))
+                print "gibbsSamp 5b"
                 lm_f  = _N.dot(lv_f, smWimOm)  #  nondiag of 1./Bi are inf
                 #  now sample
                 iVAR = _N.dot(oo.B, _N.dot(ilv_f, oo.B.T)) + iD_f
+                print "gibbsSamp 5c"
                 VAR  = _N.linalg.inv(iVAR)  #  knots x knots
                 iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
                 Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
+                print "gibbsSamp 5d"
                 oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
                 oo.smp_aS[it, :] = oo.aS
             else:
                 oo.aS[:]   = 0
-
             BaS = _N.dot(oo.B.T, oo.aS)
 
             ####  Sample latent state
@@ -345,13 +350,12 @@ class mcmcARpBM(mARspk.mcmcARspk):
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
 
 
-
             if oo.processes == 1:
                 for m in xrange(ooTR):
                     oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
                     oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                     oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                    oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+                    #oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
                     #oo.x00[m]      = oo.smpx[m, 2]*0.1
                     oo.smp_q2[m, it]= oo.q2[m]
 
@@ -363,9 +367,9 @@ class mcmcARpBM(mARspk.mcmcARspk):
                     oo._d.f_V[m] = sxv[m][2]
                     oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                     oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                    oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+                    #oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
 
-            stds = _N.std(oo.Bsmpx[:, it, 2:], axis=1)
+            stds = _N.std(oo.smpx[:, 2:, 0], axis=1)
             mnStd = _N.mean(stds, axis=0)
             print "mnStd  %.3f" % mnStd
             ###  
@@ -384,7 +388,8 @@ class mcmcARpBM(mARspk.mcmcARspk):
             if len(hists) > 0:
                 AH = 0.5*_N.sum(oo.smpx[hists, 2:, 0]*oo.smpx[hists, 2:, 0]*oo.ws[hists])
 
-                BRH = BaS + oo.smpx[hists, 2:, 0] + oous_rs[hists] + ARo[hists] - kpOws[hists] 
+                #BRH = BaS + oo.smpx[hists, 2:, 0] + oous_rs[hists] + ARo[hists] - kpOws[hists] 
+                BRH = kpOws[hists] - BaS - oous_rs[hists] - ARo[hists] 
                 BH = _N.sum(oo.ws[hists]*BRH*oo.smpx[hists, 2:, 0])
                 UH = BH / (2*AH)
                 sgH= 1/_N.sqrt(2*AH)
@@ -406,8 +411,12 @@ class mcmcARpBM(mARspk.mcmcARspk):
             a = (a - U) / sg
             b = (b - U) / sg
             print "U  %(U).3f    s  %(s).3f" % {"U" : U, "s" : sg}
-
-            oo.s[0] = U + sg*_ss.truncnorm.rvs(a, b)
+            
+            if it > 2100:
+                oo.s[0] = U + sg*_N.random.randn()
+            else:
+            #oo.s[0] = U + sg*_ss.truncnorm.rvs(a, b)
+                oo.s[0] = 0.01
             oo.s[1] = 1 - oo.s[0]
             _N.fill_diagonal(sd01[0], oo.s[0])
             _N.fill_diagonal(sd01[1], oo.s[1])
@@ -433,8 +442,8 @@ class mcmcARpBM(mARspk.mcmcARspk):
             oo.allalfas[it] = oo.F_alfa_rep
 
             for m in xrange(ooTR):
-                oo.wts[m, it, :, :]   = wt[m, :, :, 0]
-                oo.uts[m, it, :, :]   = ut[m, :, :, 0]
+                #oo.wts[m, it, :, :]   = wt[m, :, :, 0]
+                #oo.uts[m, it, :, :]   = ut[m, :, :, 0]
                 if not oo.bFixF:
                     oo.amps[it, :]  = amp
                     oo.fs[it, :]    = f
@@ -487,7 +496,7 @@ class mcmcARpBM(mARspk.mcmcARspk):
         oo.noAR = True
         oo.gibbsSamp()
 
-        oo.noAR = tmpNOAR
-        oo.gibbsSamp()
-        t2    = _tm.time()
-        print (t2-t1)
+        # oo.noAR = tmpNOAR
+        # oo.gibbsSamp()
+        # t2    = _tm.time()
+        # print (t2-t1)

@@ -32,7 +32,7 @@ from multiprocessing import Pool
 
 import matplotlib.pyplot as _plt
 
-class mcmcARpBM(mARspk.mcmcARspk):
+class mcmcARpBM2(mARspk.mcmcARspk):
     ###########  TEMP
     THR           = None
     startZ        = 0
@@ -101,9 +101,10 @@ class mcmcARpBM(mARspk.mcmcARspk):
                 oo.varz = _N.array(oo.varz)
             oo.fxdz  = _N.array(disjointSubset(range(oo.TR), oo.varz), dtype=_N.int)
 
-    def gibbsSamp(self):  ###########################  GIBBSSAMP
+    def dirichletAllocate(self):  ###########################  GIBBSSAMP
         oo          = self
         ooTR        = oo.TR
+        print ooTR
         ook         = oo.k
         ooNMC       = oo.NMC
         ooN         = oo.N
@@ -118,8 +119,6 @@ class mcmcARpBM(mARspk.mcmcARspk):
         kpOws = _N.empty((ooTR, ooN+1))
         lv_f     = _N.zeros((ooN+1, ooN+1))
         lv_u     = _N.zeros((ooTR, ooTR))
-        alpR   = oo.F_alfa_rep[0:oo.R]
-        alpC   = oo.F_alfa_rep[oo.R:]
         Bii    = _N.zeros((ooN+1, ooN+1))
         
         #alpC.reverse()
@@ -183,7 +182,6 @@ class mcmcARpBM(mARspk.mcmcARspk):
             oo._d.f_V[m, 0]     = oo.s2_x00
             oo._d.f_V[m, 1]     = oo.s2_x00
 
-
         THR = _N.empty(oo.TR)
         dirArgs = _N.empty(oo.nStates)  #  dirichlet distribution args
         expT= _N.empty(ooN+1)
@@ -203,80 +201,70 @@ class mcmcARpBM(mARspk.mcmcARspk):
 
             #  generate latent AR state
 
-            
-            if it > oo.startZ:
-                ######  Z
-                #print "!!!!!!!!!!!!!!!  1"
-                for tryZ in xrange(oo.nStates):
-                    _N.dot(sd01[tryZ], oo.smpx[..., 2:, 0], out=smpx01[tryZ])
-                    #oo.build_addHistory(ARo01[tryZ], smpx01[tryZ, m], BaS, oo.us, lrnBadLoc)
-                    oo.build_addHistory(ARo01[tryZ], smpx01[tryZ], BaS, oo.us, oo.knownSig)
-                    """
-                    for m in xrange(oo.TR):
-                        locs = _N.where(lrnBadLoc[m] == True)
-                        if locs[0].shape[0] > 0:
-                            print "found a bad loc"
-                            fig = _plt.figure(figsize=(8, 5))
-                            _plt.suptitle("%d" % m)
-                            _plt.subplot(2, 1, 1)
-                            _plt.plot(smpx01[tryZ, m])
-                            _plt.subplot(2, 1, 2)
-                            _plt.plot(ARo01[tryZ, m])
-                    """
-                    #print "!!!!!!!!!!!!!!!  2"
-                for m in oo.varz:
-                    for tryZ in xrange(oo.nStates):  #  only allow certain trials to change
+            ######  Z
+            #print "!!!!!!!!!!!!!!!  1"
+            for tryZ in xrange(oo.nStates):
+                _N.dot(sd01[tryZ], oo.smpx[..., 2:, 0], out=smpx01[tryZ])
+                #oo.build_addHistory(ARo01[tryZ], smpx01[tryZ, m], BaS, oo.us, lrnBadLoc)
+                oo.build_addHistory(ARo01[tryZ], smpx01[tryZ], BaS, oo.us, oo.knownSig)
+                """
+                for m in xrange(oo.TR):
+                    locs = _N.where(lrnBadLoc[m] == True)
+                    if locs[0].shape[0] > 0:
+                        print "found a bad loc"
+                        fig = _plt.figure(figsize=(8, 5))
+                        _plt.suptitle("%d" % m)
+                        _plt.subplot(2, 1, 1)
+                        _plt.plot(smpx01[tryZ, m])
+                        _plt.subplot(2, 1, 2)
+                        _plt.plot(ARo01[tryZ, m])
+                """
+                #print "!!!!!!!!!!!!!!!  2"
+            for m in oo.varz:
+                for tryZ in xrange(oo.nStates):  #  only allow certain trials to change
 
-                        #  calculate p0, p1  p0 = m_0 x PROD_n Ber(y_n | Z_j)
-                        #                       = m_0 x _N.exp(_N.log(  ))
-                        #  p0, p1 not normalized
-                        ll[tryZ] = 0
-                        #  Ber(0 | ) and Ber(1 | )
-                        _N.exp(smpx01[tryZ, m] + BaS + ARo01[tryZ, m] + oo.us[m], out=expT)
-                        Bp[0]   = 1 / (1 + expT)
-                        Bp[1]   = expT / (1 + expT)
+                    #  calculate p0, p1  p0 = m_0 x PROD_n Ber(y_n | Z_j)
+                    #                       = m_0 x _N.exp(_N.log(  ))
+                    #  p0, p1 not normalized
+                    ll[tryZ] = 0
+                    #  Ber(0 | ) and Ber(1 | )
+                    _N.exp(smpx01[tryZ, m] + BaS + ARo01[tryZ, m] + oo.us[m], out=expT)
+                    Bp[0]   = 1 / (1 + expT)
+                    Bp[1]   = expT / (1 + expT)
 
-                        #   z[:, 1]   is state label
+                    #   z[:, 1]   is state label
 
-                        for n in xrange(oo.N+1):
-                            ll[tryZ] += _N.log(Bp[oo.y[m, n], n])
+                    for n in xrange(oo.N+1):
+                        ll[tryZ] += _N.log(Bp[oo.y[m, n], n])
 
-                    ofs = _N.min(ll)
-                    ll  -= ofs
-                    nc = oo.m[0]*_N.exp(ll[0]) + oo.m[1]*_N.exp(ll[1])
-                    #print "%(nc).3e   %(m)s" % {"nc" : nc, "m" : str(oo.m)}
+                ofs = _N.min(ll)
+                ll  -= ofs
+                nc = oo.m[0]*_N.exp(ll[0]) + oo.m[1]*_N.exp(ll[1])
 
-                    iARo = 1
-                    oo.Z[m, 0] = 0;  oo.Z[m, 1] = 1
-                    THR[m] = (oo.m[0]*_N.exp(ll[0]) / nc)
-                    #print "m  %(m)d   THR %(THR).3f" % {"m" : m, "THR" : THR[m]}
-                    if _N.random.rand() < THR[m]:
-                        oo.Z[m, 0] = 1;  oo.Z[m, 1] = 0
-                        iARo = 0
-                    oo.smp_zs[m, it] = oo.Z[m]
-                    ####  did we forget to do this?
-                    ARo[m] = ARo01[iARo, m]
-                    #print "END----"
-                for m in oo.fxdz: #####  outside BM loop
-                    oo.smp_zs[m, it] = oo.Z[m]
+                iARo = 1
+                oo.Z[m, 0] = 0;  oo.Z[m, 1] = 1
+                THR[m] = (oo.m[0]*_N.exp(ll[0]) / nc)
+                if _N.random.rand() < THR[m]:
+                    oo.Z[m, 0] = 1;  oo.Z[m, 1] = 0
+                    iARo = 0
+                oo.smp_zs[m, it] = oo.Z[m]
+                ####  did we forget to do this?
+                ARo[m] = ARo01[iARo, m]
+            for m in oo.fxdz: #####  outside BM loop
+                oo.smp_zs[m, it] = oo.Z[m]
 
-                #print THR[0:50]
-                #print THR[50:]
-                #  Z  set
-                _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
-                _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])
-                #for kkk in xrange(oo.TR):
-                #    print zd[kkk, kkk]
-                _N.dot(zd, oo.smpx[..., 2:, 0], out=zsmpx)
-                ######  sample m's
-                _N.add(oo.alp, _N.sum(oo.Z[oo.varz], axis=0), out=dirArgs)
-                oo.m[:] = _N.random.dirichlet(dirArgs)
-                oo.smp_ms[it] = oo.m
-                print oo.m
-            else:  #  it < startZ
-                _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
-                _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])            
-                _N.dot(zd, oo.smpx[..., 2:, 0], out=zsmpx)
+            #  Z  set
+            _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
+            _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])
+            #for kkk in xrange(oo.TR):
+            #    print zd[kkk, kkk]
+            _N.dot(zd, oo.smpx[..., 2:, 0], out=zsmpx)
+            ######  sample m's
+            _N.add(oo.alp, _N.sum(oo.Z[oo.varz], axis=0), out=dirArgs)
+            oo.m[:] = _N.random.dirichlet(dirArgs)
+            oo.smp_ms[it] = oo.m
+            print oo.m
+
             oo.build_addHistory(ARo, zsmpx, BaS, oo.us, oo.knownSig)
 
             ######  PG generate
@@ -287,16 +275,12 @@ class mcmcARpBM(mARspk.mcmcARspk):
                 nanLoc = _N.where(_N.isnan(oo.ws[m]))
                 if len(nanLoc[0]) > 0:
                     loc = nanLoc[0][0]
-                    # print zsmpx[m, loc]
-                    # print oo.us[m]
-                    # print ARo[m]
             _N.divide(oo.kp, oo.ws, out=kpOws)
 
             ########     per trial offset sample
             Ons  = kpOws - zsmpx - ARo - BaS
             _N.einsum("mn,mn->m", oo.ws, Ons, out=smWinOn)  #  sum over trials
             ilv_u  = _N.diag(_N.sum(oo.ws, axis=1))  #  var  of LL
-            #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
             _N.fill_diagonal(lv_u, 1./_N.diagonal(ilv_u))
             lm_u  = _N.dot(lv_u, smWinOn)  #  nondiag of 1./Bi are inf, mean LL
             #  now sample
@@ -338,9 +322,6 @@ class mcmcARpBM(mARspk.mcmcARspk):
             else:
                 oo._d.f_V[:, 0]     = _N.mean(oo._d.f_V[:, 1:], axis=1)
 
-            #oo._d.f_x[:, 0, :, 0]     = oo.x00
-            #oo._d.f_V[:, 0]     =       oo._d.f_V[:, 1]
-            #  _d.F, _d.N, _d.ks, 
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
 
 
@@ -349,8 +330,6 @@ class mcmcARpBM(mARspk.mcmcARspk):
                     oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
                     oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                     oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                    #oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
-                    #oo.x00[m]      = oo.smpx[m, 2]*0.1
                     oo.smp_q2[m, it]= oo.q2[m]
 
             else:
@@ -368,7 +347,6 @@ class mcmcARpBM(mARspk.mcmcARspk):
             print "mnStd  %.3f" % mnStd
             ###  
 
-
             lwsts = _N.where(oo.Z[:, 0] == 1)[0]
             hists = _N.where(oo.Z[:, 1] == 1)[0]
 
@@ -382,11 +360,6 @@ class mcmcARpBM(mARspk.mcmcARspk):
                 U = UL
                 sg= sgL
 
-                a = 0
-                b = 1
-            
-                a = (a - U) / sg
-                b = (b - U) / sg
                 print "U  %(U).3f    s  %(s).3f" % {"U" : U, "s" : sg}
 
                 oo.s[1] = U + sg*_N.random.randn()
@@ -395,24 +368,6 @@ class mcmcARpBM(mARspk.mcmcARspk):
                 _N.fill_diagonal(sd01[1], oo.s[1])
                 print oo.s[1]
                 oo.smp_ss[it] = oo.s[1] 
-
-            #######  Sample AR coefficient
-            if not oo.bFixF:   
-                ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H) 
-
-                oo.F_alfa_rep = alpR + alpC   #  new constructed
-                prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
-                print prt
-            ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
-            oo.allalfas[it] = oo.F_alfa_rep
-
-            for m in xrange(ooTR):
-                #oo.wts[m, it, :, :]   = wt[m, :, :, 0]
-                #oo.uts[m, it, :, :]   = ut[m, :, :, 0]
-                if not oo.bFixF:
-                    oo.amps[it, :]  = amp
-                    oo.fs[it, :]    = f
-            oo.F0          = (-1*_Npp.polyfromroots(oo.F_alfa_rep)[::-1].real)[1:]
 
             oo.a2 = oo.a_q2 + 0.5*(ooTR*ooN + 2)  #  N + 1 - 1
             BB2 = oo.B_q2
@@ -430,6 +385,32 @@ class mcmcARpBM(mARspk.mcmcARspk):
             t2 = _tm.time()
             print "gibbs iter %.3f" % (t2-t1)
 
+    def runDirAlloc(self, pckl, trials=None): ###########  RUN
+        """
+        """
+        oo     = self    #  call self oo.  takes up less room on line
+        oo.setname = os.getcwd().split("/")[-1]
+
+        oo.Cs          = len(oo.freq_lims)
+        oo.C           = oo.Cn + oo.Cs
+        oo.R           = 1
+        oo.k           = 2*oo.C + oo.R
+        #  x0  --  Gaussian prior
+        oo.u_x00        = _N.zeros(oo.k)
+        oo.s2_x00       = _arl.dcyCovMat(oo.k, _N.ones(oo.k), 0.4)
+
+        oo.loadDat(trials)
+        oo.setParams()
+        oo.us = pckl[0]
+        oo.q2 = _N.ones(oo.TR)*pckl[1]
+        oo.F0 = _N.zeros(oo.k)
+        print len(pckl[2])
+        for l in xrange(len(pckl[2])):
+            oo.F0 += (-1*_Npp.polyfromroots(pckl[2][l])[::-1].real)[1:]
+        oo.F0 /= len(pckl[2])
+        oo.aS = pckl[3]
+        
+        oo.dirichletAllocate()
 
     def run(self, runDir=None, trials=None, minSpkCnt=0): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line

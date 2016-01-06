@@ -186,10 +186,10 @@ class mcmcARpBM2(mARspk.mcmcARspk):
         dirArgs = _N.empty(oo.nStates)  #  dirichlet distribution args
         expT= _N.empty(ooN+1)
         BaS = _N.dot(oo.B.T, oo.aS)
-        print BaS
 
         oo.nSMP_smpxC = 0
         if oo.processes > 1:
+            print oo.processes
             pool = Pool(processes=oo.processes)
 
         while (it < ooNMC + oo.burn - 1):
@@ -203,6 +203,7 @@ class mcmcARpBM2(mARspk.mcmcARspk):
 
             ######  Z
             #print "!!!!!!!!!!!!!!!  1"
+
             for tryZ in xrange(oo.nStates):
                 _N.dot(sd01[tryZ], oo.smpx[..., 2:, 0], out=smpx01[tryZ])
                 #oo.build_addHistory(ARo01[tryZ], smpx01[tryZ, m], BaS, oo.us, lrnBadLoc)
@@ -252,6 +253,7 @@ class mcmcARpBM2(mARspk.mcmcARspk):
                 ARo[m] = ARo01[iARo, m]
             for m in oo.fxdz: #####  outside BM loop
                 oo.smp_zs[m, it] = oo.Z[m]
+            t2 = _tm.time()
 
             #  Z  set
             _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
@@ -266,6 +268,7 @@ class mcmcARpBM2(mARspk.mcmcARspk):
             print oo.m
 
             oo.build_addHistory(ARo, zsmpx, BaS, oo.us, oo.knownSig)
+            t3 = _tm.time()
 
             ######  PG generate
             nanLoc = _N.where(_N.isnan(BaS))
@@ -301,14 +304,22 @@ class mcmcARpBM2(mARspk.mcmcARspk):
                 #  now sample
                 iVAR = _N.dot(oo.B, _N.dot(ilv_f, oo.B.T)) + iD_f
                 VAR  = _N.linalg.inv(iVAR)  #  knots x knots
-                iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
-                Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
+                #iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
+                #Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
+
+                Mn = oo.u_a + _N.dot(DB, _N.linalg.solve(BDB + lv_f, lm_f - BTua))
                 oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
                 oo.smp_aS[it, :] = oo.aS
+
+                #iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
+                #Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
+                #oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
+                #oo.smp_aS[it, :] = oo.aS
             else:
                 oo.aS[:]   = 0
             BaS = _N.dot(oo.B.T, oo.aS)
 
+            t4 = _tm.time()
             ####  Sample latent state
             oo._d.y = _N.dot(izd, kpOws - BaS - ARo - oous_rs)
             oo._d.copyParams(oo.F0, oo.q2)
@@ -324,7 +335,7 @@ class mcmcARpBM2(mARspk.mcmcARspk):
 
             tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
 
-
+            t5 = _tm.time()
             if oo.processes == 1:
                 for m in xrange(ooTR):
                     oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
@@ -382,8 +393,8 @@ class mcmcARpBM2(mARspk.mcmcARspk):
             oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)
 
             oo.smp_q2[:, it]= oo.q2
-            t2 = _tm.time()
-            print "gibbs iter %.3f" % (t2-t1)
+            t7 = _tm.time()
+            print "gibbs iter %.3f" % (t7-t1)
 
     def runDirAlloc(self, pckl, trials=None): ###########  RUN
         """

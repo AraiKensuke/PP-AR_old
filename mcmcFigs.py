@@ -661,6 +661,8 @@ def arbitaryAxes(ax, axesVis=[True, True, True, True], x_tick_positions="bottom"
 
     ax.xaxis.set_ticks_position(x_tick_positions)
     ax.yaxis.set_ticks_position(y_tick_positions)
+    ax.xaxis.set_label_position(x_tick_positions)
+    ax.yaxis.set_label_position(y_tick_positions)
 
     ax.spines["right"].axis.axes.tick_params(direction="outward", width=2)
     ax.spines["top"].axis.axes.tick_params(direction="outward", width=2)

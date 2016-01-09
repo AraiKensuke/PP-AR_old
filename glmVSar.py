@@ -29,8 +29,6 @@ def compare(mARp, est, X, spkHist, oscMn, dat, gkW=20, earlyHist=None):
     gk /= _N.sum(gk)
 
     TR  = oscMn.shape[0]
-    print TR
-
     corrs = _N.empty((TR, 3))
 
     cglmAll = _N.zeros((TR, mARp.N+1))
@@ -48,26 +46,36 @@ def compare(mARp, est, X, spkHist, oscMn, dat, gkW=20, earlyHist=None):
         infrd = oscMn[tr, stT:] / _N.std(oscMn[tr, stT:])
         infrd /= _N.std(infrd)
 
+        # if tr < 3:
+        #     fig = _plt.figure()
+        #     _plt.plot(glm + 4)
+        #     _plt.plot(cglm + 2)
+        #     _plt.plot(infrd)
+        #     _plt.plot(gt - 2)
+        #     _plt.suptitle(tr)
+
+
         pc1, pv1 = _ss.pearsonr(glm, gt)
         pc1c, pv1c = _ss.pearsonr(cglm, gt)
         pc2, pv2 = _ss.pearsonr(infrd, gt)
 
         cglmAll[tr, stT:] = cglm
         infrdAll[tr, stT:] = infrd
+        
 
-        fig = _plt.figure(figsize=(12, 4))
-        ax = fig.add_subplot(1, 1, 1)
-        _plt.plot(xt, infrd, color=myC.infrdM, lw=1.5)
-        _plt.plot(xt, cglm, color=myC.infrdM, lw=2., ls="--")
-        #_plt.plot(xt, glm, color=myC.infrdM, lw=2., ls="-.")
-        _plt.plot(xt, gt, color=myC.grndTruth, lw=3)
-        #_plt.title("%(1).3f   %(2).3f" % {"1" : pc1c, "2" : pc2})
-        _plt.xlim(stT, mARp.N+1)
-        mF.arbitraryAxes(ax, axesVis=[False, False, False, False], xtpos="bottom", ytpos="none")
-        mF.setLabelTicks(_plt, yticks=[], yticksDsp=None, xlabel="time (ms)", ylabel=None, xtickFntSz=24, xlabFntSz=26)
-        fig.subplots_adjust(left=0.05, right=0.95, bottom=0.2, top=0.85)
-        _plt.savefig("cmpGLMAR%d.eps" % tr, transparent=True)
-        _plt.close()
+        # fig = _plt.figure(figsize=(12, 4))
+        # ax = fig.add_subplot(1, 1, 1)
+        # _plt.plot(xt, infrd, color=myC.infrdM, lw=1.5)
+        # _plt.plot(xt, cglm, color=myC.infrdM, lw=2., ls="--")
+        # #_plt.plot(xt, glm, color=myC.infrdM, lw=2., ls="-.")
+        # _plt.plot(xt, gt, color=myC.grndTruth, lw=3)
+        # #_plt.title("%(1).3f   %(2).3f" % {"1" : pc1c, "2" : pc2})
+        # _plt.xlim(stT, mARp.N+1)
+        # mF.arbitraryAxes(ax, axesVis=[False, False, False, False], xtpos="bottom", ytpos="none")
+        # mF.setLabelTicks(_plt, yticks=[], yticksDsp=None, xlabel="time (ms)", ylabel=None, xtickFntSz=24, xlabFntSz=26)
+        # fig.subplots_adjust(left=0.05, right=0.95, bottom=0.2, top=0.85)
+        # _plt.savefig("cmpGLMAR%d.eps" % tr, transparent=True)
+        # _plt.close()
 
 
         corrs[tr] = pc1, pc1c, pc2

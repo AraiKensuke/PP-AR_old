@@ -132,28 +132,31 @@ def histPhase0_phaseInfrd(mARp, _mdn, t0=None, t1=None, bRealDat=False, trials=N
     else:
         TR     = len(trials)
     nPh0s = _N.zeros(TR)
-    t1    = t1-t0   #  mdn already size t1-t0
-    t0    = 0
+    #t1    = t1-t0   #  mdn already size t1-t0
+    #t0    = 0
 
     mdn = _mdn
     fx  = _fx
-    if _mdn.shape[0] != t1 - t0:
-        mdn = _mdn[:, t0:t1]
-    if _fx.shape[0] != t1 - t0:
-        fx = _fx[:, t0:t1]
+    #if _mdn.shape[0] != t1 - t0:
+    #    mdn = _mdn[:, t0:t1]
+    #if _fx.shape[0] != t1 - t0:
+    #    fx = _fx[:, t0:t1]
 
     itr   = 0
 
     for tr in trials:
         itr += 1
         cv = _N.convolve(mdn[tr, t0:t1] - _N.mean(mdn[tr, t0:t1]), gk, mode="same")
+        #cv = mdn[tr, t0:t1] - _N.mean(mdn[tr, t0:t1])
 
         ht_mdn  = _ssig.hilbert(cv)
+        #ht_fx   = _ssig.hilbert(fx[tr, t0:t1] - _N.mean(fx[tr, t0:t1]))
         ht_fx   = _ssig.hilbert(fx[tr, t0:t1] - _N.mean(fx[tr, t0:t1]))
         ph_mdn  = _N.arctan2(ht_mdn.imag, ht_mdn.real) / _N.pi
         ph_fx   = ((_N.arctan2(ht_fx.imag, ht_fx.real)   / _N.pi) + 1)
 
         #  phase = 0 is somewhere in middle
+
         for i in xrange(t0-t0, t1-t0-1):
             if (ph_mdn[i] < 1) and (ph_mdn[i] > 0.5) and (ph_mdn[i+1] < -0.5):
                 nPh0s[itr-1] += 1

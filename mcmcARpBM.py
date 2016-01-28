@@ -466,3 +466,11 @@ class mcmcARpBM(mARspk.mcmcARspk):
         # oo.gibbsSamp()
         # t2    = _tm.time()
         # print (t2-t1)
+
+    def dumpSamples(self, dir=None):
+        pcklme     = {}
+        
+        pcklme["ss"]  = oo.smp_ss
+        pcklme["zs"]  = oo.smp_zs
+        pcklme["ms"]  = oo.smp_ms
+        oo.__class__.__bases__[0].dumpSamples(pcklme=pcklme, dir=dir)

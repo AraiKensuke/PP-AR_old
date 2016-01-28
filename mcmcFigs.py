@@ -114,10 +114,11 @@ def histPhase0_phaseInfrd(mARp, _mdn, t0=None, t1=None, bRealDat=False, trials=N
     #  what is the inferred phase when ground truth phase is 0
     pInfrdAt0 = []
 
-    if (filtParams is not None) and (not bRealDat):
+    #if (filtParams is not None) and (not bRealDat):
+    if not bRealDat:
         _fx = _N.empty((mARp.TR, mARp.N+1))
         for tr in xrange(mARp.TR):
-            _fx[tr] = lpFilt(20, 26, 500, mARp.x[tr])
+            _fx[tr] = lpFilt(30, 40, 1000, mARp.x[tr])
     else:
         _fx  = mARp.x
 
@@ -317,7 +318,7 @@ def plotWFandSpks(mARp, zts0, sFilename="latnt,GrdTr,Spks", tMult=1, intv=None, 
         if sTitle is not None:
             _plt.title(sTitle)
         fig.subplots_adjust(left=0.05, right=0.95, bottom=0.2, top=0.85)
-        if sFilename != None:
+        if sFilename is not None:
             _plt.savefig("%(fn)s,tr=%(tr)d.eps" % {"fn" : sFilename, "tr" : tr}, transparent=True)
             _plt.close()
 
@@ -349,7 +350,7 @@ def plotPSTH(mARp):
     _plt.close()
     return meanPSTH
 
-def plotFsAmp(mARp, tr0=None, tr1=None, xticks=None, yticksFrq=None, yticksMod=None, yticksAmp=None, fMult=1):
+def plotFsAmp(mARp, tr0=None, tr1=None, xticks=None, yticksFrq=None, yticksMod=None, yticksAmp=None, fMult=1, dir=None, fn="fs_amps"):
     if tr0 is None:
         tr0 = 1
     if tr1 is None:
@@ -370,7 +371,10 @@ def plotFsAmp(mARp, tr0=None, tr1=None, xticks=None, yticksFrq=None, yticksMod=N
     setTicksAndLims(xlabel="iterations", ylabel="amplitude", xticks=xticks, yticks=yticksAmp, xlim=tr1, tickFS=20, labelFS=20)
     bottomLeftAxes(ax)
     fig.subplots_adjust(left=0.1, bottom=0.25, top=0.95, right=0.95, wspace=0.4, hspace=0.4)
-    _plt.savefig("fs_amps.eps", transparent=True)
+    if dir is None:
+        _plt.savefig("%s.eps" % fn, transparent=True)
+    else:
+        _plt.savefig("%(d)s/%(f)s.eps" % {"d" : dir, "f" :fn}, transparent=True)
     _plt.close()
 
 def corrcoeffs(mARp, mdn, bRealDat=False):

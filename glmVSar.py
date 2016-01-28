@@ -10,15 +10,20 @@ import matplotlib.pyplot as _plt
 import mcmcFigs as mF
 import myColors as myC
 
-def compare(mARp, est, X, spkHist, oscMn, dat, gkW=20, earlyHist=None):
+def compare(mARp, est, X, spkHist, oscMn, dat, gkW=20, useRefr=True):
     params = _N.array(est.params)
 
     stT = spkHist.LHbin * (spkHist.nLHBins + 1)    #  first stT spikes used for initial history
     ocifs  = _N.empty((spkHist.endTR - spkHist.startTR, spkHist.t1-spkHist.t0 - stT))
     dt     = 0.001
 
-    params[spkHist.endTR:spkHist.endTR+spkHist.LHbin] = params[spkHist.endTR+spkHist.LHbin]
-    print params[spkHist.endTR:spkHist.endTR+spkHist.LHbin]
+    ##  
+
+    sur = "refr"
+    if not useRefr:
+        params[spkHist.endTR:spkHist.endTR+spkHist.LHbin] = params[spkHist.endTR+spkHist.LHbin]
+        sur = "NOrefr"
+
     fig = _plt.figure()
     _plt.plot(params[spkHist.endTR+spkHist.LHbin:])
 
@@ -36,7 +41,8 @@ def compare(mARp, est, X, spkHist, oscMn, dat, gkW=20, earlyHist=None):
     xt   = _N.arange(stT, mARp.N+1)
 
     for tr in xrange(spkHist.startTR, TR):
-        gt = dat[stT:, tr*3]
+        _gt = dat[stT:, tr*3]
+        gt = _N.convolve(_gt, gk, mode="same")
         gt /= _N.std(gt)
 
         glm = (ocifs[tr] - _N.mean(ocifs[tr])) / _N.std(ocifs[tr])
@@ -63,23 +69,24 @@ def compare(mARp, est, X, spkHist, oscMn, dat, gkW=20, earlyHist=None):
         infrdAll[tr, stT:] = infrd
         
 
-        # fig = _plt.figure(figsize=(12, 4))
-        # ax = fig.add_subplot(1, 1, 1)
-        # _plt.plot(xt, infrd, color=myC.infrdM, lw=1.5)
-        # _plt.plot(xt, cglm, color=myC.infrdM, lw=2., ls="--")
-        # #_plt.plot(xt, glm, color=myC.infrdM, lw=2., ls="-.")
-        # _plt.plot(xt, gt, color=myC.grndTruth, lw=3)
-        # #_plt.title("%(1).3f   %(2).3f" % {"1" : pc1c, "2" : pc2})
-        # _plt.xlim(stT, mARp.N+1)
-        # mF.arbitraryAxes(ax, axesVis=[False, False, False, False], xtpos="bottom", ytpos="none")
-        # mF.setLabelTicks(_plt, yticks=[], yticksDsp=None, xlabel="time (ms)", ylabel=None, xtickFntSz=24, xlabFntSz=26)
-        # fig.subplots_adjust(left=0.05, right=0.95, bottom=0.2, top=0.85)
-        # _plt.savefig("cmpGLMAR%d.eps" % tr, transparent=True)
-        # _plt.close()
-
+        """
+        fig = _plt.figure(figsize=(12, 4))
+        ax = fig.add_subplot(1, 1, 1)
+        _plt.plot(xt, infrd, color=myC.infrdM, lw=1.5)
+        _plt.plot(xt, cglm, color=myC.infrdM, lw=2., ls="--")
+        #_plt.plot(xt, glm, color=myC.infrdM, lw=2., ls="-.")
+        _plt.plot(xt, gt, color=myC.grndTruth, lw=3)
+        #_plt.title("%(1).3f   %(2).3f" % {"1" : pc1c, "2" : pc2})
+        _plt.xlim(stT, mARp.N+1)
+        mF.arbitraryAxes(ax, axesVis=[False, False, False, False], xtpos="bottom", ytpos="none")
+        mF.setLabelTicks(_plt, yticks=[], yticksDsp=None, xlabel="time (ms)", ylabel=None, xtickFntSz=24, xlabFntSz=26)
+        fig.subplots_adjust(left=0.05, right=0.95, bottom=0.2, top=0.85)
+        _plt.savefig("cmpGLMAR_%(ur)s_%(tr)d" % {"tr" : tr, "ur" : sur})
+        _plt.close()
+         """
 
         corrs[tr] = pc1, pc1c, pc2
-    mF.histPhase0_phaseInfrd(mARp, cglmAll, t0=stT, t1=(mARp.N+1), bRealDat=False, normed=True, maxY=1.8, fn="smthdGLMPhaseGLM")
+    mF.histPhase0_phaseInfrd(mARp, cglmAll, t0=stT, t1=(mARp.N+1), bRealDat=False, normed=True, maxY=1.8, fn="smthdGLMPhaseGLM%s" % sur)
     mF.histPhase0_phaseInfrd(mARp, infrdAll, t0=stT, t1=(mARp.N+1), bRealDat=False, normed=True, maxY=1.8, fn="smthdGLMPhaseInfrd")
 
     print _N.mean(corrs[:, 0])

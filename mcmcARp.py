@@ -53,7 +53,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
     fs            = None
     amps          = None
     dt            = None
-    mnStds        = None
 
     ####  TEMPORARY
     Bi            = None
@@ -76,6 +75,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
     #  1 offset for all trials
     bIndOffset    = True
+    peek          = 400
 
     def gibbsSamp(self, burns=None):  ###########################  GIBBSSAMPH
         oo          = self
@@ -277,6 +277,19 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.smp_q2[:, it]= oo.q2
 
             t6 = _tm.time()
+
+            if (it > 1) and (it % oo.peek == 0):
+                fig = _plt.figure(figsize=(8, 8))
+                fig.add_subplot(3, 1, 1)
+                _plt.plot(oo.amps[1:it, 0])
+                fig.add_subplot(3, 1, 2)
+                _plt.plot(oo.fs[1:it, 0])
+                fig.add_subplot(3, 1, 3)
+                _plt.plot(oo.mnStds[1:it])
+
+                _plt.savefig("tmp-fsamps%d" % it)
+                _plt.close()
+        
             # print "t2-t1 %.3f" % (t2-t1)
             # print "t3-t2 %.3f" % (t3-t2)
             # print "t4-t3 %.3f" % (t4-t3)
@@ -372,7 +385,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             t6 = _tm.time()
 
 
-    def dump(self):
+    def dump(self, dir=None):
         oo    = self
         pcklme = [oo]
         #oo.Bsmpx = None
@@ -384,7 +397,10 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oo.rts   = None
         oo.zts   = None
 
-        dmp = open("mARp.dump", "wb")
+        if dir is None:
+            dmp = open("mARp.dump", "wb")
+        else:
+            dmp = open("%s/mARp.dump" % dir, "wb")
         pickle.dump(pcklme, dmp, -1)
         dmp.close()
 
@@ -458,48 +474,3 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         
         oo.latentState(useMeanOffset=useMeanOffset)
 
-    def findMode(self, startIt=None, NB=20, NeighB=1):
-        oo  = self
-        startIt = oo.burn if startIt == None else startIt
-        aus = _N.mean(oo.smp_u[:, startIt:], axis=1)
-        aSs = _N.mean(oo.smp_aS[startIt:], axis=0)
-
-        L   = oo.burn + oo.NMC - startIt
-
-        hist, bins = _N.histogram(oo.fs[startIt:, 0], _N.linspace(_N.min(oo.fs[startIt:, 0]), _N.max(oo.fs[startIt:, 0]), NB))
-        indMfs =  _N.where(hist == _N.max(hist))[0][0]
-        indMfsL =  max(indMfs - NeighB, 0)
-        indMfsH =  min(indMfs + NeighB+1, NB-1)
-        loF, hiF = bins[indMfsL], bins[indMfsH]
-
-        hist, bins = _N.histogram(oo.amps[startIt:, 0], _N.linspace(_N.min(oo.amps[startIt:, 0]), _N.max(oo.amps[startIt:, 0]), NB))
-        indMamps  =  _N.where(hist == _N.max(hist))[0][0]
-        indMampsL =  max(indMamps - NeighB, 0)
-        indMampsH =  min(indMamps + NeighB+1, NB)
-        loA, hiA = bins[indMampsL], bins[indMampsH]
-
-        fig = _plt.figure(figsize=(8, 8))
-        fig.add_subplot(2, 1, 1)
-        _plt.hist(oo.fs[startIt:, 0], bins=_N.linspace(_N.min(oo.fs[startIt:, 0]), _N.max(oo.fs[startIt:, 0]), NB), color="black")
-        _plt.axvline(x=loF, color="red")
-        _plt.axvline(x=hiF, color="red")
-        fig.add_subplot(2, 1, 2)
-        _plt.hist(oo.amps[startIt:, 0], bins=_N.linspace(_N.min(oo.amps[startIt:, 0]), _N.max(oo.amps[startIt:, 0]), NB), color="black")
-        _plt.axvline(x=loA, color="red")
-        _plt.axvline(x=hiA, color="red")
-        _plt.savefig(resFN("chosenFsAmps", dir=oo.setname))
-        _plt.close()
-
-        indsFs = _N.where((oo.fs[startIt:, 0] >= loF) & (oo.fs[startIt:, 0] <= hiF))
-        indsAs = _N.where((oo.amps[startIt:, 0] >= loA) & (oo.amps[startIt:, 0] <= hiA))
-
-        asfsInds = _N.intersect1d(indsAs[0], indsFs[0]) + startIt
-        q = _N.mean(oo.smp_q2[0, startIt:])
-
-
-        #alfas = _N.mean(oo.allalfas[asfsInds], axis=0)
-        pcklme = [aus, q, oo.allalfas[asfsInds], aSs]
-        
-        dmp = open(resFN("bestParams.pkl", dir=oo.setname), "wb")
-        pickle.dump(pcklme, dmp, -1)
-        dmp.close()

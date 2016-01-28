@@ -173,11 +173,11 @@ def create(setname):
             currentsOsc[n, tr] = xBest[n]
             currentsUpDn[n, tr] = updn[tr, n]
 
-            dV[n] = -V[n] / tau + eps[n] + currentsOth[n, tr] + oscCS[tr]*currentsOsc[n, tr] + updn[tr, n]
+            dV[n] = -V[n] / tau + eps[n] + currentsOth[n, tr] + oscCS[tr]*currentsOsc[n, tr]
 
             V[n+1] = V[n] + dV[n]*dt
 
-            if V[n+1] > thr:
+            if V[n+1] + updn[tr, n] > thr:
                 V[n + 1] = rst
                 dN[n] = 1
                 if n > buff:

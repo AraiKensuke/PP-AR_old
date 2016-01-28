@@ -15,6 +15,7 @@ import numpy.polynomial.polynomial as _Npp
 from kflib import createDataAR
 import patsy
 import pickle
+import matplotlib.pyplot as _plt
 
 class mcmcARspk(mAR.mcmcAR):
     ##  
@@ -37,6 +38,7 @@ class mcmcARspk(mAR.mcmcAR):
     pgs           = None
     fs            = None
     amps          = None
+    mnStds        = None
 
     #  Existing data, ground truth
     fx            = None   #  filtered latent state
@@ -426,7 +428,7 @@ class mcmcARspk(mAR.mcmcAR):
 
         return cif
 
-    def findMode(self, startIt=None, NB=20, NeighB=1):
+    def findMode(self, startIt=None, NB=20, NeighB=1, dir=None):
         oo  = self
         startIt = oo.burn if startIt == None else startIt
         aus = _N.mean(oo.smp_u[:, startIt:], axis=1)
@@ -455,7 +457,10 @@ class mcmcARspk(mAR.mcmcAR):
         _plt.hist(oo.amps[startIt:, 0], bins=_N.linspace(_N.min(oo.amps[startIt:, 0]), _N.max(oo.amps[startIt:, 0]), NB), color="black")
         _plt.axvline(x=loA, color="red")
         _plt.axvline(x=hiA, color="red")
-        _plt.savefig(resFN("chosenFsAmps", dir=oo.setname))
+        if dir is None:
+            _plt.savefig(resFN("chosenFsAmps", dir=oo.setname))
+        else:
+            _plt.savefig(resFN("%s/chosenFsAmps" % dir, dir=oo.setname))
         _plt.close()
 
         indsFs = _N.where((oo.fs[startIt:, 0] >= loF) & (oo.fs[startIt:, 0] <= hiF))
@@ -468,6 +473,34 @@ class mcmcARspk(mAR.mcmcAR):
         #alfas = _N.mean(oo.allalfas[asfsInds], axis=0)
         pcklme = [aus, q, oo.allalfas[asfsInds], aSs]
         
-        dmp = open(resFN("bestParams.pkl", dir=oo.setname), "wb")
+        if dir is None:
+            dmp = open(resFN("bestParams.pkl", dir=oo.setname), "wb")
+        else:
+            dmp = open(resFN("%s/bestParams.pkl" % dir, dir=oo.setname), "wb")
         pickle.dump(pcklme, dmp, -1)
         dmp.close()
+
+    
+    def dump_smps(self, pcklme=None, dir=None):
+        oo    = self
+        if pcklme is None:
+            pcklme = {}
+
+        pcklme["aS"]   = oo.smp_aS  #  this is last
+        pcklme["B"]    = oo.B
+        pcklme["q2"]   = oo.smp_q2
+        pcklme["amps"] = oo.amps
+        pcklme["fs"]   = oo.fs
+        pcklme["u"]    = oo.smp_u
+        pcklme["mnStds"]= oo.mnStds
+
+        if dir is None:
+            dmp = open("smpls.dump", "wb")
+        else:
+            dmp = open("%s/smpls.dump" % dir, "wb")
+        pickle.dump(pcklme, dmp, -1)
+        dmp.close()
+
+        # import pickle
+        # with open("smpls.dump", "rb") as f:
+        # lm = pickle.load(f)

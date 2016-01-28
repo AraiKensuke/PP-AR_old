@@ -163,6 +163,24 @@ class mcmcARp1(mcmcARspk1.mcmcARspk1):
             ########     PSTH sample
             if oo.bpsth:
                 Oms  = kpOws - oo.smpx - ARo - oous_rs
+                _N.einsum("mn,mn->n", oo.ws, Oms, out=smWimOm)   #  sum over
+                ilv_f  = _N.diag(_N.sum(oo.ws, axis=0))
+                #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
+                _N.fill_diagonal(lv_f, 1./_N.diagonal(ilv_f))
+                lm_f  = _N.dot(lv_f, smWimOm)  #  nondiag of 1./Bi are inf
+                #  now sample
+                iVAR = _N.dot(oo.B, _N.dot(ilv_f, oo.B.T)) + iD_f
+                t4a = _tm.time()
+                VAR  = _N.linalg.inv(iVAR)  #  knots x knots
+                t4b = _tm.time()
+                #iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
+                #Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
+
+                Mn = oo.u_a + _N.dot(DB, _N.linalg.solve(BDB + lv_f, lm_f - BTua
+))
+
+                """
+                Oms  = kpOws - oo.smpx - ARo - oous_rs
                 _N.einsum("mn,mn->n", oo.ws, Oms, out=smWimOm)   #  sum over 
                 ilv_f  = _N.diag(_N.sum(oo.ws, axis=0))
                 #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
@@ -173,6 +191,7 @@ class mcmcARp1(mcmcARspk1.mcmcARspk1):
                 VAR  = _N.linalg.inv(iVAR)  #  knots x knots
                 iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
                 Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
+                """
 
                 oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
                 oo.smp_aS[it, :] = oo.aS
@@ -198,6 +217,15 @@ class mcmcARp1(mcmcARspk1.mcmcARspk1):
             t5 = t4
             if not oo.noAR:
             #  _d.F, _d.N, _d.ks, 
+
+
+
+
+
+
+
+
+
                 oo.smpx = _kfar1.armdl_FFBS_1itr(oo._d, multitrial=True)
                 oo.Bsmpx[:, it]    = oo.smpx
                 stds = _N.std(oo.Bsmpx[:, it], axis=1)

@@ -354,8 +354,8 @@ class mcmcARpBM2(mARspk.mcmcARspk):
                     #oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
 
             stds = _N.std(oo.smpx[:, 2:, 0], axis=1)
-            mnStd = _N.mean(stds, axis=0)
-            print "mnStd  %.3f" % mnStd
+            oo.mnStds[it] = _N.mean(stds, axis=0)
+            print "mnStd  %.3f" % oo.mnStds[it]
             ###  
 
             lwsts = _N.where(oo.Z[:, 0] == 1)[0]
@@ -458,3 +458,11 @@ class mcmcARpBM2(mARspk.mcmcARspk):
         # oo.gibbsSamp()
         # t2    = _tm.time()
         # print (t2-t1)
+
+    def dumpSamples(self, dir=None):
+        pcklme     = {}
+        
+        pcklme["ss"]  = oo.smp_ss
+        pcklme["zs"]  = oo.smp_zs
+        pcklme["ms"]  = oo.smp_ms
+        oo.__class__.__bases__[0].dumpSamples(pcklme=pcklme, dir=dir)

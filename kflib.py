@@ -158,27 +158,33 @@ def createModEnvelopes(TR, N, t0, t1, jitterTiming, jitterLength, gkW=0, weak=0.
 
     return out
 
-def createUpDn(TR, N, minDur, lmd, lowV=-1, upM=1):
+def createUpDn(TR, N, minDurL, lmdL, minDurH, lmdH, lowV=-1, upM=1, pUp=0.5):
     """
     upM will take time period and multiply if an upstate
     """
     updn = _N.empty((TR, N))
-    sz   = 10*N*TR/lmd
-    rv = _ss.expon.rvs(scale=lmd, size=sz)
-    fltrd     = rv[rv > minDur]
+    szL   = 10*N*TR/lmdL
+    szH   = 10*N*TR/lmdH
+    rvL = _ss.expon.rvs(scale=lmdL, size=szL)
+    rvH = _ss.expon.rvs(scale=lmdH, size=szH)
+    fltrdL     = rvL[rvL > minDurL]
+    fltrdH     = rvH[rvH > minDurH]
     ir = 0   #  random exponential
     vals  = _N.array([0, lowV])
     for tr in xrange(TR):
-        iS = 0 if (_N.random.rand() > 0.5) else 1
+        iS = 0 if (_N.random.rand() < 0.5) else 1
         t = 0
 
         while t < N:
             m = 1
             if iS == 0:
                 m = upM
-            updn[tr, t:t+int(fltrd[ir]*m)] = vals[iS]
+                updn[tr, t:t+int(fltrdH[ir]*m)] = vals[iS]
+                t += int(fltrdH[ir]*m)
+            else:
+                updn[tr, t:t+int(fltrdL[ir]*m)] = vals[iS]
+                t += int(fltrdL[ir]*m)
             iS = 1 - iS
-            t += int(fltrd[ir]*m)
             ir += 1
     return updn
 """

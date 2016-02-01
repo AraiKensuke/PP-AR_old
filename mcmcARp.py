@@ -236,8 +236,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                     oo.F_alfa_rep = alpR + alpC   #  new constructed
                     prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
                     print prt
-                #ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
-                #ranks[it]    = rank
+                ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
+
                 oo.allalfas[it] = oo.F_alfa_rep
 
                 for m in xrange(ooTR):
@@ -378,6 +378,14 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                     oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                     oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                     oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+
+            ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
+                oo.allalfas[it] = oo.F_alfa_rep
+
+                for m in xrange(ooTR):
+                    #oo.wts[m, it, :, :]   = wt[m, :, :, 0]
+                    #oo.uts[m, it, :, :]   = ut[m, :, :, 0]
+
 
             stds = _N.std(oo.smpx[:, 2:, 0], axis=1)
             oo.mnStds[it] = _N.mean(stds, axis=0)

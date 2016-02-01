@@ -1,7 +1,7 @@
 from kassdirs import resFN
 import scipy.signal as _ssig
 import re as _re
-from filter import lpFilt, bpFilt, base_q4atan
+from filter import lpFilt, bpFilt, base_q4atan, gauKer
 import numpy as _N
 import matplotlib.pyplot as _plt
 import random as _ran
@@ -67,6 +67,104 @@ def modhistAll(setname, shftPhase=0, haveFiltered=False, fltPrms=[3.3, 11, 1, 15
 
     return figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, surrogates=surrogates, normed=normed, fn=fn, maxY=maxY, yticks=yticks, setname=setname)
 
+def histPhase0_phaseInfrdAll(mARp, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0):
+    if not bRealDat:
+        return _histPhase0_phaseInfrdAll(mARp.TR, mARp.N+1, mARp.x, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0)
+    else:   #  REAL DAT
+        return _histPhase0_phaseInfrdAll(mARp.TR, mARp.N+1, mARp.fx, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0)
+
+def _histPhase0_phaseInfrdAll(TR, N, x, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0):
+
+    """
+    what is the inferred phase when ground truth phase is 0
+    """
+    pInfrdAt0 = []
+
+    if (fltPrms is not None) and (not bRealDat):
+        _fx = _N.empty((TR, N))
+        for tr in xrange(TR):
+            if len(fltPrms) == 2:
+                _fx[tr] = lpFilt(fltPrms[0], fltPrms[1], 500, x[tr])
+            elif len(fltPrms) == 4: 
+                # 20, 40, 10, 55 #(fpL, fpH, fsL, fsH, nyqf, y):
+                _fx[tr] = bpFilt(fltPrms[0], fltPrms[1], fltPrms[2], fltPrms[3], 500, x[tr])
+    else:
+        _fx  = x
+
+    gk  = gauKer(1) 
+    gk /= _N.sum(gk)
+
+    if trials is None:
+        trials = _N.arange(TR)
+        TR     = TR
+    else:
+        TR     = len(trials)
+        trials = _N.array(trials)
+
+    #trials, TR = range(mARp.TR), mARp.TR if (trials is None) else trials, len(trials)
+
+    nPh0s = _N.zeros(TR)
+    t1    = t1-t0   #  mdn already size t1-t0
+    t0    = 0
+
+    mdn = _mdn
+    fx  = _fx
+    if _mdn.shape[0] != t1 - t0:
+        mdn = _mdn[:, t0:t1]
+    if _fx.shape[0] != t1 - t0:
+        fx = _fx[:, t0:t1]
+
+    itr   = 0
+
+    phs  = []   #  phase 0 of inferred is at what phase of GT or LFP?
+    cSpkPhs= []
+    sSpkPhs= []
+
+    for tr in trials:
+        itr += 1
+        cv = _N.convolve(mdn[tr, t0:t1] - _N.mean(mdn[tr, t0:t1]), gk, mode="same")
+
+        ht_mdn  = _ssig.hilbert(cv)
+        ht_fx   = _ssig.hilbert(fx[tr, t0:t1] - _N.mean(fx[tr, t0:t1]))
+        ph_mdn  = (_N.arctan2(ht_mdn.imag, ht_mdn.real) + _N.pi) / (2*_N.pi)
+        ph_mdn  = _N.mod(ph_mdn + shftPhase, 1)
+        ph_fx  = (_N.arctan2(ht_fx.imag, ht_fx.real) + _N.pi) / (2*_N.pi)
+        ph_fx  = _N.mod(ph_fx + shftPhase, 1)
+        #  phase = 0 is somewhere in middle
+
+        inds = _N.where((ph_mdn[0:t1-t0-1] < 1) & (ph_mdn[0:t1-t0-1] > 0.5) & (ph_mdn[1:t1-t0] < 0.25))[0]
+        cSpkPhs.append(_N.cos(2*_N.pi*ph_fx[inds+t0]))
+        sSpkPhs.append(_N.sin(2*_N.pi*ph_fx[inds+t0]))
+        phs.append(ph_fx[inds+t0])
+        
+        #for i in xrange(t0-t0, t1-t0-1):
+        #    if (ph_mdn[i] < 1) and (ph_mdn[i] > 0.5) and (ph_mdn[i+1] < -0.5):
+        #        pInfrdAt0.append(ph_fx[i]/2.)
+
+    return figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, surrogates=surrogates, normed=normed, fn=fn, maxY=maxY, yticks=yticks)
+
+def getPhases(_mdn):
+    """
+    what is the inferred phase when ground truth phase is 0
+    """
+    TR = _mdn.shape[0]
+    ph = _N.array(_mdn)
+
+    gk  = gauKer(2) 
+    gk /= _N.sum(gk)
+
+
+    mdn = _mdn
+    itr   = 0
+
+    for tr in xrange(TR):
+        itr += 1
+        cv = _N.convolve(mdn[tr] - _N.mean(mdn[tr]), gk, mode="same")
+
+        ht_mdn  = _ssig.hilbert(cv)
+        ph[tr]  = (_N.arctan2(ht_mdn.imag, ht_mdn.real) + _N.pi) / (2*_N.pi)
+    return ph
+
 def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surrogates=1, normed=False, fn=None, maxY=None, yticks=None):  #  phase histogram
     ltr = len(trials)
     inorderTrials = _N.arange(ltr)   #  original trial IDs no lnger necessary
@@ -94,7 +192,6 @@ def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surroga
     bgFnt = 22
     smFnt = 20
     fig, ax = _plt.subplots(figsize=(6, 4.2))
-    #_plt.hist(phs + (vPhs + 1).tolist(), bins=_N.linspace(0, 2, 51), color=mC.hist1, edgecolor=mC.hist1, normed=normed)
     _plt.hist(vPhs.tolist() + (vPhs + 1).tolist(), bins=_N.linspace(0, 2, 51), color=mC.hist1, edgecolor=mC.hist1, normed=normed)
 
     if maxY is not None:
@@ -112,11 +209,13 @@ def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surroga
 
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+    ax.spines["left"].axis.axes.tick_params(direction="outward", width=2)
+    ax.spines["bottom"].axis.axes.tick_params(direction="outward", width=2)
 
     ax.yaxis.set_ticks_position("left")
     ax.xaxis.set_ticks_position("bottom")
-    for tic in ax.xaxis.get_major_ticks():
-        tic.tick1On = tic.tick2On = False
+    #    for tic in ax.xaxis.get_major_ticks():
+    #   tic.tick1On = tic.tick2On = False
 
     fig.subplots_adjust(left=0.17, bottom=0.17, right=0.95, top=0.9)
 

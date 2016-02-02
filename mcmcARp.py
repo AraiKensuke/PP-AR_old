@@ -236,8 +236,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                     oo.F_alfa_rep = alpR + alpC   #  new constructed
                     prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
                     print prt
-                ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
-
+                #ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
+                #ranks[it]    = rank
                 oo.allalfas[it] = oo.F_alfa_rep
 
                 for m in xrange(ooTR):
@@ -304,15 +304,20 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
     def latentState(self, burns=None, useMeanOffset=False):  ###########################  GIBBSSAMPH
         oo          = self
+
         ooTR        = oo.TR
         ook         = oo.k
         ooNMC       = oo.NMC
         ooN         = oo.N
         oo.x00         = _N.array(oo.smpx[:, 2])
         oo.V00         = _N.zeros((ooTR, ook, ook))
+        alpR   = oo.F_alfa_rep[0:oo.R]
+        alpC   = oo.F_alfa_rep[oo.R:]
 
         ARo   = _N.empty((ooTR, oo._d.N+1))
         kpOws = _N.empty((ooTR, ooN+1))
+        oo.uts          = _N.empty((oo.TR, oo.burn+oo.NMC, oo.R, oo.N+2))
+        oo.wts          = _N.empty((oo.TR, oo.burn+oo.NMC, oo.C, oo.N+3))
 
         it    = -1
 
@@ -380,12 +385,11 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                     oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
 
             ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
-                oo.allalfas[it] = oo.F_alfa_rep
+            oo.allalfas[it] = oo.F_alfa_rep
 
-                for m in xrange(ooTR):
-                    #oo.wts[m, it, :, :]   = wt[m, :, :, 0]
-                    #oo.uts[m, it, :, :]   = ut[m, :, :, 0]
-
+            for m in xrange(ooTR):
+                oo.wts[m, it, :, :]   = wt[m, :, :, 0]
+                oo.uts[m, it, :, :]   = ut[m, :, :, 0]
 
             stds = _N.std(oo.smpx[:, 2:, 0], axis=1)
             oo.mnStds[it] = _N.mean(stds, axis=0)

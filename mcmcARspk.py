@@ -370,7 +370,8 @@ class mcmcARspk(mAR.mcmcAR):
         for tr in xrange(TR):
             for it in xrange(1, burn + NMC):
                 b, c = dcmpcff(alfa=oo.allalfas[it])
-
+                print b
+                print c
                 for r in xrange(R):
                     oo.rts[tr, it, :, r] = b[r] * oo.uts[tr, it, r, :]
 
@@ -493,6 +494,7 @@ class mcmcARspk(mAR.mcmcAR):
         pcklme["fs"]   = oo.fs
         pcklme["u"]    = oo.smp_u
         pcklme["mnStds"]= oo.mnStds
+        pcklme["allalfas"]= oo.allalfas
 
         if dir is None:
             dmp = open("smpls.dump", "wb")

@@ -693,3 +693,60 @@ def isis(dat, COLS, spkcol=2, trials=None, t0=0, t1=None):
 
     return isis
         
+
+
+def findMode(dmp, setname, burn, NMC, startIt=None, NB=20, NeighB=1, dir=None):
+    smp_u  = dmp["u"]
+    smp_aS = dmp["aS"]
+    fs     = dmp["fs"]
+    amps   = dmp["amps"]
+    amps   = dmp["amps"]
+    startIt = burn if startIt == None else startIt
+    aus = _N.mean(smp_u[:, startIt:], axis=1)
+    aSs = _N.mean(smp_aS[startIt:], axis=0)
+
+    L   = burn + NMC - startIt
+
+    hist, bins = _N.histogram(fs[startIt:, 0], _N.linspace(_N.min(fs[startIt:, 0]), _N.max(fs[startIt:, 0]), NB))
+    indMfs =  _N.where(hist == _N.max(hist))[0][0]
+    indMfsL =  max(indMfs - NeighB, 0)
+    indMfsH =  min(indMfs + NeighB+1, NB-1)
+    loF, hiF = bins[indMfsL], bins[indMfsH]
+
+    hist, bins = _N.histogram(amps[startIt:, 0], _N.linspace(_N.min(amps[startIt:, 0]), _N.max(amps[startIt:, 0]), NB))
+    indMamps  =  _N.where(hist == _N.max(hist))[0][0]
+    indMampsL =  max(indMamps - NeighB, 0)
+    indMampsH =  min(indMamps + NeighB+1, NB)
+    loA, hiA = bins[indMampsL], bins[indMampsH]
+
+    fig = _plt.figure(figsize=(8, 8))
+    fig.add_subplot(2, 1, 1)
+    _plt.hist(fs[startIt:, 0], bins=_N.linspace(_N.min(fs[startIt:, 0]), _N.max(fs[startIt:, 0]), NB), color="black")
+    _plt.axvline(x=loF, color="red")
+    _plt.axvline(x=hiF, color="red")
+    fig.add_subplot(2, 1, 2)
+    _plt.hist(amps[startIt:, 0], bins=_N.linspace(_N.min(amps[startIt:, 0]), _N.max(amps[startIt:, 0]), NB), color="black")
+    _plt.axvline(x=loA, color="red")
+    _plt.axvline(x=hiA, color="red")
+    if dir is None:
+        _plt.savefig(resFN("chosenFsAmps", dir=setname))
+    else:
+        _plt.savefig(resFN("%s/chosenFsAmps" % dir, dir=setname))
+    _plt.close()
+
+    indsFs = _N.where((fs[startIt:, 0] >= loF) & (fs[startIt:, 0] <= hiF))
+    indsAs = _N.where((amps[startIt:, 0] >= loA) & (amps[startIt:, 0] <= hiA))
+
+    asfsInds = _N.intersect1d(indsAs[0], indsFs[0]) + startIt
+    q = _N.mean(smp_q2[0, startIt:])
+
+
+    #alfas = _N.mean(allalfas[asfsInds], axis=0)
+    pcklme = [aus, q, allalfas[asfsInds], aSs]
+
+    if dir is None:
+        dmp = open(resFN("bestParams.pkl", dir=setname), "wb")
+    else:
+        dmp = open(resFN("%s/bestParams.pkl" % dir, dir=setname), "wb")
+    pickle.dump(pcklme, dmp, -1)
+    dmp.close()

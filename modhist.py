@@ -36,6 +36,8 @@ def modhist(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr
         COLS = 3
         sub  = 1
 
+    print bRealDat
+
     TR   = cols / COLS
     if trials is None:
         if tr1 is None:

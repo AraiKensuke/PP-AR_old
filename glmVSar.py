@@ -52,15 +52,6 @@ def compare(mARp, est, X, spkHist, oscMn, dat, gkW=20, useRefr=True):
         infrd = oscMn[tr, stT:] / _N.std(oscMn[tr, stT:])
         infrd /= _N.std(infrd)
 
-        # if tr < 3:
-        #     fig = _plt.figure()
-        #     _plt.plot(glm + 4)
-        #     _plt.plot(cglm + 2)
-        #     _plt.plot(infrd)
-        #     _plt.plot(gt - 2)
-        #     _plt.suptitle(tr)
-
-
         pc1, pv1 = _ss.pearsonr(glm, gt)
         pc1c, pv1c = _ss.pearsonr(cglm, gt)
         pc2, pv2 = _ss.pearsonr(infrd, gt)
@@ -104,3 +95,39 @@ def compare(mARp, est, X, spkHist, oscMn, dat, gkW=20, useRefr=True):
 
     _plt.savefig("cmpGLMAR_hist")
     _plt.close()
+
+
+def getGLMphases(TR, t0, t1, est, X, spkHist, dat, gkW=20, useRefr=True):
+    params = _N.array(est.params)
+
+    stT = spkHist.LHbin * (spkHist.nLHBins + 1)    #  first stT spikes used for initial history
+    ocifs  = _N.empty((spkHist.endTR - spkHist.startTR, spkHist.t1-spkHist.t0 - stT))
+    dt     = 0.001
+
+    ##  
+
+    sur = "refr"
+    if not useRefr:
+        params[spkHist.endTR:spkHist.endTR+spkHist.LHbin] = params[spkHist.endTR+spkHist.LHbin]
+        sur = "NOrefr"
+
+    for tr in xrange(spkHist.endTR - spkHist.startTR):
+        ocifs[tr] = _N.exp(_N.dot(X[tr], params)) / dt
+
+    gk = _flt.gauKer(gkW)
+    gk /= _N.sum(gk)
+
+    cglmAll = _N.zeros((TR, t1-t0))
+
+    for tr in xrange(spkHist.startTR, TR):  #  spkHist.statTR usually 0
+        _gt = dat[stT:, tr*3]
+        gt = _N.convolve(_gt, gk, mode="same")
+        gt /= _N.std(gt)
+
+        glm = (ocifs[tr] - _N.mean(ocifs[tr])) / _N.std(ocifs[tr])
+        cglm = _N.convolve(glm, gk, mode="same")
+        cglm /= _N.std(cglm)
+
+        cglmAll[tr, stT:] = cglm
+
+    return stT, cglmAll

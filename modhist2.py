@@ -9,7 +9,7 @@ import myColors as mC
 import itertools as itls
 
 #  [3.3, 11, 1, 15]
-def modhistAll(setname, shftPhase=0, haveFiltered=False, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, maxY=None, yticks=None, normed=False, surrogates=1):
+def modhistAll(setname, shftPhase=0, haveFiltered=False, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, maxY=None, yticks=None, normed=False, surrogates=1, color=None):
     """
     shftPhase from 0 to 1.  
     yticks should look like [[0.5, 1, 1.5], ["0.5", "1", "1.5"]]
@@ -65,16 +65,15 @@ def modhistAll(setname, shftPhase=0, haveFiltered=False, fltPrms=[3.3, 11, 1, 15
         sSpkPhs.append(_N.sin(2*_N.pi*ph_x[ispks]))
         phs.append(ph_x[ispks])
 
-    return figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, surrogates=surrogates, normed=normed, fn=fn, maxY=maxY, yticks=yticks, setname=setname)
+    return figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, surrogates=surrogates, normed=normed, fn=fn, maxY=maxY, yticks=yticks, setname=setname, color=color)
 
-def histPhase0_phaseInfrdAll(mARp, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0):
+def histPhase0_phaseInfrdAll(mARp, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0, color=None):
     if not bRealDat:
-        return _histPhase0_phaseInfrdAll(mARp.TR, mARp.N+1, mARp.x, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0)
+        return _histPhase0_phaseInfrdAll(mARp.TR, mARp.N+1, mARp.x, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0, color=color)
     else:   #  REAL DAT
-        return _histPhase0_phaseInfrdAll(mARp.TR, mARp.N+1, mARp.fx, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0)
+        return _histPhase0_phaseInfrdAll(mARp.TR, mARp.N+1, mARp.fx, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0, color=color)
 
-def _histPhase0_phaseInfrdAll(TR, N, x, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0):
-
+def _histPhase0_phaseInfrdAll(TR, N, x, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0, color=None):
     """
     what is the inferred phase when ground truth phase is 0
     """
@@ -141,7 +140,7 @@ def _histPhase0_phaseInfrdAll(TR, N, x, _mdn, t0=None, t1=None, bRealDat=False, 
         #    if (ph_mdn[i] < 1) and (ph_mdn[i] > 0.5) and (ph_mdn[i+1] < -0.5):
         #        pInfrdAt0.append(ph_fx[i]/2.)
 
-    return figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, surrogates=surrogates, normed=normed, fn=fn, maxY=maxY, yticks=yticks)
+    return figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, surrogates=surrogates, normed=normed, fn=fn, maxY=maxY, yticks=yticks, color=color)
 
 def getPhases(_mdn):
     """
@@ -165,7 +164,7 @@ def getPhases(_mdn):
         ph[tr]  = (_N.arctan2(ht_mdn.imag, ht_mdn.real) + _N.pi) / (2*_N.pi)
     return ph
 
-def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surrogates=1, normed=False, fn=None, maxY=None, yticks=None):  #  phase histogram
+def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surrogates=1, normed=False, fn=None, maxY=None, yticks=None, color=None):  #  phase histogram
     ltr = len(trials)
     inorderTrials = _N.arange(ltr)   #  original trial IDs no lnger necessary
     R2s = _N.empty(surrogates)
@@ -192,7 +191,11 @@ def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surroga
     bgFnt = 22
     smFnt = 20
     fig, ax = _plt.subplots(figsize=(6, 4.2))
-    _plt.hist(vPhs.tolist() + (vPhs + 1).tolist(), bins=_N.linspace(0, 2, 51), color=mC.hist1, edgecolor=mC.hist1, normed=normed)
+    if color is None:
+        ec = mC.hist1
+    else:
+        ec = color
+    _plt.hist(vPhs.tolist() + (vPhs + 1).tolist(), bins=_N.linspace(0, 2, 51), color=ec, edgecolor=ec, normed=normed)
 
     if maxY is not None:
         _plt.ylim(0, maxY)

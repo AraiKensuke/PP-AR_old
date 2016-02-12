@@ -53,6 +53,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
     fs            = None
     amps          = None
     dt            = None
+    mcmcRunDir    = None
 
     ####  TEMPORARY
     Bi            = None
@@ -86,6 +87,13 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oo.x00         = _N.array(oo.smpx[:, 2])
         oo.V00         = _N.zeros((ooTR, ook, ook))
 
+        print "oo.mcmcRunDir    %s" % oo.mcmcRunDir
+        if oo.mcmcRunDir is None:
+            print "here!!!!!!!!!!!!!!"
+            oo.mcmcRunDir = ""
+        elif oo.mcmcRunDir[-1] != "/":
+            oo.mcmcRunDir += "/"
+
         ARo   = _N.empty((ooTR, oo._d.N+1))
         
         kpOws = _N.empty((ooTR, ooN+1))
@@ -102,7 +110,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         Oms          = _N.empty((ooTR, ooN+1))
         smWimOm      = _N.zeros(ooN + 1)
         smWinOn      = _N.zeros(ooTR)
-        bConstPSTH = False
+        bConstPSTH   = False
         D_f          = _N.diag(_N.ones(oo.B.shape[0])*oo.s2_a)   #  spline
         iD_f = _N.linalg.inv(D_f)
         D_u  = _N.diag(_N.ones(oo.TR)*oo.s2_u)   #  This should 
@@ -287,20 +295,37 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 fig.add_subplot(3, 1, 3)
                 _plt.plot(oo.mnStds[1:it])
 
-                _plt.savefig("tmp-fsamps%d" % it)
+                _plt.savefig("%(dir)stmp-fsamps%(it)d" % {"dir" : oo.mcmcRunDir, "it" : it})
                 _plt.close()
-        
-            # print "t2-t1 %.3f" % (t2-t1)
-            # print "t3-t2 %.3f" % (t3-t2)
-            # print "t4-t3 %.3f" % (t4-t3)
-            # print "t4a-t4 %.3f" % (t4a-t4)
-            # print "t4b-t4a %.3f" % (t4b-t4a)
-            # print "t4c-t4b %.3f" % (t4c-t4b)
-            #print "***t4d-t4c %.3f" % (t4d-t4c)
 
-            # print "t5-t4b %.3f" % (t5-t4b)
-            # print "t6-t5 %.3f" % (t6-t5)
-            # print "gibbs iter %.3f" % (t6-t1)
+                W   = 60
+                #  do an sta of inferred state
+                stwfs = []
+                for tr in xrange(oo.TR):
+                    sts = _N.where(oo.y[tr] == 1)[0]
+    
+                for t in sts:
+                    if (t > oo.t0+W) and (t < oo.t1-W):
+                        stwfs.append(oo.smpx[tr, t-W:t+W, 0])
+
+
+                rstwfs = []
+                inds   = _N.arange(oo.TR)
+                _N.random.shuffle(inds)
+                for tr in xrange(oo.TR):
+                    rtr = inds[tr]
+                    sts = _N.where(oo.y[rtr] == 1)[0]
+    
+                    for t in sts:
+                        if (t > oo.t0+W) and (t < oo.t1-W):
+                            rstwfs.append(oo.smpx[tr, t-W:t+W, 0])
+
+                astwfs  = _N.array(stwfs)
+                arstwfs = _N.array(rstwfs)
+
+                _N.savetxt("%(dir)sstlwfs%(it)d.dat" % {"dir" : oo.mcmcRunDir, "it" : it}, astwfs, fmt=("%.3f " * 2*W))
+                _N.savetxt("%(dir)srstlwfs%(it)d.dat" % {"dir" : oo.mcmcRunDir, "it" : it}, arstwfs, fmt=("%.3f " * 2*W))
+                _N.savetxt("%(dir)ssmpx%(it)d.dat" % {"dir" : oo.mcmcRunDir, "it" : it}, oo.smpx[:, 2:, 0].T, fmt=("%.3f " * oo.TR))
 
     def latentState(self, burns=None, useMeanOffset=False):  ###########################  GIBBSSAMPH
         oo          = self
@@ -410,9 +435,9 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oo.zts   = None
 
         if dir is None:
-            dmp = open("mARp.dump", "wb")
+            dmp = open("oo.dump", "wb")
         else:
-            dmp = open("%s/mARp.dump" % dir, "wb")
+            dmp = open("%s/oo.dump" % dir, "wb")
         pickle.dump(pcklme, dmp, -1)
         dmp.close()
 

@@ -198,17 +198,17 @@ def plotFsAmp(mARp, tr0=None, tr1=None, xticks=None, yticksFrq=None, yticksMod=N
         tr1 = mARp.burn + mARp.NMC
     fig = _plt.figure(figsize=(12, 3))
     ax  = fig.add_subplot(1, 3, 1)
-    _plt.plot((mARp.fs[tr0:tr1, 0]/fMult)*1000, color=mC.msurd)
+    _plt.plot(range(tr0, tr1, 5), (mARp.fs[tr0:tr1:5, 0]/fMult)*1000, color=mC.msurd)
     setTicksAndLims(xlabel="iterations", ylabel="Hz", xticks=xticks, yticks=yticksFrq, xlim=tr1, tickFS=20, labelFS=20)
     bottomLeftAxes(ax)
     ######
     ax = fig.add_subplot(1, 3, 2)
-    _plt.plot(mARp.amps[tr0:tr1, 0], color=mC.msurd)
+    _plt.plot(range(tr0, tr1, 5), mARp.amps[tr0:tr1:5, 0], color=mC.msurd)
     setTicksAndLims(xlabel="iterations", ylabel="modulus", xticks=xticks, yticks=yticksMod, xlim=tr1, tickFS=20, labelFS=20)
     bottomLeftAxes(ax)
     ######
     ax = fig.add_subplot(1, 3, 3)
-    _plt.plot(mARp.mnStds[tr0:tr1], color=mC.msurd)
+    _plt.plot(range(tr0, tr1, 5), mARp.mnStds[tr0:tr1:5], color=mC.msurd)
     setTicksAndLims(xlabel="iterations", ylabel="amplitude", xticks=xticks, yticks=yticksAmp, xlim=tr1, tickFS=20, labelFS=20)
     bottomLeftAxes(ax)
     fig.subplots_adjust(left=0.1, bottom=0.25, top=0.95, right=0.95, wspace=0.4, hspace=0.4)

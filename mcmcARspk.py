@@ -459,9 +459,9 @@ class mcmcARspk(mAR.mcmcAR):
         _plt.axvline(x=loA, color="red")
         _plt.axvline(x=hiA, color="red")
         if dir is None:
-            _plt.savefig(resFN("chosenFsAmps", dir=oo.setname))
+            _plt.savefig(resFN("chosenFsAmps%d" % startIt, dir=oo.setname))
         else:
-            _plt.savefig(resFN("%s/chosenFsAmps" % dir, dir=oo.setname))
+            _plt.savefig(resFN("%(sn)s/chosenFsAmps%(it)d" % {"sn" : dir, "it" : startIt}, dir=oo.setname))
         _plt.close()
 
         indsFs = _N.where((oo.fs[startIt:, 0] >= loF) & (oo.fs[startIt:, 0] <= hiF))
@@ -475,9 +475,9 @@ class mcmcARspk(mAR.mcmcAR):
         pcklme = [aus, q, oo.allalfas[asfsInds], aSs]
         
         if dir is None:
-            dmp = open(resFN("bestParams.pkl", dir=oo.setname), "wb")
+            dmp = open(resFN("bestParams%d.pkl" % startIt, dir=oo.setname), "wb")
         else:
-            dmp = open(resFN("%s/bestParams.pkl" % dir, dir=oo.setname), "wb")
+            dmp = open(resFN("%(sn)s/bestParams%(it)d.pkl" % {"sn" : dir, "it" : startIt}, dir=oo.setname), "wb")
         pickle.dump(pcklme, dmp, -1)
         dmp.close()
 

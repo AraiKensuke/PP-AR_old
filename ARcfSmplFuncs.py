@@ -90,7 +90,8 @@ def initF(nR, nCS, nCN, ifs=None):
 
     #iRs[0:nR] = -0.6 - 0.4*_N.random.rand(nR)
     #iRs[0:nR] = 0.1*_N.random.rand(nR)
-    iRs[0:nR] = 0.4
+    iRs[0:nR] = -0.4   #  negative value here helps AR(3) when using modulus prior
+    #iRs[0:nR] = 0.4   #  was good for AR(p > 3) when using modulus prior
 
     if (ifs == None):
         ifs  = []
@@ -99,8 +100,9 @@ def initF(nR, nCS, nCN, ifs=None):
 
     for n in xrange(nCPr):
         if n < nCS:
+            print ifs[n]
             th = ifs[n]
-            r  = 0.95
+            r  = 0.97
         else:  #  Looking at how noise roots distribute themselves
                #  they seem to spread out fairly evenly in spectrum
             th = _N.pi*(0.15 + 0.8 / (nCN - (n - nCS)))   #  above 80Hz, weak

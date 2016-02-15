@@ -495,6 +495,7 @@ class mcmcARspk(mAR.mcmcAR):
         pcklme["u"]    = oo.smp_u
         pcklme["mnStds"]= oo.mnStds
         pcklme["allalfas"]= oo.allalfas
+        pcklme["smpx"] = oo.smpx
 
         if dir is None:
             dmp = open("smpls.dump", "wb")

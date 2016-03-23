@@ -59,22 +59,33 @@ def compare(mARp, est, X, spkHist, oscMn, dat, gkW=20, useRefr=True):
         cglmAll[tr, stT:] = cglm
         infrdAll[tr, stT:] = infrd
         
-
-        """
         fig = _plt.figure(figsize=(12, 4))
         ax = fig.add_subplot(1, 1, 1)
-        _plt.plot(xt, infrd, color=myC.infrdM, lw=1.5)
+        _plt.plot(xt, infrd, color=myC.infrdM, lw=2)
         _plt.plot(xt, cglm, color=myC.infrdM, lw=2., ls="--")
         #_plt.plot(xt, glm, color=myC.infrdM, lw=2., ls="-.")
-        _plt.plot(xt, gt, color=myC.grndTruth, lw=3)
-        #_plt.title("%(1).3f   %(2).3f" % {"1" : pc1c, "2" : pc2})
+        _plt.plot(xt, gt, color=myC.grndTruth, lw=4)
+
+        MINx = _N.min(infrd)
+        MAXx = _N.max(infrd)
+
+        AMP  = MAXx - MINx
+        ht   = 0.08*AMP
+        ys1  = MINx - 0.5*ht
+        ys2  = MINx - 3*ht
+
+        for n in xrange(stT, mARp.N+1):
+            if mARp.y[tr, n] == 1:
+                _plt.plot([n, n], [ys1, ys2], lw=2.5, color="black")
+        _plt.ylim(ys2 - 0.05*AMP, MAXx + 0.05*AMP)
+
         _plt.xlim(stT, mARp.N+1)
         mF.arbitraryAxes(ax, axesVis=[False, False, False, False], xtpos="bottom", ytpos="none")
         mF.setLabelTicks(_plt, yticks=[], yticksDsp=None, xlabel="time (ms)", ylabel=None, xtickFntSz=24, xlabFntSz=26)
         fig.subplots_adjust(left=0.05, right=0.95, bottom=0.2, top=0.85)
-        _plt.savefig("cmpGLMAR_%(ur)s_%(tr)d" % {"tr" : tr, "ur" : sur})
+        _plt.savefig("cmpGLMAR_%(ur)s_%(tr)d.eps" % {"tr" : tr, "ur" : sur})
         _plt.close()
-         """
+
 
         corrs[tr] = pc1, pc1c, pc2
     mF.histPhase0_phaseInfrd(mARp, cglmAll, t0=stT, t1=(mARp.N+1), bRealDat=False, normed=True, maxY=1.8, fn="smthdGLMPhaseGLM%s" % sur)

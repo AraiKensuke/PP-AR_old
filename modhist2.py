@@ -234,39 +234,51 @@ def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surroga
     _plt.close()
     return R2s
 
-def oscPer(setname, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, showHist=True):
+def oscPer(setname, fltPrms=[5, 13, 1, 20], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, showHist=True, osc=None):
     """
     find period of oscillation
     """
-    _dat     = _N.loadtxt(resFN("xprbsdN.dat", dir=setname))
-    #  modulation histogram.  phase @ spike
-
-    Na, cols = _dat.shape
 
     if t0 is None:
         t0 = 0
     if t1 is None:
         t1 = Na
-    dat = _dat[t0:t1, :]
-    N   = t1-t0
 
-    p = _re.compile("^\d{6}")   # starts like "exptDate-....."
-    m = p.match(setname)
+    if setname is not None:
+        _dat     = _N.loadtxt(resFN("xprbsdN.dat", dir=setname))
 
-    bRealDat = True
-    COLS = 4
-    sub  = 1
+        #  modulation histogram.  phase @ spike
+        Na, cols = _dat.shape
 
-    if m == None:
+        p = _re.compile("^\d{6}")   # starts like "exptDate-....."
+        m = p.match(setname)
+
+        bRealDat = True
+        COLS = 4
+        sub  = 1
+
+        if m == None:
+            bRealDat = False
+            COLS = 3
+            sub  = 0
+
+        TR   = cols / COLS
+        if trials is None:
+            if tr1 is None:
+                tr1 = TR
+            trials = _N.arange(tr0, tr1)
+
+        N   = t1-t0
+        dat = _dat[t0:t1, :]
+    elif  osc is not None:
+        TR, N  = osc.shape
+        trials = _N.arange(TR)
+
         bRealDat = False
-        COLS = 3
-        sub  = 0
-
-    TR   = cols / COLS
-    if trials is None:
-        if tr1 is None:
-            tr1 = TR
-        trials = _N.arange(tr0, tr1)
+        COLS     = 3
+        sub      = 0
+        dat      = _N.empty((N, COLS*TR))
+        dat[:, sub::COLS]      = osc.T
 
     Ts = []
     for tr in trials:

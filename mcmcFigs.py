@@ -9,6 +9,101 @@ import myColors as mC
 import modhist2 as mh2
 from tmrsclTest import timeRescaleTest, zoom
 
+def histPhase0_phaseInfrd(mARp, _mdn, t0=None, t1=None, bRealDat=False, trials=None, filtParams=None, maxY=None, yticks=None, fn=None, normed=False):
+    #  what is the inferred phase when ground truth phase is 0
+    pInfrdAt0 = []
+
+    #if (filtParams is not None) and (not bRealDat):
+    if not bRealDat:
+        _fx = _N.empty((mARp.TR, mARp.N+1))
+        for tr in xrange(mARp.TR):
+            _fx[tr] = lpFilt(30, 40, 1000, mARp.x[tr])
+    else:
+        _fx  = mARp.x
+
+    if bRealDat:
+        _fx = mARp.fx
+    gk  = gauKer(1) 
+    gk /= _N.sum(gk)
+
+    if trials is None:
+        trials = range(mARp.TR)
+        TR     = mARp.TR
+    else:
+        TR     = len(trials)
+    nPh0s = _N.zeros(TR)
+    #t1    = t1-t0   #  mdn already size t1-t0
+    #t0    = 0
+
+    mdn = _mdn
+    fx  = _fx
+    #if _mdn.shape[0] != t1 - t0:
+    #    mdn = _mdn[:, t0:t1]
+    #if _fx.shape[0] != t1 - t0:
+    #    fx = _fx[:, t0:t1]
+
+    itr   = 0
+
+    for tr in trials:
+        itr += 1
+        cv = _N.convolve(mdn[tr, t0:t1] - _N.mean(mdn[tr, t0:t1]), gk, mode="same")
+        #cv = mdn[tr, t0:t1] - _N.mean(mdn[tr, t0:t1])
+
+        ht_mdn  = _ssig.hilbert(cv)
+        #ht_fx   = _ssig.hilbert(fx[tr, t0:t1] - _N.mean(fx[tr, t0:t1]))
+        ht_fx   = _ssig.hilbert(fx[tr, t0:t1] - _N.mean(fx[tr, t0:t1]))
+        ph_mdn  = _N.arctan2(ht_mdn.imag, ht_mdn.real) / _N.pi
+        ph_fx   = ((_N.arctan2(ht_fx.imag, ht_fx.real)   / _N.pi) + 1)
+
+        #  phase = 0 is somewhere in middle
+
+        for i in xrange(t0-t0, t1-t0-1):
+            if (ph_mdn[i] < 1) and (ph_mdn[i] > 0.5) and (ph_mdn[i+1] < -0.5):
+                nPh0s[itr-1] += 1
+                pInfrdAt0.append(ph_fx[i]/2.)
+                pInfrdAt0.append((ph_fx[i]+2)/2.)
+
+    bgFnt = 22
+    smFnt = 20
+
+    fig, ax = _plt.subplots(figsize=(6, 4.2))
+    pInfrdAt0A = _N.array(pInfrdAt0[::2])#  0 to 2
+    Npts = len(pInfrdAt0A)
+    R2   = (1./(Npts*Npts)) * (_N.sum(_N.cos(2*_N.pi*pInfrdAt0A))**2 + _N.sum(_N.sin(2*_N.pi*pInfrdAt0A))**2)
+    _plt.hist(pInfrdAt0, bins=_N.linspace(0, 2, 41), color=mC.hist1, edgecolor=mC.hist1, normed=normed)
+    print "maxY!!!  %f" % maxY
+    if (maxY is not None):
+        _plt.ylim(0, maxY)
+        
+    _plt.xlabel("phase", fontsize=bgFnt)
+    _plt.ylabel("frequency", fontsize=bgFnt)
+    _plt.xticks(fontsize=smFnt)
+    if yticks is not None:
+        _plt.yticks(yticks)
+    _plt.yticks(fontsize=smFnt)
+    if yticks is not None:
+        _plt.yticks(yticks)
+    if normed:
+        _plt.yticks([0.25, 0.5, 0.75, 1], ["0.25", "0.5", "0.75", "1"])
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    ax.yaxis.set_ticks_position("left")
+    ax.xaxis.set_ticks_position("bottom")
+    for tic in ax.xaxis.get_major_ticks():
+        tic.tick1On = tic.tick2On = False
+
+    fig.subplots_adjust(left=0.17, bottom=0.17, right=0.95, top=0.9)
+    if fn is None:
+        fn = "fxPhase1_phaseInfrd,R=%.3f.eps" % _N.sqrt(R2)
+    else:
+        fn = "%(1)s,R=%(2).3f.eps" % {"1" : fn, "2" : _N.sqrt(R2)}
+
+    _plt.savefig(fn, transparent=True)
+    _plt.close()
+    return pInfrdAt0, _N.sqrt(R2), nPh0s
+
 def last_fsamps(mARp, tr0, tr1):
     amps    = mARp.amps[tr0:tr1, 0]
     fs      = mARp.fs[tr0:tr1, 0]

@@ -332,7 +332,7 @@ def reasonableHistory2(lmd, maxH=1.2, strT=1, cutoff=100, dcyTS=60):
     return cmpLmd
 
 
-def findAndSaturateHist(cl, refrT=30, MAXcl=2):
+def findAndSaturateHist(cl, refrT=30, MAXcl=None):
     """
     how high
     """
@@ -382,17 +382,17 @@ def findAndSaturateHist(cl, refrT=30, MAXcl=2):
     B  = patsy.bs(xs, knots=bestKts, include_intercept=True)
     ftdC = _N.exp(_N.dot(B, bestAs))
 
-    #  now compress, and 
-    MAX = _N.max(ftdC[0:refrT])
-    maxInd = _N.where(ftdC == MAX)[0][0]
-    ftdC[maxInd:] = _N.linspace(MAX, 1, refrT-maxInd)
+    if MAXcl is not None:
+        #  now compress, and 
+        MAX = _N.max(ftdC[0:refrT])
+        maxInd = _N.where(ftdC == MAX)[0][0]
+        ftdC[maxInd:] = _N.linspace(MAX, 1, refrT-maxInd)
 
-    bg1Inds = _N.where(ftdC > 1)[0]
+        bg1Inds = _N.where(ftdC > 1)[0]
 
-    print (MAXcl - 1)
-    ftdC[bg1Inds] = (((ftdC[bg1Inds] - 1) / (MAX - 1)) * (MAXcl-1)) +1
-    lt1Inds = _N.where(ftdC[refrT:] < 1)[0]
-    ftdC[refrT+lt1Inds] = 1
+        ftdC[bg1Inds] = (((ftdC[bg1Inds] - 1) / (MAX - 1)) * (MAXcl-1)) +1
+        lt1Inds = _N.where(ftdC[refrT:] < 1)[0]
+        ftdC[refrT+lt1Inds] = 1
     
     lftdC = _N.log(ftdC)
     for it in xrange(ITERS):

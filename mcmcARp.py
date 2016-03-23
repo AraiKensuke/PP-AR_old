@@ -298,6 +298,15 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 _plt.savefig("%(dir)stmp-fsamps%(it)d" % {"dir" : oo.mcmcRunDir, "it" : it})
                 _plt.close()
 
+                fig = _plt.figure(figsize=(8, 8))
+                fig.add_subplot(2, 1, 1)
+                _plt.plot(oo.smpx[0, 2:, 0])
+                _plt.plot(oo.y[0])
+                fig.add_subplot(2, 1, 2)
+                _plt.plot(oo.smpx[1, 2:, 0])
+                _plt.plot(oo.y[1])
+                _plt.savefig("%(dir)smpxs%(it)d" % {"dir" : oo.mcmcRunDir, "it" : it})                
+
                 W   = 60
                 #  do an sta of inferred state
                 stwfs = []

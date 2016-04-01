@@ -9,7 +9,7 @@ import myColors as mC
 import itertools as itls
 
 #  [3.3, 11, 1, 15]
-def modhistAll(setname, shftPhase=0, haveFiltered=False, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, maxY=None, yticks=None, normed=False, surrogates=1, color=None):
+def modhistAll(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, maxY=None, yticks=None, normed=False, surrogates=1, color=None, nofig=False, flatten=False):
     """
     shftPhase from 0 to 1.  
     yticks should look like [[0.5, 1, 1.5], ["0.5", "1", "1.5"]]
@@ -52,19 +52,26 @@ def modhistAll(setname, shftPhase=0, haveFiltered=False, fltPrms=[3.3, 11, 1, 15
             elif len(fltPrms) == 4: 
                 # 20, 40, 10, 55 #(fpL, fpH, fsL, fsH, nyqf, y):
                 fx = bpFilt(fltPrms[0], fltPrms[1], fltPrms[2], fltPrms[3], 500, x)
-            ht_x  = _ssig.hilbert(fx)
-            ph_x  = (_N.arctan2(ht_x.imag, ht_x.real) + _N.pi) / (2*_N.pi)
-            ph_x  = _N.mod(ph_x + shftPhase, 1)
         else:
-            ph_x  = dat[:, tr*COLS + phC]
-            if tr == 0:
-                print ph_x
+            fx   = dat[:, tr*COLS]
+
+        ht_x  = _ssig.hilbert(fx)
+        ph_x  = (_N.arctan2(ht_x.imag, ht_x.real) + _N.pi) / (2*_N.pi)
+        ph_x  = _N.mod(ph_x + shftPhase, 1)
 
         ispks  = _N.where(dat[:, tr*COLS+(COLS-sub)] == 1)[0]
         cSpkPhs.append(_N.cos(2*_N.pi*ph_x[ispks]))
         sSpkPhs.append(_N.sin(2*_N.pi*ph_x[ispks]))
         phs.append(ph_x[ispks])
 
+    if nofig:
+        if not flatten:
+            return phs
+        else:
+            fl = []
+            for i in xrange(len(phs)):
+                fl.extend(phs[i])
+            return fl
     return figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, surrogates=surrogates, normed=normed, fn=fn, maxY=maxY, yticks=yticks, setname=setname, color=color)
 
 def histPhase0_phaseInfrdAll(mARp, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0, color=None):

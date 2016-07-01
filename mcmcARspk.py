@@ -19,7 +19,7 @@ import matplotlib.pyplot as _plt
 
 class mcmcARspk(mAR.mcmcAR):
     ##  
-    psthBurns     = 30
+    psthBurns     = 5
     Cn            = None;    Cs            = None;    C             = None
     kntsPSTH      = None;    dfPSTH        = None
     ID_q2         = True
@@ -354,6 +354,17 @@ class mcmcARspk(mAR.mcmcAR):
 
             _N.log(oo.s_lrn[m] / (1 + (1 - oo.s_lrn[m])*oo.lrn_scr1), out=ARo[m])   #  history Offset   ####TRD change
             #print ARo[m]
+
+    def stitch_Hist(self, ARo, hcrv, stsM):  # history curve
+        oo = self
+        for m in xrange(oo.TR):
+            sts = stsM[m]
+            for it in xrange(len(sts)-1):
+                t0 = sts[it]
+                t1 = sts[it+1]
+                ARo[m, t0+1:t1+1] = hcrv[t0-t0:t1-t0]
+            T = oo.N+1 - sts[-1]
+            ARo[m, t1+1:] = hcrv[0:T-1]
 
     def getComponents(self):
         oo    = self

@@ -122,6 +122,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
         it    = -1
 
+        oo.us[:] = 0
         oous_rs = oo.us.reshape((ooTR, 1))
         lrnBadLoc = _N.empty((oo.TR, oo.N+1), dtype=_N.bool)
         runTO = ooNMC + oo.burn - 1 if (burns is None) else (burns - 1)
@@ -189,8 +190,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
                 t4c = _tm.time()
 
-
-
                 oo.aS   = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
                 oo.smp_aS[it, :] = oo.aS
             else:
@@ -199,16 +198,19 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             ########     per trial offset sample  burns==None, only psth fit
             if burns is None: 
                 Ons  = kpOws - oo.smpx[..., 2:, 0] - ARo - BaS - oo.knownSig
-                _N.einsum("mn,mn->m", oo.ws, Ons, out=smWinOn)  #  sum over trials
-                ilv_u  = _N.diag(_N.sum(oo.ws, axis=1))  #  var  of LL
-                #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
-                _N.fill_diagonal(lv_u, 1./_N.diagonal(ilv_u))
-                lm_u  = _N.dot(lv_u, smWinOn)  #  nondiag of 1./Bi are inf, mean LL
-                #  now sample
-                iVAR = ilv_u + iD_u
-                VAR  = _N.linalg.inv(iVAR)  #
-                Mn    = _N.dot(VAR, _N.dot(ilv_u, lm_u) + iD_u_u_u)
-                oo.us[:]  = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
+
+                #  solve for the mean of the distribution
+                H    = _N.ones((oo.TR-1, oo.TR-1)) * _N.sum(oo.ws[0])
+                RHS = _N.empty(oo.TR-1)
+                for dd in xrange(1, oo.TR):
+                    H[dd-1, dd-1] += _N.sum(oo.ws[dd])
+                    RHS[dd-1] = _N.sum(oo.ws[dd]*Ons[dd] - oo.ws[0]*Ons[0])
+
+                MM  = _N.linalg.solve(H, RHS)
+                Cov = _N.linalg.inv(H)
+                
+                oo.us[1:] = _N.random.multivariate_normal(MM, Cov)
+                oo.us[0]  = -_N.sum(oo.us[1:])
                 if not oo.bIndOffset:
                     oo.us[:] = _N.mean(oo.us)
                 oo.smp_u[:, it] = oo.us

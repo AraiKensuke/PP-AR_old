@@ -79,24 +79,25 @@ def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=Tr
         if trend is None:    #  generate x
             if useSines:
                 _x = _kfl.createFlucOsc(f0, _N.zeros(1), N, dt, 1, Bf=Bf, Ba=Ba, smoothKer=5, dSF=dSF, dSA=dSA)
+                _x -= _N.mean(_x)
                 x  = amp*(_x[0] / _N.std(_x[0]))
             else:
                 trim = 100
                 _x = _kfl.createDataAR(N+trim, ARcf, 0.1, 0.1, trim=trim)
+                _x -= _N.mean(_x)
                 x  = amp*(_x[0] / _N.std(_x[0]))
                 #x  = amp*(_x / _N.std(_x))
         else:
             if len(trend.shape) == 2:
-                x = trend[tr]
+                x = _N.array(trend[tr])
             else:
-                x = trend
+                x = _N.array(trend)
             x *= amp
 
         for t in xrange(N):
             st = 0
             if bMix:
                 ex = _N.exp(u + x[t])
-
 
                 tot = 0
                 rnd =_N.random.rand()
@@ -159,3 +160,4 @@ def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=Tr
 
         _plt.close()
 
+    return data

@@ -346,7 +346,7 @@ def createDataPPl2(TR, N, dt, B, u, stNz, lambda2, nRhythms=1, p=1, x=None, offs
     ht    = -int(_N.random.rand() * 50)
 
     for i in xrange(N):
-        e = _N.exp(u[i] + cs * etme[i] * x[i+buf]) * dt
+        e = _N.exp(u[i] + offset[i] + cs * etme[i] * x[i+buf]) * dt
         prbs[i]  = (p*e) / (1 + e)
         e = _N.exp(u[i]) * dt
         prbsNOsc[i]  = (p*e) / (1 + e)

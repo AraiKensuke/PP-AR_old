@@ -107,7 +107,7 @@ class mcmcARcntMW(mAR.mcmcAR):
         oo.smp_zs       = _N.zeros((oo.NMC + oo.burn, oo.N+1, oo.J), dtype=_N.int)
         oo.smp_rn       = _N.zeros((oo.NMC + oo.burn, oo.W, oo.J), dtype=_N.int)
         oo.smp_u        = _N.zeros((oo.NMC + oo.burn, oo.W, oo.J))
-        oo.smp_dty      = _N.zeros((oo.NMC + oo.burn, oo.J), dtype=_N.int)
+        oo.smp_dty      = _N.zeros((oo.NMC + oo.burn, oo.W, oo.J), dtype=_N.int)
         oo.smp_q2       = _N.zeros(oo.NMC + oo.burn)
         oo.smp_m        = _N.zeros((oo.NMC + oo.burn, oo.J))
 
@@ -143,7 +143,8 @@ class mcmcARcntMW(mAR.mcmcAR):
         cts     = _N.array(oo.y).reshape(oo.N+1, oo.W, 1)
         rn     = _N.array(oo.rn).reshape(1, oo.W, oo.J)
 
-        cntMCMCiters = 40
+        soox   = _N.std(oo.x)
+        cntMCMCiters = 80
         oo.mrns = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W, oo.J), dtype=_N.int)
         oo.mus  = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W))
         oo.mdty = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W), dtype=_N.int)
@@ -169,13 +170,19 @@ class mcmcARcntMW(mAR.mcmcAR):
         wAw = _N.empty((oo.N+1, oo.W))
         wA  = _N.empty(oo.N+1)
 
+        usr   = oo.us.reshape((1, oo.W, oo.J))
+        rsmpx = oo.smpx.reshape((oo.N+1, 1, 1))
+
         for it in xrange(oo.burn+oo.NMC):
             print "---   iter %d" % it
 
-            ########  Allocate into states
-            for w in xrange(oo.W):
-                for j in xrange(oo.J):
-                    p[:, w, j] = 1 / (1 + _N.exp(-(oo.us[w, j] + oo.smpx)))
+            ########  Allocate into Binary L,H states
+
+            _N.divide(1, 1 + _N.exp(-(usr + rsmpx)), out=p)
+
+            # for w in xrange(oo.W):
+            #     for j in xrange(oo.J):
+            #         p[:, w, j] = 1 / (1 + _N.exp(-(oo.us[w, j] + oo.smpx)))
             rands= _N.random.rand(oo.N+1)
 
             z = _N.zeros(oo.J, dtype=_N.int)
@@ -223,18 +230,18 @@ class mcmcARcntMW(mAR.mcmcAR):
                             if len(notBNML) > 0:
                                 oo.zs[notBNML, j] = 0
                                 oo.zs[notBNML, 1-j] = 1
-            else:
+            else:  #  binary state weights are not [1, 0] or [0, 1]
                 oo.zs[:, 1 - zrs[0]] = 1
                 oo.zs[:, zrs[0]] = 0
                 print "hit zero"
             oo.smp_zs[it] = oo.zs
 
-            if oo.J > 1:
+            ########  Now sample the other parameters
+            if oo.J > 1:   #  lht[j]   the trials with lo-hi state == j
                 lht = [_N.where(oo.zs[:, 0] == 1)[0], _N.where(oo.zs[:, 1] == 1)[0]]
             else:
                 lht = [_N.where(oo.zs[:, 0] == 1)[0]]
 
-            ######  update distribution parameters
             for w in xrange(oo.W):
                 for j in xrange(oo.J):
                     oo.us[w, j], oo.rn[w, j], oo.model[w, j] = cntmdlMCMCOnly(it, cntMCMCiters, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
@@ -243,7 +250,7 @@ class mcmcARcntMW(mAR.mcmcAR):
             oo.m[:] = _N.random.dirichlet(dirArgs)
             oo.smp_m[it] = oo.m
             oo.smp_rn[it] = oo.rn
-            #oo.smp_dty[it] = oo.dty
+            oo.smp_dty[it] = oo.model
 
             for j in xrange(oo.J):
                 trls = lht[j]
@@ -257,6 +264,7 @@ class mcmcARcntMW(mAR.mcmcAR):
                         rnsy[trls, w] = oo.rn[w, j]
                     usJ[trls, w]  = oo.us[w, j]
 
+            ###  PG variables
             for w in xrange(oo.W):
                 wsTST[:]    = oo.ws[:, w]
                 susJC[:]    = oo.smpx + usJ[:, w]
@@ -272,7 +280,8 @@ class mcmcARcntMW(mAR.mcmcAR):
             wAw[:] = wAr
 
             for iw in xrange(oo.W):
-                wAw[:, iw] /= 1./oo.ws[:, iw]
+                #wAw[:, iw] /= 1./oo.ws[:, iw]
+                wAw[:, iw] *= oo.ws[:, iw]
             
             oo._d.y[:]             = (_N.sum((oo.kp/oo.ws - usJ)*wAw, axis=1) / _N.sum(wAw, axis=1))
 
@@ -306,7 +315,7 @@ class mcmcARcntMW(mAR.mcmcAR):
                 oo._d.f_V[0, 0, 0]     = oo.V00
 
                 oo.smpx = _kfar.armdl_FFBS_1itr(oo._d)
-                print "smpx mean  %(1).3f  std %(2).3f    std (x) %(3).3f" % {"1" : _N.mean(oo.smpx), "2" : _N.std(oo.smpx), "3" : _N.std(oo.x)}
+                print "smpx mean  %(1).3f  std %(2).3f    std (x) %(3).3f" % {"1" : _N.mean(oo.smpx), "2" : _N.std(oo.smpx), "3" : soox}
 
                 oo.Bsmpx[it, :] = oo.smpx
 

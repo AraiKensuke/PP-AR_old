@@ -33,7 +33,7 @@ dSA        = 5;     dSF        = 5;
 def create(setname):
     # _plt.ioff()
     copyfile("%s.py" % setname, "%(s)s/%(s)s.py" % {"s" : setname, "to" : setFN("%s.py" % setname, dir=setname, create=True)})
-    global dt, lambda2, rpsth, isis, us, csTR, etme, bGenOscUsingAR, f0VAR, f0, Bf, Ba, amp, amp_nz, dSA, dSF
+    global dt, lambda2, rpsth, isis, us, csTR, etme, bGenOscUsingAR, f0VAR, f0, Bf, Ba, amp, amp_nz, dSA, dSF, psth
     if bGenOscUsingAR:
         ARcoeff = _N.empty((nRhythms, 2))
         for n in xrange(nRhythms):
@@ -76,11 +76,11 @@ def create(setname):
         if bGenOscUsingAR:
             #x, dN, prbs, fs, prbsNOsc = createDataPPl2(TR, N, dt, ARcoeff, psth + us[tr], stNzs[tr], lambda2=lambda2, p=1, nRhythms=nRhythms, cs=csTR[tr], etme=etme[tr])
             #  psth is None.  Turn it off for now
-            x, dN, prbs, fs, prbsNOsc = createDataPPl2(TR, N, dt, ARcoeff, us[tr], stNzs[tr], lambda2=lambda2, p=1, nRhythms=nRhythms, cs=csTR[tr], etme=etme[tr])
+            x, dN, prbs, fs, prbsNOsc = createDataPPl2(TR, N, dt, ARcoeff, us[tr], stNzs[tr], lambda2=lambda2, p=1, nRhythms=nRhythms, cs=csTR[tr], etme=etme[tr], offset=psth)
         else:
             xosc = createFlucOsc(f0, _N.array([f0VAR[tr]]), N, dt, 1, Bf=Bf, Ba=Ba, amp=amp, amp_nz=amp_nz, stdf=stdf, stda=stda, sig=sig, smoothKer=5, dSA=dSA, dSF=dSF) * etme[tr]  # sig is arbitrary, but we need to keep it same as when stdf, stda measured
             #x, dN, prbs, fs, prbsNOsc = createDataPPl2(TR, N, dt, None, psth + us[tr], None, lambda2=lambda2, p=1, nRhythms=1, cs=csTR[tr], etme=etme[tr], x=xosc[0])
-            x, dN, prbs, fs, prbsNOsc = createDataPPl2(TR, N, dt, None, us[tr], None, lambda2=lambda2, p=1, nRhythms=1, cs=csTR[tr], etme=etme[tr], x=xosc)
+            x, dN, prbs, fs, prbsNOsc = createDataPPl2(TR, N, dt, None, us[tr], None, lambda2=lambda2, p=1, nRhythms=1, cs=csTR[tr], etme=etme[tr], x=xosc, offset=psth)
 
         spksPT[tr] = _N.sum(dN)
         rpsth.extend(_N.where(dN == 1)[0])

@@ -44,6 +44,7 @@ class mcmcARspk(mAR.mcmcAR):
     fx            = None   #  filtered latent state
     px            = None   #  phase of latent state
 
+    histknots     = 10
     #  LFC
     lfc           = None
 
@@ -191,6 +192,9 @@ class mcmcARspk(mAR.mcmcAR):
         if Bsmpx:
             oo.Bsmpx        = _N.zeros((oo.TR, iters, (oo.N+1) + 2))
         oo.smp_u        = _N.zeros((oo.TR, iters))
+        oo.smp_hS        = _N.zeros((oo.histknots, iters))   # history spline
+        oo.smp_hist        = _N.zeros((oo.N+1, iters))   # history spline
+
         if oo.bpsth:
             oo.smp_aS        = _N.zeros((iters, oo.dfPSTH))
         oo.smp_q2       = _N.zeros((oo.TR, iters))

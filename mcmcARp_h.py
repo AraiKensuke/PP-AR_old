@@ -134,10 +134,10 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         BaS = _N.zeros(oo.N+1)#_N.empty(oo.N+1)
 
         #  H shape    100 x 9
-        Hbf = patsy.bs(_N.linspace(0, 1.2, 1200), knots=_N.array([0, 0.003, 0.01, 0.03, 0.04, 1.2]), include_intercept=True)    #  spline basis
+        Hbf = patsy.bs(_N.linspace(0, 1.2, 1200), knots=_N.array([0, 0.003, 0.01, 0.035, 0.05, 1.2]), include_intercept=True)    #  spline basis
         #Hbf = patsy.bs(_N.linspace(0, 1.2, 1200), knots=_N.array([0, 0.1, 0.2, 0.3, 1.2]), include_intercept=True)    #  spline basis
 
-        cInds = _N.array([0, 1, 6, 7, 8, 9])
+        cInds = _N.array([0, 1, 6, 7, 8, 9,])
         #cInds = _N.array([0, 1, 6, 7, 8, 9])
         vInds = _N.array([2, 3, 4, 5])
 
@@ -148,10 +148,23 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         for m in xrange(ooTR):
             Msts.append(_N.where(oo.y[m] == 1)[0])
         HcM  = _N.empty((4, 4))
-        RHS = _N.empty((10, 1))
+        RHS = _N.empty((oo.histknots, 1))
         RHS[cInds, 0] = 0
-        RHS[0, 0] = -5
-        RHS[1, 0] = -5
+        RHS[0, 0] = 0#-5
+        RHS[1, 0] = 0#-5
+
+        HbfExpd = _N.empty((oo.histknots, ooTR, oo.N+1))
+        #  HbfExpd is 11 x M x 1200
+        #  find the mean.  For the HISTORY TERM
+        for i in xrange(oo.histknots):
+            for m in xrange(oo.TR):
+                sts = Msts[m]
+                HbfExpd[i, m, 0:sts[0]] = 0
+                for iss in xrange(len(sts)-1):
+                    t0  = sts[iss]
+                    t1  = sts[iss+1]
+                    HbfExpd[i, m, t0+1:t1+1] = Hbf[0:t1-t0, i]
+                HbfExpd[i, m, sts[-1]+1:] = 0
 
         while (it < runTO):
             t1 = _tm.time()
@@ -165,43 +178,31 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 lw.rpg_devroye(oo.rn, oo.us[m] + ARo[m], out=oo.ws[m])  ######  devryoe
             t3 = _tm.time()
 
-            #  find the mean.  For the HISTORY TERM
+            O = oo.kp/oo.ws - oo.us.reshape((ooTR, 1))
             for i in vInds:
                 for j in vInds:
-                    HcM[i-2, j-2] = 0
-                    for m in xrange(oo.TR):
-                        sts = Msts[m]
-                        for iss in xrange(len(sts)-1):
-                            t0  = sts[iss]
-                            t1  = sts[iss+1]
-                            #t1  = oo.N-1 if t1 > oo.N else t1
-                            isi = t1 - t0
-                            #mlt = 1 if i == j else 0.5
-                            HcM[i-2, j-2] += _N.sum(oo.ws[m, t0+1:t1+1]*Hbf[0:t1-t0, i]*Hbf[0:t1-t0, j])
-                            # if i == j:
-                            #     HcM[i-2, j-2] += 1./1.**2
+                    HcM[i-2, j-2] = _N.sum(oo.ws*HbfExpd[i]*HbfExpd[j])
 
-                RHS[i, 0] = 0
-                for m in xrange(oo.TR):
-                    O = oo.kp[m]/oo.ws[m] - oo.us[m]
-                    sts = Msts[m]
+                RHS[i, 0] = _N.sum(oo.ws*HbfExpd[i]*O)
+                for cj in cInds:
+                    RHS[i, 0] -= _N.sum(oo.ws*HbfExpd[i]*HbfExpd[cj])*RHS[cj, 0]
 
-                    for iss in xrange(len(sts)-1):
-                        t0  = sts[iss]
-                        t1  = sts[iss+1]
-                        RHS[i, 0] += _N.sum(oo.ws[m, t0+1:t1+1]*Hbf[0:t1-t0, i]*O[t0+1:t1+1])
-                        RHS[i, 0] += 0 / 1.**2
-                        for cj in cInds:
-                            RHS[i, 0] -= _N.sum(oo.ws[m, t0+1:t1+1]*Hbf[0:t1-t0, i]*Hbf[0:t1-t0, cj])*RHS[cj, 0]
-            print RHS
+                    # for iss in xrange(len(sts)-1):
+                    #     t0  = sts[iss]
+                    #     t1  = sts[iss+1]
+                    #     RHS[i, 0] += _N.sum(oo.ws[m, t0+1:t1+1]*Hbf[0:t1-t0, i]*O[t0+1:t1+1])
+                    #     RHS[i, 0] += 0 / 1.**2
+                    #     for cj in cInds:
+                    #         RHS[i, 0] -= _N.sum(oo.ws[m, t0+1:t1+1]*Hbf[0:t1-t0, i]*Hbf[0:t1-t0, cj])*RHS[cj, 0]
 
             vm = _N.linalg.solve(HcM, RHS[2:6])
             Cov = _N.linalg.inv(HcM)
-            print vm
 
             cfs = _N.random.multivariate_normal(vm[:, 0], Cov)
 
             RHS[2:6,0] = cfs
+            oo.smp_hS[:, it] = RHS[:, 0]
+
             #RHS[2:6, 0] = vm[:, 0]
 
             #print HcM
@@ -209,6 +210,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             #print vv.shape
             #print oo.loghist.shape
             _N.dot(Hbf, RHS[:, 0], out=oo.loghist)
+            oo.smp_hist[:, it] = oo.loghist
             oo.stitch_Hist(ARo, oo.loghist, Msts)
 
             if ooTR == 1:

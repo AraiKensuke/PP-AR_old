@@ -62,6 +62,6 @@ class mcmcAR:
     #  initial states
     u_x00        = None;          s2_x00       = None
     #  u   --  Gaussian prior
-    u_u          = 0;             s2_u         = 1.5
+    u_u          = -3;             s2_u         = 2.5
     #  initial states
     u_x00        = None;          s2_x00       = None

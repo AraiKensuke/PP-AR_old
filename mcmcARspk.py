@@ -1,3 +1,4 @@
+#
 from mcmcARpFuncs import loadL2, runNotes, loadKnown
 from filter import bpFilt, lpFilt, gauKer
 import mcmcAR as mAR
@@ -13,9 +14,12 @@ import re as _re
 from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
 import numpy.polynomial.polynomial as _Npp
 from kflib import createDataAR
+#
+import splineknots as _spknts
 import patsy
 import pickle
 import matplotlib.pyplot as _plt
+
 
 class mcmcARspk(mAR.mcmcAR):
     ##  
@@ -45,6 +49,7 @@ class mcmcARspk(mAR.mcmcAR):
     px            = None   #  phase of latent state
 
     histknots     = 10
+    #histknots     = 11
     #  LFC
     lfc           = None
 
@@ -78,12 +83,16 @@ class mcmcARspk(mAR.mcmcAR):
     sig_ph0H      = 0
 
     # psth spline coefficient priors
-    u_a          = None;             s2_a         = 0.5
+    u_a          = None;             s2_a         = 2.
 
     #  knownSig
     knownSigFN      = None
     knownSig        = None
     xknownSig       = 1   #  multiply knownSig by...
+
+    h0_1      = None        # silence following spike
+    h0_2      = None        #  inhibitory rebound peak
+
 
     def __init__(self):
         if (self.noAR is not None) or (self.noAR == False):
@@ -164,22 +173,44 @@ class mcmcARspk(mAR.mcmcAR):
 
         tot_isi = 0
         nisi    = 0
+        isis = []
         for tr in xrange(oo.TR):
-            spkts = _N.where(oo.y[tr] == 1)
-            if len(spkts[0]) > 2:
-                nisi += 1
-                tot_isi += spkts[0][1] - spkts[0][0]
-        oo.mean_isi_1st2spks = float(tot_isi) / nisi
-        #####  LOAD spike history
-        oo.l2 = loadL2(oo.setname, fn=oo.histFN)
+            spkts = _N.where(oo.y[tr] == 1)[0]
+            isis.extend(_N.diff(spkts))
+        
+        cnts, bins = _N.histogram(isis, bins=_N.linspace(0, oo.N+1, oo.N+2))
+
+        ###  look at the isi distribution
+        if (oo.h0_1 is None) or (oo.h0_2 is None):
+            ii = 0
+            while cnts[ii] == 0:
+                ii += 1
+            oo.h0_1 = ii  #  firing prob is 0, oo.h0_1 ms postspike
+            oo.h0_2 = _N.where(cnts == _N.max(cnts))[0][0]
+            # while cnts[ii] < 0.5*(cnts[ii+1]+cnts[ii+2]):
+            #     ii += 1
+            # oo.h0_2 = ii  #  approx peak of post-spike rebound
+
+        crats = _N.zeros(oo.N+2)
+        for n in xrange(0, oo.N+1):
+            crats[n+1] = crats[n] + cnts[n]
+        crats /= crats[-1]
+
+        ####  generate spike before time=0.  PSTH estimation
+        oo.t0_is_t_since_1st_spk = _N.empty(oo.TR, dtype=_N.int)
+        rands = _N.random.rand(oo.TR)
+        for tr in xrange(oo.TR):
+            spkts = _N.where(oo.y[tr] == 1)[0]
+
+            if len(spkts) > 0:
+                t0 = spkts[0]
+                r0 = crats[t0]   # say 0.3   
+                adjRnd = (1 - r0) * rands[tr]
+                isi = _N.where(crats >= adjRnd)[0][0]  # isi in units of bin sz
+
+                oo.t0_is_t_since_1st_spk[tr] = isi
+
         oo.knownSig = loadKnown(oo.setname, trials=oo.useTrials, fn=oo.knownSigFN) 
-        if oo.l2 is None:
-            oo.lrn[:] = 1
-        else:
-            #  assume ISIs near beginning of data are exponentially 
-            #  distributed estimate
-            for tr in xrange(oo.TR):
-                oo.lrn[tr] = oo.build_lrnLambda2(tr)
         if oo.knownSig is None:
             oo.knownSig = _N.zeros((oo.TR, oo.N+1))
         else:
@@ -196,7 +227,7 @@ class mcmcARspk(mAR.mcmcAR):
         oo.smp_hist        = _N.zeros((oo.N+1, iters))   # history spline
 
         if oo.bpsth:
-            oo.smp_aS        = _N.zeros((iters, oo.dfPSTH))
+            oo.smp_aS        = _N.zeros((iters, oo.B.shape[0]))
         oo.smp_q2       = _N.zeros((oo.TR, iters))
         oo.smp_x00      = _N.empty((oo.TR, iters, oo.k))
         #  store samples of
@@ -269,97 +300,38 @@ class mcmcARspk(mAR.mcmcAR):
         oo.lrn_scr3   = _N.empty(oo.N+1)
         oo.lrn_scld   = _N.empty(oo.N+1)
 
-        print "!!!!!!!!!!!!!!!!!!"
         if oo.bpsth:
-            print "IS bpsth"
-            oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), df=oo.dfPSTH, knots=oo.kntsPSTH, include_intercept=True)    #  spline basis
+            psthKnts, apsth, aWeights = _spknts.suggestPSTHKnots(oo.dt, oo.TR, oo.N+1, oo.y.T, iknts=4)
 
-            if oo.dfPSTH is None:
-                oo.dfPSTH = oo.B.shape[1] 
+            apprx_ps = _N.array(_N.abs(aWeights))
+            oo.u_a   = -_N.log(1/apprx_ps - 1)
+
+            #  For oo.u_a, use the values we get from aWeights 
+
+            print psthKnts
+
+            oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), knots=(psthKnts*oo.dt), include_intercept=True)    #  spline basis
+
             oo.B = oo.B.T    #  My convention for beta
-
-            print "CCCCCCC"
-            if oo.aS is None:
-                oo.aS = _N.linalg.solve(_N.dot(oo.B, oo.B.T), _N.dot(oo.B, _N.ones(oo.t1 - oo.t0)*0.01))   #  small amplitude psth at first
-            oo.u_a            = _N.zeros(oo.dfPSTH)
+            oo.aS    = _N.array(oo.u_a)
+            # fig = _plt.figure(figsize=(4, 7))
+            # fig.add_subplot(2, 1, 1)
+            # _plt.plot(apsth)
+            # fig.add_subplot(2, 1, 2)
+            # _plt.plot(_N.dot(oo.B.T, aWeights))
         else:
             oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), df=4, include_intercept=True)    #  spline basis
 
-            print "DDDDDDDD"
             oo.B = oo.B.T    #  My convention for beta
             oo.aS = _N.zeros(4)
 
-            #oo.u_a            = _N.ones(oo.dfPSTH)*_N.mean(oo.us)
-            print "~^^^^^^^^^^^^^^^^^^^^"
-            oo.u_a            = _N.zeros(oo.dfPSTH)
+        #oo.Hbf = patsy.bs(_N.linspace(0, 1.2, 1200), knots=_N.array([0, oo.h0_1*oo.dt, oo.h0_2*oo.dt, oo.h0_2*3*oo.dt, oo.h0_2*4*oo.dt, oo.h0_2*5*oo.dt, 1.2]), include_intercept=True)    #  spline basisp
+        oo.Hbf = patsy.bs(_N.linspace(0, 1.2, 1200), knots=_N.array([oo.h0_1*oo.dt, oo.h0_2*oo.dt, oo.h0_2*3*oo.dt, oo.h0_2*4*oo.dt, oo.h0_2*5*oo.dt, 1.]), include_intercept=True)    #  spline basisp
 
-    def build_lrnLambda2(self, tr):
-        oo = self
-        #  lmbda2 is short snippet of after-spike depression behavior
-        lrn = _N.ones(oo.N + 1)
-        lh    = len(oo.l2)
-
-        spkts = _N.where(oo.y[tr] == 1)[0]
-
-        #  P(isi | t - t0 = t').  This prob is zero for isi < t-t0.  What is the shape of the distribution for longer isis?
-        for t in spkts:
-            maxL = lh if t + lh <= oo.N else oo.N - t
-            lrn[t+1:t+1 + maxL] = oo.l2[0:maxL]
-
-        ###  It stands to reason that at t=0, the actual state of the
-        #    spiking history lambda is not always == 1, ie a spike
-        #    occurred just slightly prior to t=0.  Let's just assume
-        #    some virtual observation, and set
-        bDone = False
-
-        times = -1
-        while (not bDone) and (times < 50):
-            times += 1
-            ivrtISI = int(oo.mean_isi_1st2spks*_N.random.exponential())
-            #print "%(1)d    %(2)d" % {"1" : ivrtISI, "2" : spkts[0]}
-            if (ivrtISI > 2) and (ivrtISI > spkts[0]):
-                bDone = True
-
-        print ivrtISI
-        if not bDone:
-            ivrtISI = 1  #  spkts[0] is SO large, don't even worry about history
-        #  if vrtISI == oo.y[tr, 0] + 2, put virtual 2 bins back in time
-
-        bckwds = ivrtISI - spkts[0]
-        print "bckwds   %d" % bckwds
-        #if bckwds < lh:
-        if (bckwds >= 0) and (bckwds < lh) :
-            lrn[0:lh-bckwds] = oo.l2[bckwds:]
-
-        return lrn
-
-    def build_addHistory(self, ARo, smpx, BaS, us, knownSig):
-        oo = self
-        for m in xrange(oo.TR):
-            _N.exp(smpx[m] + BaS + us[m] + knownSig[m], out=oo.lrn_scr1) #ex
-            _N.add(1, oo.lrn_scr1, out=oo.lrn_scr2)     # 1 + ex
-
-            _N.divide(oo.lrn_scr1, oo.lrn_scr2, out=oo.lrn_scr3)  #ex / (1+ex)
-            _N.multiply(oo.lrn_scr3, oo.lrn[m], out=oo.sprb[m])#(lam ex)/(1+ex)
-
-            _N.exp(-smpx[m] - BaS - us[m] - knownSig[m], out=oo.lrn_iscr1)  #e{-x}
-            _N.add(0.99, 0.99*oo.lrn_iscr1, out=oo.lrn_scld)  # 0.99(1 + e-x)
-            sat = _N.where(oo.sprb[m] > 0.99)
-            if len(sat[0]) > 0:
-                print "bad loc   %(m)d     %(l)d" % {"m" : m, "l" : len(sat[0])}
-                #fig = _plt.figure(figsize=(14, 3))
-                #                _plt.plot(oo.lrn[m], lw=3, color="blue")
-                #_plt.plot(oo.s_lrn[m], lw=2, color="red")
-
-            oo.s_lrn[m, :] = oo.lrn[m]
-            oo.s_lrn[m, sat[0]] = oo.lrn_scld[sat[0]]
-            # if len(sat[0]) > 0:            
-            #     _plt.plot(oo.s_lrn[m], lw=2)
-
-            _N.log(oo.s_lrn[m] / (1 + (1 - oo.s_lrn[m])*oo.lrn_scr1), out=ARo[m])   #  history Offset   ####TRD change
-            #print ARo[m]
 
     def stitch_Hist(self, ARo, hcrv, stsM):  # history curve
+        #  this has no direct bearing on sampling of history knots
+        #  however, 
         oo = self
         for m in xrange(oo.TR):
             sts = stsM[m]
@@ -369,6 +341,8 @@ class mcmcARspk(mAR.mcmcAR):
                 ARo[m, t0+1:t1+1] = hcrv[t0-t0:t1-t0]
             T = oo.N+1 - sts[-1]
             ARo[m, t1+1:] = hcrv[0:T-1]
+            isiHiddenPrt = oo.t0_is_t_since_1st_spk[m] + 1
+            ARo[m, 0:sts[0]+1] = hcrv[isiHiddenPrt:isiHiddenPrt + sts[0]+1]
 
     def getComponents(self):
         oo    = self
@@ -511,6 +485,12 @@ class mcmcARspk(mAR.mcmcAR):
         pcklme["mnStds"]= oo.mnStds
         pcklme["allalfas"]= oo.allalfas
         pcklme["smpx"] = oo.smpx
+        if oo.Hbf is not None:
+            pcklme["spkhist"] = oo.smp_hist
+            pcklme["Hbf"]    = oo.Hbf
+            pcklme["h_coeffs"]    = oo.smp_hS
+
+
 
         if dir is None:
             dmp = open("smpls.dump", "wb")

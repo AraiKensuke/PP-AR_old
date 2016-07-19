@@ -9,7 +9,7 @@ import myColors as mC
 import itertools as itls
 
 #  [3.3, 11, 1, 15]
-def modhistAll(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, maxY=None, yticks=None, normed=False, surrogates=1, color=None, nofig=False, flatten=False):
+def modhistAll(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, maxY=None, yticks=None, normed=False, surrogates=1, color=None, nofig=False, flatten=False, filtCol=0):
     """
     shftPhase from 0 to 1.  
     yticks should look like [[0.5, 1, 1.5], ["0.5", "1", "1.5"]]
@@ -53,7 +53,7 @@ def modhistAll(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None,
                 # 20, 40, 10, 55 #(fpL, fpH, fsL, fsH, nyqf, y):
                 fx = bpFilt(fltPrms[0], fltPrms[1], fltPrms[2], fltPrms[3], 500, x)
         else:
-            fx   = dat[:, tr*COLS]
+            fx   = dat[:, tr*COLS+filtCol]
 
         ht_x  = _ssig.hilbert(fx)
         ph_x  = (_N.arctan2(ht_x.imag, ht_x.real) + _N.pi) / (2*_N.pi)
@@ -149,7 +149,7 @@ def _histPhase0_phaseInfrdAll(TR, N, x, _mdn, t0=None, t1=None, bRealDat=False, 
 
     return figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, surrogates=surrogates, normed=normed, fn=fn, maxY=maxY, yticks=yticks, color=color)
 
-def getPhases(_mdn):
+def getPhases(_mdn, offset=0):
     """
     what is the inferred phase when ground truth phase is 0
     """
@@ -169,6 +169,11 @@ def getPhases(_mdn):
 
         ht_mdn  = _ssig.hilbert(cv)
         ph[tr]  = (_N.arctan2(ht_mdn.imag, ht_mdn.real) + _N.pi) / (2*_N.pi)
+        if offset != 0:
+            ph[tr] += offset
+            inds = _N.where(ph[tr] >= 1)[0]
+            ph[tr, inds] -= 1
+
     return ph
 
 def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surrogates=1, normed=False, fn=None, maxY=None, yticks=None, color=None):  #  phase histogram

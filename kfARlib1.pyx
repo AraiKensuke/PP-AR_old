@@ -26,7 +26,9 @@ def armdl_FFBS_1itr(_d, multitrial=False):   #  approximation
     return BS1(_d, multitrial=multitrial)
 
 def FF1dv(_d, multitrial=False):   #  approximate KF    #  k==1,dynamic variance
-    GQGT    = _d.G[0,0]*_d.G[0, 0] * _d.Q[0]
+    dQ = _N.array([_d.Q]) if (not multitrial) else _d.Q
+    GQGT    = _d.G[0,0]*_d.G[0, 0] * dQ[0]
+
     k     = _d.k
     px    = _d.p_x
     pV    = _d.p_V
@@ -69,6 +71,9 @@ def FF1dv(_d, multitrial=False):   #  approximate KF    #  k==1,dynamic variance
             fV[n,0,0] = (1 - K[n,0,0])* pV[n,0,0]
 
 def BS1(_d, multitrial=False):
+    dQ = _N.array([_d.Q]) if (not multitrial) else _d.Q
+    GQGT    = _d.G[0,0]*_d.G[0, 0] * dQ[0]
+
     k     = _d.k
     fx    = _d.f_x
     fV    = _d.f_V
@@ -81,7 +86,9 @@ def BS1(_d, multitrial=False):
         F02  = F0*F0
 
         ##########  SMOOTHING step
-        GQGT = _d.Q[0] * _d.G[0,0]* _d.G[0,0]
+        #GQGT = _d.Q[0] * _d.G[0,0]* _d.G[0,0]
+        #GQGT = _d.Q[0] * _d.G[0,0]* _d.G[0,0]
+        GQGT = dQ[0] * _d.G[0,0]* _d.G[0,0]
         iGQGT= 1./GQGT
 
         FTiGQGTF = iGQGT*F02
@@ -102,7 +109,8 @@ def BS1(_d, multitrial=False):
         F02  = F0*F0
 
         ##########  SMOOTHING step
-        GQGT = _d.Q * _d.G[0,0]* _d.G[0,0]
+        #GQGT = _d.Q * _d.G[0,0]* _d.G[0,0]
+        GQGT = dQ[0] * _d.G[0,0]* _d.G[0,0]
         iGQGT= 1./GQGT
 
         FTiGQGTF = iGQGT*F02

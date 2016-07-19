@@ -1,6 +1,4 @@
 import patsy
-import statsmodels.api as _sma
-import scipy.io as _sio
 import utilities as _U
 import numpy as _N
 import matplotlib.pyplot as _plt
@@ -19,118 +17,118 @@ def genKnts(tscl, xMax):
     knts[3:]  = TSCL + (xMax - TSCL)*_N.random.rand(3)
     return _N.sort(knts)
 
-def hazzard(dt, TR, bindat, tsclPct=0.85):
-    ####  Suggest knots for history term
+# def hazzard(dt, TR, bindat, tsclPct=0.85):
+#     ####  Suggest knots for history term
 
-    isis    = _U.fromBinDat(bindat, ISIs=True)
-    ecdf    = _sma.distributions.ECDF(isis)
-    xs      = _N.arange(0, max(isis))        #  in units of ms.
-    cdf     = ecdf(_N.arange(0, max(isis)))  # value of cdf from [0, 1)
-    tscl    = _N.where(cdf > tsclPct)[0][0]
-    dt      = 0.001
+#     isis    = _U.fromBinDat(bindat, ISIs=True)
+#     ecdf    = _sma.distributions.ECDF(isis)
+#     xs      = _N.arange(0, max(isis))        #  in units of ms.
+#     cdf     = ecdf(_N.arange(0, max(isis)))  # value of cdf from [0, 1)
+#     tscl    = _N.where(cdf > tsclPct)[0][0]
+#     dt      = 0.001
 
-    S  = 1 - cdf
+#     S  = 1 - cdf
 
-    haz = -(_N.diff(S) / (0.5*(S[0:-1]+S[1:])))/dt   #  Units of Hz
-    #  defined on xs[0:-1]
-    haz[_N.where(haz == 0)[0]] = 0.0001    #  need this because log
-    #  rough frequency
-    #nSpks = len(isis) + TR
-    #Hz = float(nSpks) / (TR*N*dt)
-    nhaz = haz / _N.mean(haz[int(1.5*tscl):int(2.5*tscl)])  #  
+#     haz = -(_N.diff(S) / (0.5*(S[0:-1]+S[1:])))/dt   #  Units of Hz
+#     #  defined on xs[0:-1]
+#     haz[_N.where(haz == 0)[0]] = 0.0001    #  need this because log
+#     #  rough frequency
+#     #nSpks = len(isis) + TR
+#     #Hz = float(nSpks) / (TR*N*dt)
+#     nhaz = haz / _N.mean(haz[int(1.5*tscl):int(2.5*tscl)])  #  
 
-    #nhaz = haz / Hz
-    return xs, nhaz, tscl
+#     #nhaz = haz / Hz
+#     return xs, nhaz, tscl
 
 
-def suggestHistKnots(dt, TR, bindat, tsclPct=0.85, outfn="fittedL2.dat"):
-    global v, c
-    xs, nhaz, tscl = hazzard(dt, TR, bindat, tsclPct=tsclPct)
+# def suggestHistKnots(dt, TR, bindat, tsclPct=0.85, outfn="fittedL2.dat"):
+#     global v, c
+#     xs, nhaz, tscl = hazzard(dt, TR, bindat, tsclPct=tsclPct)
 
-    ITERS   = 1000
-    allKnts = _N.empty((ITERS, 6))
-    r2s    = _N.empty(ITERS)
+#     ITERS   = 1000
+#     allKnts = _N.empty((ITERS, 6))
+#     r2s    = _N.empty(ITERS)
 
-    ac = _N.zeros(c)
-    for tr in xrange(ITERS):
-        bGood = False
-        while not bGood:
-            knts = genKnts(tscl, xs[-1]*0.9)
+#     ac = _N.zeros(c)
+#     for tr in xrange(ITERS):
+#         bGood = False
+#         while not bGood:
+#             knts = genKnts(tscl, xs[-1]*0.9)
 
-            B  = patsy.bs(xs[0:-1], knots=knts, include_intercept=True)
+#             B  = patsy.bs(xs[0:-1], knots=knts, include_intercept=True)
 
-            Bc = B[:, v:];   Bv = B[:, 0:v]
+#             Bc = B[:, v:];   Bv = B[:, 0:v]
 
-            try:
-                iBvTBv = _N.linalg.inv(_N.dot(Bv.T, Bv))
-                bGood = True
-            except _N.linalg.linalg.LinAlgError:
-                print "Linalg Error"
+#             try:
+#                 iBvTBv = _N.linalg.inv(_N.dot(Bv.T, Bv))
+#                 bGood = True
+#             except _N.linalg.linalg.LinAlgError:
+#                 print "Linalg Error"
 
-        av = _N.dot(iBvTBv, _N.dot(Bv.T, _N.log(nhaz) - _N.dot(Bc, ac)))
-        a = _N.array(av.tolist() + ac.tolist())
+#         av = _N.dot(iBvTBv, _N.dot(Bv.T, _N.log(nhaz) - _N.dot(Bc, ac)))
+#         a = _N.array(av.tolist() + ac.tolist())
 
-        #  Now fit where the last few nots are fixed
-        splFt          = _N.exp(_N.dot(B, a))
-        df             = nhaz - splFt
-        r2s[tr]        = _N.dot(df[0:int(tscl)], df[0:int(tscl)])
-        allKnts[tr, :] = knts
+#         #  Now fit where the last few nots are fixed
+#         splFt          = _N.exp(_N.dot(B, a))
+#         df             = nhaz - splFt
+#         r2s[tr]        = _N.dot(df[0:int(tscl)], df[0:int(tscl)])
+#         allKnts[tr, :] = knts
 
-    bstKnts = allKnts[_N.where(r2s == r2s.min())[0][0], :]
+#     bstKnts = allKnts[_N.where(r2s == r2s.min())[0][0], :]
 
-    B  = patsy.bs(xs[0:-1], knots=bstKnts, include_intercept=True)
-    Bc = B[:, v:];   Bv = B[:, 0:v]
-    iBvTBv = _N.linalg.inv(_N.dot(Bv.T, Bv))
-    av = _N.dot(iBvTBv, _N.dot(Bv.T, _N.log(nhaz) - _N.dot(Bc, ac)))
-    a = _N.array(av.tolist() + ac.tolist())
-    #  Now fit where the last few nots are fixed
-    lmd2          = _N.exp(_N.dot(B, a))
+#     B  = patsy.bs(xs[0:-1], knots=bstKnts, include_intercept=True)
+#     Bc = B[:, v:];   Bv = B[:, 0:v]
+#     iBvTBv = _N.linalg.inv(_N.dot(Bv.T, Bv))
+#     av = _N.dot(iBvTBv, _N.dot(Bv.T, _N.log(nhaz) - _N.dot(Bc, ac)))
+#     a = _N.array(av.tolist() + ac.tolist())
+#     #  Now fit where the last few nots are fixed
+#     lmd2          = _N.exp(_N.dot(B, a))
 
-    return bstKnts, lmd2, nhaz, tscl
+#     return bstKnts, lmd2, nhaz, tscl
 
-def suggestHistKnotsFromLam(xs, nhaz, outfn="fittedL2.dat"):
-    global v, c
+# def suggestHistKnotsFromLam(xs, nhaz, outfn="fittedL2.dat"):
+#     global v, c
 
-    ITERS   = 1000
-    allKnts = _N.empty((ITERS, 6))
-    r2s    = _N.empty(ITERS)
+#     ITERS   = 1000
+#     allKnts = _N.empty((ITERS, 6))
+#     r2s    = _N.empty(ITERS)
 
-    ac = _N.zeros(c)
-    for tr in xrange(ITERS):
-        bGood = False
-        while not bGood:
-            knts = genKnts(tscl, xs[-1]*0.9)
+#     ac = _N.zeros(c)
+#     for tr in xrange(ITERS):
+#         bGood = False
+#         while not bGood:
+#             knts = genKnts(tscl, xs[-1]*0.9)
 
-            B  = patsy.bs(xs[0:-1], knots=knts, include_intercept=True)
+#             B  = patsy.bs(xs[0:-1], knots=knts, include_intercept=True)
 
-            Bc = B[:, v:];   Bv = B[:, 0:v]
+#             Bc = B[:, v:];   Bv = B[:, 0:v]
 
-            try:
-                iBvTBv = _N.linalg.inv(_N.dot(Bv.T, Bv))
-                bGood = True
-            except _N.linalg.linalg.LinAlgError:
-                print "Linalg Error"
+#             try:
+#                 iBvTBv = _N.linalg.inv(_N.dot(Bv.T, Bv))
+#                 bGood = True
+#             except _N.linalg.linalg.LinAlgError:
+#                 print "Linalg Error"
 
-        av = _N.dot(iBvTBv, _N.dot(Bv.T, _N.log(nhaz) - _N.dot(Bc, ac)))
-        a = _N.array(av.tolist() + ac.tolist())
+#         av = _N.dot(iBvTBv, _N.dot(Bv.T, _N.log(nhaz) - _N.dot(Bc, ac)))
+#         a = _N.array(av.tolist() + ac.tolist())
 
-        #  Now fit where the last few nots are fixed
-        splFt          = _N.exp(_N.dot(B, a))
-        df             = nhaz - splFt
-        r2s[tr]        = _N.dot(df[0:int(tscl)], df[0:int(tscl)])
-        allKnts[tr, :] = knts
+#         #  Now fit where the last few nots are fixed
+#         splFt          = _N.exp(_N.dot(B, a))
+#         df             = nhaz - splFt
+#         r2s[tr]        = _N.dot(df[0:int(tscl)], df[0:int(tscl)])
+#         allKnts[tr, :] = knts
 
-    bstKnts = allKnts[_N.where(r2s == r2s.min())[0][0], :]
+#     bstKnts = allKnts[_N.where(r2s == r2s.min())[0][0], :]
 
-    B  = patsy.bs(xs[0:-1], knots=bstKnts, include_intercept=True)
-    Bc = B[:, v:];   Bv = B[:, 0:v]
-    iBvTBv = _N.linalg.inv(_N.dot(Bv.T, Bv))
-    av = _N.dot(iBvTBv, _N.dot(Bv.T, _N.log(nhaz) - _N.dot(Bc, ac)))
-    a = _N.array(av.tolist() + ac.tolist())
-    #  Now fit where the last few nots are fixed
-    lmd2          = _N.exp(_N.dot(B, a))
+#     B  = patsy.bs(xs[0:-1], knots=bstKnts, include_intercept=True)
+#     Bc = B[:, v:];   Bv = B[:, 0:v]
+#     iBvTBv = _N.linalg.inv(_N.dot(Bv.T, Bv))
+#     av = _N.dot(iBvTBv, _N.dot(Bv.T, _N.log(nhaz) - _N.dot(Bc, ac)))
+#     a = _N.array(av.tolist() + ac.tolist())
+#     #  Now fit where the last few nots are fixed
+#     lmd2          = _N.exp(_N.dot(B, a))
 
-    return bstKnts, lmd2, nhaz, tscl
+#     return bstKnts, lmd2, nhaz, tscl
 
 
 def suggestPSTHKnots(dt, TR, N, bindat, bnsz=50, iknts=2):
@@ -144,32 +142,56 @@ def suggestPSTHKnots(dt, TR, N, bindat, bnsz=50, iknts=2):
     fs     = (h / (TR * bnsz * dt))
     apsth = _N.repeat(fs, bnsz)    #    piecewise boxy approximate PSTH
 
-    _plt.plot(apsth)
+    apsth *= dt
+
     ITERS = 1000
     x     = _N.linspace(0., N-1, N, endpoint=False)  # in units of ms.
     r2s   = _N.empty(ITERS)
     allKnts = _N.empty((ITERS, iknts))
+    allCoeffs  = []
+
+    tAvg  = 1./iknts
+    tsMin = tAvg*0.5
+    tsMax = tAvg*1.5
 
     for it in xrange(ITERS):
         bGood = False
         while not bGood:
             try:
-                knts  = _N.sort((0.05 + 0.9*_N.random.rand(iknts))*N)
-                B     = patsy.bs(x, knots=knts, include_intercept=True)
+
+                pieces  = tsMin + _N.random.rand(iknts+1)*(tsMax-tsMin)
+
+                knts    = _N.empty(iknts+1)
+
+                knts[0] = pieces[0]
+                for i in xrange(1, iknts+1):
+                    knts[i] = knts[i-1] + pieces[i]
+                knts /= knts[-1]
+                knts[0:-1] *= N
+                #knts  = _N.sort((0.1 + 0.85*_N.random.rand(iknts))*N)
+                B     = patsy.bs(x, knots=(knts[0:-1]), include_intercept=True)
                 iBTB   = _N.linalg.inv(_N.dot(B.T, B))
                 bGood  = True
             except _N.linalg.linalg.LinAlgError, ValueError:
-                print "Linalg Error or Value Error"
+                print "Linalg Error or Value Error in suggestPSTHKnots"
 
-        a     = _N.dot(iBTB, _N.dot(B.T, _N.log(apsth)))
-        ft    = _N.exp(_N.dot(B, a))
+        #a     = _N.dot(iBTB, _N.dot(B.T, _N.log(apsth)))
+        a     = _N.dot(iBTB, _N.dot(B.T, apsth))
+        #ft    = _N.exp(_N.dot(B, a))
+        ft    = _N.dot(B, a)
         r2s[it] = _N.dot(ft - apsth, ft - apsth)
-        allKnts[it, :] = knts
+        allKnts[it, :] = knts[0:-1]
+        allCoeffs.append(a)
 
     mnIt = _N.where(r2s == r2s.min())[0][0]
     knts = allKnts[mnIt]
+    cfs  = allCoeffs[mnIt]
+    B     = patsy.bs(x, knots=knts, include_intercept=True)
+    #fig = _plt.figure()
+    #_plt.plot(_N.dot(B, cfs))
+    #_plt.plot(apsth)
 
-    return knts, apsth
+    return knts, apsth, cfs
 
 def display(N, dt, tscl, nhaz, apsth, lambda2, psth, histknts, psthknts, dir=None):
     """

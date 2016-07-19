@@ -11,12 +11,18 @@ import mcmcFigs as mF
 import myColors as myC
 
 def compare(mARp, est, X, spkHist, oscMn, dat, gkW=20, useRefr=True):
+    dt     = 0.001
+
+    gk = _flt.gauKer(gkW)
+    gk /= _N.sum(gk)
+
+    TR  = oscMn.shape[0]
+
+    #  params, stT
     params = _N.array(est.params)
 
     stT = spkHist.LHbin * (spkHist.nLHBins + 1)    #  first stT spikes used for initial history
     ocifs  = _N.empty((spkHist.endTR - spkHist.startTR, spkHist.t1-spkHist.t0 - stT))
-    dt     = 0.001
-
     ##  
 
     sur = "refr"
@@ -24,17 +30,8 @@ def compare(mARp, est, X, spkHist, oscMn, dat, gkW=20, useRefr=True):
         params[spkHist.endTR:spkHist.endTR+spkHist.LHbin] = params[spkHist.endTR+spkHist.LHbin]
         sur = "NOrefr"
 
-    fig = _plt.figure()
-    _plt.plot(params[spkHist.endTR+spkHist.LHbin:])
-
     for tr in xrange(spkHist.endTR - spkHist.startTR):
         ocifs[tr] = _N.exp(_N.dot(X[tr], params)) / dt
-
-    gk = _flt.gauKer(gkW)
-    gk /= _N.sum(gk)
-
-    TR  = oscMn.shape[0]
-    corrs = _N.empty((TR, 3))
 
     cglmAll = _N.zeros((TR, mARp.N+1))
     infrdAll = _N.zeros((TR, mARp.N+1))
@@ -142,3 +139,86 @@ def getGLMphases(TR, t0, t1, est, X, spkHist, dat, gkW=20, useRefr=True):
         cglmAll[tr, stT:] = cglm
 
     return stT, cglmAll
+
+def compareWF(mARp, ests, Xs, spkHists, oscMn, dat, gkW=20, useRefr=True, dspW=None):
+    glmsets = len(ests)     #  horrible hack
+    TR  = oscMn.shape[0]
+    infrdAll = _N.zeros((TR, mARp.N+1))
+    dt     = 0.001
+    gk = _flt.gauKer(gkW)
+    gk /= _N.sum(gk)
+
+    paramss = [];    ocifss = [];    stTs   = []
+
+    for gs in xrange(glmsets):
+        params = _N.array(ests[gs].params)
+        X      = Xs[gs]
+        spkHist = spkHists[gs]
+
+        stTs.append(spkHist.LHbin * (spkHist.nLHBins + 1))    #  first stT spikes used for initial history
+        ocifss.append(_N.empty((spkHist.endTR - spkHist.startTR, spkHist.t1-spkHist.t0 - stTs[gs])))
+
+        for tr in xrange(spkHist.endTR - spkHist.startTR):
+            ocifss[gs][tr] = _N.exp(_N.dot(X[tr], params)) / dt
+
+    stT = min(stTs)
+
+    #cglmAll = _N.zeros((TR, mARp.N+1))
+
+    xt = _N.arange(stT, mARp.N+1)
+    xts = [_N.arange(stTs[0], mARp.N+1), _N.arange(stTs[1], mARp.N+1)]
+    lss  = ["-", "--"]
+    lws  = [2, 3.8]
+    for tr in xrange(spkHist.startTR, TR):
+        _gt = dat[stT:, tr*3]
+        gt = _N.convolve(_gt, gk, mode="same")
+        gt /= _N.std(gt)
+
+        infrd = oscMn[tr, stT:] / _N.std(oscMn[tr, stT:])
+        infrd /= _N.std(infrd)
+        infrdAll[tr, stT:] = infrd
+
+        fig = _plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(1, 1, 1)
+        _plt.plot(xt, gt, color=myC.grndTruth, lw=4)
+        #_plt.plot(xt, infrd, color="brown", lw=4)
+
+        up1 = _N.max(gt) - _N.min(gt)
+        ##  mirror
+        _plt.plot(xt, gt + up1*1.25, color=myC.grndTruth, lw=4)
+        _plt.plot(xt, infrd+up1*1.25, color="brown", lw=2.5)
+
+
+        for gs in xrange(glmsets):
+            ocifs = ocifss[gs]
+            glm = (ocifs[tr] - _N.mean(ocifs[tr])) / _N.std(ocifs[tr])
+            cglm = _N.convolve(glm, gk, mode="same")
+            cglm /= _N.std(cglm)
+
+            _plt.plot(xts[gs], cglm, color=myC.infrdM, lw=lws[gs], ls=lss[gs])
+
+        MINx = _N.min(infrd)
+        #MAXx = _N.max(infrd)
+        MAXx = _N.max(gt)+up1*1.35
+
+        AMP  = MAXx - MINx
+        ht   = 0.08*AMP
+        ys1  = MINx - 0.5*ht
+        ys2  = MINx - 3*ht
+
+        for n in xrange(stT, mARp.N+1):
+            if mARp.y[tr, n] == 1:
+                _plt.plot([n, n], [ys1, ys2], lw=2.5, color="black")
+        _plt.ylim(ys2 - 0.05*AMP, MAXx + 0.05*AMP)
+
+        if dspW is None:
+            _plt.xlim(stT, mARp.N+1)
+        else:
+            _plt.xlim(dspW[0], dspW[1])
+        mF.arbitraryAxes(ax, axesVis=[False, False, False, False], xtpos="bottom", ytpos="none")
+        mF.setLabelTicks(_plt, yticks=[], yticksDsp=None, xlabel="time (ms)", ylabel=None, xtickFntSz=24, xlabFntSz=26)
+        fig.subplots_adjust(left=0.05, right=0.95, bottom=0.2, top=0.85)
+        _plt.savefig("cmpGLMAR_%(tr)d.eps" % {"tr" : tr}, transparent=True)
+        _plt.close()
+
+

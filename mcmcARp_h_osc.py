@@ -91,6 +91,9 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oo.V00         = _N.zeros((ooTR, ook, ook))
         oo.loghist = _N.zeros(oo.N+1)
 
+        if oo.processes > 1:
+            pool = Pool(processes=oo.processes)
+
         print "oo.mcmcRunDir    %s" % oo.mcmcRunDir
         if oo.mcmcRunDir is None:
             print "here!!!!!!!!!!!!!!"
@@ -140,7 +143,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
         RHS = _N.empty((oo.histknots, 1))
 
-        if oo.h0_1 > 0:   #  first few are 0s
+        if oo.h0_1 > 1:   #  first few are 0s   
             #cInds = _N.array([0, 1, 5, 6, 7, 8, 9, 10])
             cInds = _N.array([0, 4, 5, 6, 7, 8, 9])
             #vInds = _N.array([2, 3, 4])
@@ -153,9 +156,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             vInds = _N.array([0, 1, 2, 3, ])
             #vInds = _N.array([0, 1, 2, 3, 4])
             RHS[cInds, 0] = 0
-
-        if oo.processes > 1:
-            pool = Pool(processes=oo.processes)
 
         Msts = []
         for m in xrange(ooTR):
@@ -190,7 +190,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             else:
                 oo._d.f_V[:, 0]     = _N.mean(oo._d.f_V[:, 1:], axis=1)
 
-            _N.dot(oo.B.T, oo.aS, out=BaS)
             ###  PG latent variable sample
             t2 = _tm.time()
 
@@ -218,12 +217,15 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 for cj in cInds:
                     RHS[i, 0] -= _N.sum(oo.ws*HbfExpd[i]*HbfExpd[cj])*RHS[cj, 0]
 
+            # print HbfExpd
+            # print HcM
+            # print RHS[vInds]
             vm = _N.linalg.solve(HcM, RHS[vInds])
             Cov = _N.linalg.inv(HcM)
             print vm
-            cfs = _N.random.multivariate_normal(vm[:, 0], Cov)
+            cfs = _N.random.multivariate_normal(vm[:, 0], Cov, size=1)
 
-            RHS[vInds,0] = cfs
+            RHS[vInds,0] = cfs[0]
             oo.smp_hS[:, it] = RHS[:, 0]
 
             #RHS[2:6, 0] = vm[:, 0]
@@ -280,7 +282,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             MM  = _N.linalg.solve(H, uRHS)
             Cov = _N.linalg.inv(H)
 
-            oo.us[1:] = _N.random.multivariate_normal(MM, Cov)
+            oo.us[1:] = _N.random.multivariate_normal(MM, Cov, size=1)
             oo.us[0]  = -_N.sum(oo.us[1:])
             if not oo.bIndOffset:
                 oo.us[:] = _N.mean(oo.us)
@@ -357,8 +359,10 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                         oo.x00[m]      = oo.smpx[m, 2]*0.1
                         oo.smp_q2[m, it]= oo.q2[m]
                 else:
-                    oo.a2 = oo.a_q2 + 0.5*(ooTR*ooN + 2)  #  N + 1 - 1
-                    BB2 = oo.B_q2
+                    #oo.a2 = oo.a_q2 + 0.5*(ooTR*ooN + 2)  #  N + 1 - 1
+                    oo.a2 = 0.5*(ooTR*ooN + 2)  #  N + 1 - 1
+                    #BB2 = oo.B_q2
+                    BB2 = 0
                     for m in xrange(ooTR):
                         #   set x00 
                         oo.x00[m]      = oo.smpx[m, 2]*0.1
@@ -393,6 +397,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 _plt.plot(oo.smpx[1, 2:, 0])
                 _plt.plot(oo.y[1])
                 _plt.savefig("%(dir)smpxs%(it)d" % {"dir" : oo.mcmcRunDir, "it" : it})                
+                _plt.close()
 
                 W   = 60
                 #  do an sta of inferred state

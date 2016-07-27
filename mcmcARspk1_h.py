@@ -1,5 +1,4 @@
-#
-from mcmcARpFuncs import loadL2, runNotes, loadKnown
+from mcmcARpFuncs import loadL2, runNotes
 from filter import bpFilt, lpFilt, gauKer
 import mcmcAR as mAR
 import ARlib as _arl
@@ -14,16 +13,11 @@ import re as _re
 from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
 import numpy.polynomial.polynomial as _Npp
 from kflib import createDataAR
-#
-import splineknots as _spknts
 import patsy
-import pickle
-import matplotlib.pyplot as _plt
 
-
-class mcmcARspk(mAR.mcmcAR):
+class mcmcARspk1(mAR.mcmcAR):
     ##  
-    psthBurns     = 5
+    psthBurns     = 30
     Cn            = None;    Cs            = None;    C             = None
     kntsPSTH      = None;    dfPSTH        = None
     ID_q2         = True
@@ -42,14 +36,13 @@ class mcmcARspk(mAR.mcmcAR):
     pgs           = None
     fs            = None
     amps          = None
-    mnStds        = None
 
     #  Existing data, ground truth
     fx            = None   #  filtered latent state
     px            = None   #  phase of latent state
 
     histknots     = 10
-    #histknots     = 11
+
     #  LFC
     lfc           = None
 
@@ -83,16 +76,10 @@ class mcmcARspk(mAR.mcmcAR):
     sig_ph0H      = 0
 
     # psth spline coefficient priors
-    u_a          = None;             s2_a         = 2.
-
-    #  knownSig
-    knownSigFN      = None
-    knownSig        = None
-    xknownSig       = 1   #  multiply knownSig by...
+    u_a          = None;             s2_a         = 2
 
     h0_1      = None        # silence following spike
     h0_2      = None        #  inhibitory rebound peak
-
 
     def __init__(self):
         if (self.noAR is not None) or (self.noAR == False):
@@ -164,23 +151,26 @@ class mcmcARspk(mAR.mcmcAR):
         oo.TR    = len(oo.useTrials)
         oo.N     = N
 
-        oo.smpx        = _N.zeros((oo.TR, (oo.N + 1) + 2, oo.k))   #  start at 0 + u
+        oo.smpx        = _N.zeros((oo.TR, oo.N + 1))   #  start at 0 + u
         oo.ws          = _N.empty((oo.TR, oo.N+1), dtype=_N.float)
         oo.lrn   = _N.empty((oo.TR, oo.N+1))
 
-        if oo.us is None:
-            oo.us    = _N.zeros(oo.TR)
+        oo.us    = _N.zeros(oo.TR)
 
         tot_isi = 0
         nisi    = 0
+        for tr in xrange(oo.TR):
+            spkts = _N.where(oo.y[tr] == 1)
+            if len(spkts[0]) > 2:
+                nisi += 1
+                tot_isi += spkts[0][1] - spkts[0][0]
+
         isis = []
         for tr in xrange(oo.TR):
             spkts = _N.where(oo.y[tr] == 1)[0]
             isis.extend(_N.diff(spkts))
         
-        #  cnts will always be 0 in frist bin
         cnts, bins = _N.histogram(isis, bins=_N.linspace(0, oo.N+1, oo.N+2))
-        
 
         ###  look at the isi distribution
         if (oo.h0_1 is None) or (oo.h0_2 is None):
@@ -189,7 +179,6 @@ class mcmcARspk(mAR.mcmcAR):
                 ii += 1
             oo.h0_1 = ii  #  firing prob is 0, oo.h0_1 ms postspike
             oo.h0_2 = _N.where(cnts == _N.max(cnts))[0][0]
-            oo.h0_2 = oo.h0_1 + 1 if oo.h0_1 >= oo.h0_2 else oo.h0_2
             # while cnts[ii] < 0.5*(cnts[ii+1]+cnts[ii+2]):
             #     ii += 1
             # oo.h0_2 = ii  #  approx peak of post-spike rebound
@@ -213,60 +202,41 @@ class mcmcARspk(mAR.mcmcAR):
 
                 oo.t0_is_t_since_1st_spk[tr] = isi
 
-        oo.knownSig = loadKnown(oo.setname, trials=oo.useTrials, fn=oo.knownSigFN) 
-        if oo.knownSig is None:
-            oo.knownSig = _N.zeros((oo.TR, oo.N+1))
-        else:
-            oo.knownSig *= oo.xknownSig
 
-    def allocateSmp(self, iters, Bsmpx=False):
+    def allocateSmp(self, iters):
         oo = self
         print "^^^^^^   allocateSmp  %d" % iters
         ####  initialize
-        if Bsmpx:
-            oo.Bsmpx        = _N.zeros((oo.TR, iters, (oo.N+1) + 2))
+        oo.Bsmpx        = _N.zeros((oo.TR, iters, oo.N+1))
         oo.smp_u        = _N.zeros((oo.TR, iters))
         oo.smp_hS        = _N.zeros((oo.histknots, iters))   # history spline
         oo.smp_hist        = _N.zeros((oo.N+1, iters))   # history spline
 
         if oo.bpsth:
-            oo.smp_aS        = _N.zeros((iters, oo.B.shape[0]))
+            oo.smp_aS        = _N.zeros((iters, oo.dfPSTH))
         oo.smp_q2       = _N.zeros((oo.TR, iters))
-        oo.smp_x00      = _N.empty((oo.TR, iters, oo.k))
+        oo.smp_x00      = _N.empty((oo.TR, iters))
         #  store samples of
-        oo.allalfas     = _N.empty((iters, oo.k), dtype=_N.complex)
-        #oo.uts          = _N.empty((oo.TR, iters, oo.R, oo.N+2))
-        #oo.wts          = _N.empty((oo.TR, iters, oo.C, oo.N+3))
-        oo.ranks        = _N.empty((iters, oo.C), dtype=_N.int)
         oo.pgs          = _N.empty((oo.TR, iters, oo.N+1))
-        oo.fs           = _N.empty((iters, oo.C))
-        oo.amps         = _N.empty((iters, oo.C))
 
         oo.mnStds       = _N.empty(iters)
 
     def setParams(self):
         oo = self
         # #generate initial values of parameters
-        oo._d = _kfardat.KFARGauObsDat(oo.TR, oo.N, oo.k)
+        oo._d = _kfardat.KFARGauObsDat(oo.TR, oo.N, 1)
         oo._d.copyData(oo.y)
 
         #  baseFN_inter   baseFN_comps   baseFN_comps
 
-        radians      = buildLims(oo.Cn, oo.freq_lims, nzLimL=1.)
-        oo.AR2lims      = 2*_N.cos(radians)
-
-        oo.smpx        = _N.zeros((oo.TR, (oo.N + 1) + 2, oo.k))   #  start at 0 + u
+        oo.smpx        = _N.zeros((oo.TR, oo.N + 1))   #  start at 0 + u
         oo.ws          = _N.empty((oo.TR, oo._d.N+1), dtype=_N.float)
 
-        if oo.F_alfa_rep is None:
-            oo.F_alfa_rep  = initF(oo.R, oo.Cs, oo.Cn, ifs=oo.ifs).tolist()   #  init F_alfa_rep
-
-        print ampAngRep(oo.F_alfa_rep)
         if oo.q20 is None:
             oo.q20         = 0.00077
         oo.q2          = _N.ones(oo.TR)*oo.q20
 
-        oo.F0          = (-1*_Npp.polyfromroots(oo.F_alfa_rep)[::-1].real)[1:]
+        oo.F0          = _N.array([0.9])
         ########  Limit the amplitude to something reasonable
         xE, nul = createDataAR(oo.N, oo.F0, oo.q20, 0.1)
         mlt  = _N.std(xE) / 0.5    #  we want amplitude around 0.5
@@ -285,16 +255,10 @@ class mcmcARspk(mAR.mcmcAR):
             fgk[m, :] /= 2*_N.std(fgk[m, :])
 
             if oo.noAR:
-                oo.smpx[m, 2:, 0] = 0
+                oo.smpx[m, 0] = 0
             else:
-                oo.smpx[m, 2:, 0] = fgk[m, :]
+                oo.smpx[m] = fgk[m]
 
-            for n in xrange(2+oo.k-1, oo.N+1+2):  # CREATE square smpx
-                oo.smpx[m, n, 1:] = oo.smpx[m, n-oo.k+1:n, 0][::-1]
-            for n in xrange(2+oo.k-2, -1, -1):  # CREATE square smpx
-                oo.smpx[m, n, 0:oo.k-1] = oo.smpx[m, n+1, 1:oo.k]
-                oo.smpx[m, n, oo.k-1] = _N.dot(oo.F0, oo.smpx[m, n:n+oo.k, oo.k-2]) # no noise
-            
         oo.s_lrn   = _N.empty((oo.TR, oo.N+1))
         oo.sprb   = _N.empty((oo.TR, oo.N+1))
         oo.lrn_scr1   = _N.empty(oo.N+1)
@@ -304,34 +268,26 @@ class mcmcARspk(mAR.mcmcAR):
         oo.lrn_scld   = _N.empty(oo.N+1)
 
         if oo.bpsth:
-            psthKnts, apsth, aWeights = _spknts.suggestPSTHKnots(oo.dt, oo.TR, oo.N+1, oo.y.T, iknts=4)
+            oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), df=oo.dfPSTH, knots=oo.kntsPSTH, include_intercept=True)    #  spline basis
 
-            apprx_ps = _N.array(_N.abs(aWeights))
-            oo.u_a   = -_N.log(1/apprx_ps - 1)
-
-            #  For oo.u_a, use the values we get from aWeights 
-
-            print psthKnts
-
-            oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), knots=(psthKnts*oo.dt), include_intercept=True)    #  spline basis
-
+            if oo.dfPSTH is None:
+                oo.dfPSTH = oo.B.shape[1] 
             oo.B = oo.B.T    #  My convention for beta
-            oo.aS    = _N.array(oo.u_a)
-            # fig = _plt.figure(figsize=(4, 7))
-            # fig.add_subplot(2, 1, 1)
-            # _plt.plot(apsth)
-            # fig.add_subplot(2, 1, 2)
-            # _plt.plot(_N.dot(oo.B.T, aWeights))
+
+            if oo.aS is None:
+                oo.aS = _N.linalg.solve(_N.dot(oo.B, oo.B.T), _N.dot(oo.B, _N.ones(oo.t1 - oo.t0)*0.01))   #  small amplitude psth at first
+            oo.u_a            = _N.zeros(oo.dfPSTH)
         else:
             oo.B = patsy.bs(_N.linspace(0, (oo.t1 - oo.t0)*oo.dt, (oo.t1-oo.t0)), df=4, include_intercept=True)    #  spline basis
- 
+
             oo.B = oo.B.T    #  My convention for beta
             oo.aS = _N.zeros(4)
 
-        #oo.Hbf = patsy.bs(_N.linspace(0, 1.2, 1200), knots=_N.array([0, oo.h0_1*oo.dt, oo.h0_2*oo.dt, oo.h0_2*3*oo.dt, oo.h0_2*4*oo.dt, oo.h0_2*5*oo.dt, 1.2]), include_intercept=True)    #  spline basisp
-        #oo.Hbf = patsy.bs(_N.linspace(0, 1.2, 1200), knots=_N.array([oo.h0_1*oo.dt, oo.h0_2*oo.dt, oo.h0_2*3*oo.dt, oo.h0_2*4*oo.dt, oo.h0_2*5*oo.dt, 1.]), include_intercept=True)    #  spline basisp
-        oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_2*3, oo.h0_2*4, oo.h0_2*5, int(0.7*(oo.N+1))]), include_intercept=True)    #  spline basisp
 
+            #oo.u_a            = _N.ones(oo.dfPSTH)*_N.mean(oo.us)
+            #oo.u_a            = _N.zeros(oo.dfPSTH)
+
+        oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_2*3, oo.h0_2*4, oo.h0_2*5, int(0.7*(oo.N+1))]), include_intercept=True)    #  spline basisp
 
     def stitch_Hist(self, ARo, hcrv, stsM):  # history curve
         #  this has no direct bearing on sampling of history knots
@@ -348,35 +304,6 @@ class mcmcARspk(mAR.mcmcAR):
             isiHiddenPrt = oo.t0_is_t_since_1st_spk[m] + 1
             ARo[m, 0:sts[0]+1] = hcrv[isiHiddenPrt:isiHiddenPrt + sts[0]+1]
 
-    def getComponents(self):
-        oo    = self
-        TR    = oo.TR
-        NMC   = oo.NMC
-        burn  = oo.burn
-        R     = oo.R
-        C     = oo.C
-        ddN   = oo.N
-
-        oo.rts = _N.empty((TR, burn+NMC, ddN+2, R))    #  real components   N = ddN
-        oo.zts = _N.empty((TR, burn+NMC, ddN+2, C))    #  imag components 
-
-        for tr in xrange(TR):
-            for it in xrange(1, burn + NMC):
-                b, c = dcmpcff(alfa=oo.allalfas[it])
-                print b
-                print c
-                for r in xrange(R):
-                    oo.rts[tr, it, :, r] = b[r] * oo.uts[tr, it, r, :]
-
-                for z in xrange(C):
-                    #print "z   %d" % z
-                    cf1 = 2*c[2*z].real
-                    gam = oo.allalfas[it, R+2*z]
-                    cf2 = 2*(c[2*z].real*gam.real + c[2*z].imag*gam.imag)
-                    oo.zts[tr, it, 0:ddN+2, z] = cf1*oo.wts[tr, it, z, 1:ddN+3] - cf2*oo.wts[tr, it, z, 0:ddN+2]
-
-        oo.zts0 = _N.array(oo.zts[:, :, 1:, 0], dtype=_N.float16)
-
     def dump(self):
         oo    = self
         pcklme = [oo]
@@ -390,24 +317,13 @@ class mcmcARspk(mAR.mcmcAR):
         oo.zts   = None
 
         dmp = open("mARp.dump", "wb")
-        pickle.dump(pcklme, dmp, -1)
+        pickle.dump(pcklme, dmp)
         dmp.close()
 
         # import pickle
         # with open("mARp.dump", "rb") as f:
         # lm = pickle.load(f)
 
-
-    def readdump(self):
-        oo    = self
-
-        with open("mARp.dump", "rb") as f:
-            lm = pickle.load(f)
-        f.close()
-        oo.F_alfa_rep = lm[0].allalfas[-1].tolist()
-        oo.q20 = lm[0].q2[0]
-        oo.aS  = lm[0].aS
-        oo.us  = lm[0].us
 
     def CIF(self, us, alps, osc):
         oo = self
@@ -416,93 +332,8 @@ class mcmcARspk(mAR.mcmcAR):
         ARo   = _N.empty((oo.TR, oo.N+1))
 
         BaS = _N.dot(oo.B.T, alps)
-        oo.build_addHistory(ARo, osc, BaS, us, oo.knownSig)
+        oo.build_addHistory(ARo, osc, BaS, us)
 
-        cif = _N.exp(us + ARo + osc + BaS + oo.knownSig) / (1 + _N.exp(us + ARo + osc + BaS + oo.knownSig))
+        cif = _N.exp(us + ARo + osc + BaS) / (1 + _N.exp(us + ARo + osc + BaS))
 
         return cif
-
-    def findMode(self, startIt=None, NB=20, NeighB=1, dir=None):
-        oo  = self
-        startIt = oo.burn if startIt == None else startIt
-        aus = _N.mean(oo.smp_u[:, startIt:], axis=1)
-        aSs = _N.mean(oo.smp_aS[startIt:], axis=0)
-
-        L   = oo.burn + oo.NMC - startIt
-
-        hist, bins = _N.histogram(oo.fs[startIt:, 0], _N.linspace(_N.min(oo.fs[startIt:, 0]), _N.max(oo.fs[startIt:, 0]), NB))
-        indMfs =  _N.where(hist == _N.max(hist))[0][0]
-        indMfsL =  max(indMfs - NeighB, 0)
-        indMfsH =  min(indMfs + NeighB+1, NB-1)
-        loF, hiF = bins[indMfsL], bins[indMfsH]
-
-        hist, bins = _N.histogram(oo.amps[startIt:, 0], _N.linspace(_N.min(oo.amps[startIt:, 0]), _N.max(oo.amps[startIt:, 0]), NB))
-        indMamps  =  _N.where(hist == _N.max(hist))[0][0]
-        indMampsL =  max(indMamps - NeighB, 0)
-        indMampsH =  min(indMamps + NeighB+1, NB)
-        loA, hiA = bins[indMampsL], bins[indMampsH]
-
-        fig = _plt.figure(figsize=(8, 8))
-        fig.add_subplot(2, 1, 1)
-        _plt.hist(oo.fs[startIt:, 0], bins=_N.linspace(_N.min(oo.fs[startIt:, 0]), _N.max(oo.fs[startIt:, 0]), NB), color="black")
-        _plt.axvline(x=loF, color="red")
-        _plt.axvline(x=hiF, color="red")
-        fig.add_subplot(2, 1, 2)
-        _plt.hist(oo.amps[startIt:, 0], bins=_N.linspace(_N.min(oo.amps[startIt:, 0]), _N.max(oo.amps[startIt:, 0]), NB), color="black")
-        _plt.axvline(x=loA, color="red")
-        _plt.axvline(x=hiA, color="red")
-        if dir is None:
-            _plt.savefig(resFN("chosenFsAmps%d" % startIt, dir=oo.setname))
-        else:
-            _plt.savefig(resFN("%(sn)s/chosenFsAmps%(it)d" % {"sn" : dir, "it" : startIt}, dir=oo.setname))
-        _plt.close()
-
-        indsFs = _N.where((oo.fs[startIt:, 0] >= loF) & (oo.fs[startIt:, 0] <= hiF))
-        indsAs = _N.where((oo.amps[startIt:, 0] >= loA) & (oo.amps[startIt:, 0] <= hiA))
-
-        asfsInds = _N.intersect1d(indsAs[0], indsFs[0]) + startIt
-        q = _N.mean(oo.smp_q2[0, startIt:])
-
-
-        #alfas = _N.mean(oo.allalfas[asfsInds], axis=0)
-        pcklme = [aus, q, oo.allalfas[asfsInds], aSs]
-        
-        if dir is None:
-            dmp = open(resFN("bestParams%d.pkl" % startIt, dir=oo.setname), "wb")
-        else:
-            dmp = open(resFN("%(sn)s/bestParams%(it)d.pkl" % {"sn" : dir, "it" : startIt}, dir=oo.setname), "wb")
-        pickle.dump(pcklme, dmp, -1)
-        dmp.close()
-
-    
-    def dump_smps(self, pcklme=None, dir=None):
-        oo    = self
-        if pcklme is None:
-            pcklme = {}
-
-        pcklme["aS"]   = oo.smp_aS  #  this is last
-        pcklme["B"]    = oo.B
-        pcklme["q2"]   = oo.smp_q2
-        pcklme["amps"] = oo.amps
-        pcklme["fs"]   = oo.fs
-        pcklme["u"]    = oo.smp_u
-        pcklme["mnStds"]= oo.mnStds
-        pcklme["allalfas"]= oo.allalfas
-        pcklme["smpx"] = oo.smpx
-        if oo.Hbf is not None:
-            pcklme["spkhist"] = oo.smp_hist
-            pcklme["Hbf"]    = oo.Hbf
-            pcklme["h_coeffs"]    = oo.smp_hS
-
-
-
-        if dir is None:
-            dmp = open("smpls.dump", "wb")
-        else:
-            dmp = open("%s/smpls.dump" % dir, "wb")
-        pickle.dump(pcklme, dmp, -1)
-        dmp.close()
-
-        # import pickle
-        # with open("smpls.dump", "rb") as f:
-        # lm = pickle.load(f)

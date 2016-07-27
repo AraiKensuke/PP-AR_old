@@ -58,7 +58,7 @@ class mcmcAR:
     ##### PRIORS
     #  q2  --  Inverse Gamma prior
     #a_q2         = 1e-1;          B_q2         = 1e-6
-    a_q2         = 1e-1;          B_q2         = 1e-7
+    a_q2         = 1e-1;          B_q2         = 1e-9
     #  initial states
     u_x00        = None;          s2_x00       = None
     #  u   --  Gaussian prior

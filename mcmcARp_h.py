@@ -140,7 +140,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
         RHS = _N.empty((oo.histknots, 1))
 
-        if oo.h0_1 > 0:   #  first few are 0s
+        if oo.h0_1 > 1:   #  first few are 0s
             #cInds = _N.array([0, 1, 5, 6, 7, 8, 9, 10])
             cInds = _N.array([0, 4, 5, 6, 7, 8, 9])
             #vInds = _N.array([2, 3, 4])
@@ -199,6 +199,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
             O = kpOws - oo.us.reshape((ooTR, 1)) - BaS
 
+
             iOf = vInds[0]   #  offset HcM index with RHS index.
             for i in vInds:
                 for j in vInds:
@@ -208,23 +209,41 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 for cj in cInds:
                     RHS[i, 0] -= _N.sum(oo.ws*HbfExpd[i]*HbfExpd[cj])*RHS[cj, 0]
 
-                    # for iss in xrange(len(sts)-1):
-                    #     t0  = sts[iss]
-                    #     t1  = sts[iss+1]
-                    #     RHS[i, 0] += _N.sum(oo.ws[m, t0+1:t1+1]*Hbf[0:t1-t0, i]*O[t0+1:t1+1])
-                    #     RHS[i, 0] += 0 / 1.**2
-                    #     for cj in cInds:
-                    #         RHS[i, 0] -= _N.sum(oo.ws[m, t0+1:t1+1]*Hbf[0:t1-t0, i]*Hbf[0:t1-t0, cj])*RHS[cj, 0]
-
+            # print HbfExpd
             # print HcM
             # print RHS[vInds]
-
             vm = _N.linalg.solve(HcM, RHS[vInds])
             Cov = _N.linalg.inv(HcM)
             print vm
-            cfs = _N.random.multivariate_normal(vm[:, 0], Cov)
+            cfs = _N.random.multivariate_normal(vm[:, 0], Cov, size=1)
 
-            RHS[vInds,0] = cfs
+
+            # iOf = vInds[0]   #  offset HcM index with RHS index.
+            # for i in vInds:
+            #     for j in vInds:
+            #         HcM[i-iOf, j-iOf] = _N.sum(oo.ws*HbfExpd[i]*HbfExpd[j])
+
+            #     RHS[i, 0] = _N.sum(oo.ws*HbfExpd[i]*O)
+            #     for cj in cInds:
+            #         RHS[i, 0] -= _N.sum(oo.ws*HbfExpd[i]*HbfExpd[cj])*RHS[cj, 0]
+
+            #         # for iss in xrange(len(sts)-1):
+            #         #     t0  = sts[iss]
+            #         #     t1  = sts[iss+1]
+            #         #     RHS[i, 0] += _N.sum(oo.ws[m, t0+1:t1+1]*Hbf[0:t1-t0, i]*O[t0+1:t1+1])
+            #         #     RHS[i, 0] += 0 / 1.**2
+            #         #     for cj in cInds:
+            #         #         RHS[i, 0] -= _N.sum(oo.ws[m, t0+1:t1+1]*Hbf[0:t1-t0, i]*Hbf[0:t1-t0, cj])*RHS[cj, 0]
+
+            # # print HcM
+            # # print RHS[vInds]
+
+            # vm = _N.linalg.solve(HcM, RHS[vInds])
+            # Cov = _N.linalg.inv(HcM)
+            # print vm
+            # cfs = _N.random.multivariate_normal(vm[:, 0], Cov, size=1)
+
+            RHS[vInds,0] = cfs[0]
             oo.smp_hS[:, it] = RHS[:, 0]
 
             #RHS[2:6, 0] = vm[:, 0]
@@ -278,7 +297,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             MM  = _N.linalg.solve(H, uRHS)
             Cov = _N.linalg.inv(H)
 
-            oo.us[1:] = _N.random.multivariate_normal(MM, Cov)
+            oo.us[1:] = _N.random.multivariate_normal(MM, Cov, size=1)
             oo.us[0]  = -_N.sum(oo.us[1:])
             if not oo.bIndOffset:
                 oo.us[:] = _N.mean(oo.us)

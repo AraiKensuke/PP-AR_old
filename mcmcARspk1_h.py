@@ -79,7 +79,10 @@ class mcmcARspk1(mAR.mcmcAR):
     u_a          = None;             s2_a         = 2
 
     h0_1      = None        # silence following spike
-    h0_2      = None        #  inhibitory rebound peak
+    h0_2      = None        # inhibitory rebound peak
+    h0_3      = None        # decayed away peaky part 
+    h0_4      = None        # far
+    h0_5      = None        # farther
 
     def __init__(self):
         if (self.noAR is not None) or (self.noAR == False):
@@ -182,6 +185,14 @@ class mcmcARspk1(mAR.mcmcAR):
             # while cnts[ii] < 0.5*(cnts[ii+1]+cnts[ii+2]):
             #     ii += 1
             # oo.h0_2 = ii  #  approx peak of post-spike rebound
+
+        oo.h0_3= oo.h0_2*3
+        oo.h0_4 = int(sisis[int(Lisi*0.7)])
+        oo.h0_5 = int(sisis[int(Lisi*0.8)])
+        if oo.h0_3 > oo.h0_4:
+            oo.h0_4 = oo.h0_2 * 4
+        if oo.h0_4 > oo.h0_5:
+            oo.h0_5 = oo.h0_4 + 10
 
         crats = _N.zeros(oo.N+2)
         for n in xrange(0, oo.N+1):
@@ -287,7 +298,8 @@ class mcmcARspk1(mAR.mcmcAR):
             #oo.u_a            = _N.ones(oo.dfPSTH)*_N.mean(oo.us)
             #oo.u_a            = _N.zeros(oo.dfPSTH)
 
-        oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_2*3, oo.h0_2*4, oo.h0_2*5, int(0.7*(oo.N+1))]), include_intercept=True)    #  spline basisp
+        print "h0_1 %(1)d  h0_2 %(2)d  h0_3 %(3)d  h0_4 %(4)d  h0_5 %(5)d" % {"1" : oo.h0_1, "2" : oo.h0_2, "3" : oo.h0_3, "4" : oo.h0_4, "5" : oo.h0_5}
+        oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.h0_5, int(0.7*(oo.N+1))]), include_intercept=True)    #  spline basisp
 
     def stitch_Hist(self, ARo, hcrv, stsM):  # history curve
         #  this has no direct bearing on sampling of history knots

@@ -270,6 +270,10 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 #iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
                 #Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
 
+                print BDB.shape
+                print lv_f.shape
+                print lv_f.shape
+                print BTua.shape
                 Mn = oo.u_a + _N.dot(DB, _N.linalg.solve(BDB + lv_f, lm_f - BTua))
 
                 t4c = _tm.time()
@@ -314,11 +318,10 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             # oo.smp_u[:, it] = oo.us
 
             print "--------------"
-            print (t2-t1)
-            print (t3-t2)
-            print (t4-t3)
-            print (t5-t4)
-            print (t6-t5)
+            print (t4a-t4)
+            print (t4b-t4a)
+            print (t4c-t4b)
+            print (t5-t4c)
 
 
 

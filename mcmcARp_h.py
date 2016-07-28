@@ -182,16 +182,10 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             print it
             if (it % 10) == 0:
                 print it
-            t2 = _tm.time()
 
-            # print  "^^^^^^^^^^"
-            # print BaS
-            # print ARo
-            # print oo.us
-            # print  "^^^^^^^^^^"
             for m in xrange(ooTR):
                 lw.rpg_devroye(oo.rn, oo.us[m] + ARo[m] + BaS, out=oo.ws[m])  ######  devryoe
-            t3 = _tm.time()
+            t2 = _tm.time()
 
             if ooTR == 1:
                 oo.ws   = oo.ws.reshape(1, ooN+1)
@@ -216,7 +210,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             Cov = _N.linalg.inv(HcM)
             print vm
             cfs = _N.random.multivariate_normal(vm[:, 0], Cov, size=1)
-
+            t3 = _tm.time()
 
             # iOf = vInds[0]   #  offset HcM index with RHS index.
             # for i in vInds:
@@ -259,7 +253,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             #  ws(it+1)    using u(it), F0(it), smpx(it)
 
             #  cov matrix, prior of aS 
-
+            t4 = _tm.time()
 
             if oo.bpsth:
                 Oms  = kpOws - oo.smpx[..., 2:, 0] - ARo - oous_rs - oo.knownSig
@@ -284,6 +278,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.smp_aS[it, :] = oo.aS
                 _N.dot(oo.B.T, oo.aS, out=BaS)
 
+            t5 = _tm.time()
             ########     per trial offset sample  burns==None, only psth fit
             Ons  = kpOws - oo.smpx[..., 2:, 0] - ARo - BaS - oo.knownSig
 
@@ -302,7 +297,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             if not oo.bIndOffset:
                 oo.us[:] = _N.mean(oo.us)
             oo.smp_u[:, it] = oo.us
-
+            t6 = _tm.time()
             # Ons  = kpOws - ARo
             # _N.einsum("mn,mn->m", oo.ws, Ons, out=smWinOn)  #  sum over trials
             # ilv_u  = _N.diag(_N.sum(oo.ws, axis=1))  #  var  of LL
@@ -318,7 +313,12 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             #     oo.us[:] = _N.mean(oo.us)
             # oo.smp_u[:, it] = oo.us
 
-
+            print "--------------"
+            print (t2-t1)
+            print (t3-t2)
+            print (t4-t3)
+            print (t5-t4)
+            print (t6-t5)
 
 
 

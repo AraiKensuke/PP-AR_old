@@ -440,6 +440,7 @@ class mcmcARspk(mAR.mcmcAR):
         startIt = oo.burn if startIt == None else startIt
         aus = _N.mean(oo.smp_u[:, startIt:], axis=1)
         aSs = _N.mean(oo.smp_aS[startIt:], axis=0)
+        hSs = _N.mean(oo.smp_hS[:, startIt:], axis=1)
 
         L   = oo.burn + oo.NMC - startIt
 
@@ -478,7 +479,7 @@ class mcmcARspk(mAR.mcmcAR):
 
 
         #alfas = _N.mean(oo.allalfas[asfsInds], axis=0)
-        pcklme = [aus, q, oo.allalfas[asfsInds], aSs]
+        pcklme = [aus, q, oo.allalfas[asfsInds], aSs, oo.B, hSs, oo.Hbf]
         
         if dir is None:
             dmp = open(resFN("bestParams%d.pkl" % startIt, dir=oo.setname), "wb")

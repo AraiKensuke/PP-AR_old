@@ -505,6 +505,9 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oo.loadDat(trials)
         oo.setParams()
         oo.us = pckl[0]
+        oo.B  = pckl[4]
+        oo.hS = pckl[5]
+        oo.Hbf = pckl[6]
         oo.q2 = _N.ones(oo.TR)*pckl[1]
         oo.F0 = _N.zeros(oo.k)
         print len(pckl[2])
@@ -515,3 +518,103 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         
         oo.latentState(useMeanOffset=useMeanOffset)
 
+    def latentState(self, burns=None, useMeanOffset=False):  ###########################  GIBBSSAMPH
+        oo          = self
+
+        ooTR        = oo.TR
+        ook         = oo.k
+        ooNMC       = oo.NMC
+        ooN         = oo.N
+        oo.x00         = _N.array(oo.smpx[:, 2])
+        oo.V00         = _N.zeros((ooTR, ook, ook))
+        alpR   = oo.F_alfa_rep[0:oo.R]
+        alpC   = oo.F_alfa_rep[oo.R:]
+
+        ARo   = _N.empty((ooTR, oo._d.N+1))
+        kpOws = _N.empty((ooTR, ooN+1))
+        oo.uts          = _N.empty((oo.TR, oo.burn+oo.NMC, oo.R, oo.N+2))
+        oo.wts          = _N.empty((oo.TR, oo.burn+oo.NMC, oo.C, oo.N+3))
+
+        it    = -1
+
+        if useMeanOffset:
+            oo.us[:] = _N.mean(oo.us)
+        oous_rs = oo.us.reshape((ooTR, 1))
+        
+        runTO = ooNMC + oo.burn - 1 if (burns is None) else (burns - 1)
+        oo.allocateSmp(runTO+1, Bsmpx=True)
+
+        BaS = _N.empty(oo.N+1)
+        _N.dot(oo.B.T, oo.aS, out=BaS)
+
+        oo.loghist = _N.dot(oo.Hbf, oo.hS)
+
+        if oo.processes > 1:
+            pool = Pool(processes=oo.processes)
+
+        Msts = []
+        for m in xrange(ooTR):
+            Msts.append(_N.where(oo.y[m] == 1)[0])
+
+        oo.stitch_Hist(ARo, oo.loghist, Msts)
+        while (it < runTO):
+            t1 = _tm.time()
+            it += 1
+            print it
+            if (it % 10) == 0:
+                print it
+            #  generate latent AR state
+            oo._d.f_x[:, 0, :, 0]     = oo.x00
+            if it == 0:
+                for m in xrange(ooTR):
+                    oo._d.f_V[m, 0]     = oo.s2_x00
+            else:
+                oo._d.f_V[:, 0]     = _N.mean(oo._d.f_V[:, 1:], axis=1)
+
+            ###  PG latent variable sample
+
+            #oo.build_addHistory(ARo, oo.smpx[:, 2:, 0], BaS, oo.us, oo.knownSig)
+            for m in xrange(ooTR):
+                lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + oo.us[m] + BaS + ARo[m] + oo.knownSig[m], out=oo.ws[m])  ######  devryoe
+            t3 = _tm.time()
+            if ooTR == 1:
+                oo.ws   = oo.ws.reshape(1, ooN+1)
+            _N.divide(oo.kp, oo.ws, out=kpOws)
+
+            #  Now that we have PG variables, construct Gaussian timeseries
+            #  ws(it+1)    using u(it), F0(it), smpx(it)
+
+            oo._d.y = kpOws - BaS - ARo - oous_rs - oo.knownSig
+            oo._d.copyParams(oo.F0, oo.q2)
+            oo._d.Rv[:, :] =1 / oo.ws[:, :]   #  time dependent noise
+
+            #  cov matrix, prior of aS 
+            tpl_args = zip(oo._d.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
+
+            if oo.processes == 1:
+                for m in xrange(ooTR):
+                    oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
+                    oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                    oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
+                    oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+            else:
+                sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
+                for m in xrange(ooTR):
+                    oo.smpx[m, 2:] = sxv[m][0]
+                    oo._d.f_x[m] = sxv[m][1]
+                    oo._d.f_V[m] = sxv[m][2]
+                    oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
+                    oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
+                    oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+
+            ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
+            oo.allalfas[it] = oo.F_alfa_rep
+
+            for m in xrange(ooTR):
+                oo.wts[m, it, :, :]   = wt[m, :, :, 0]
+                oo.uts[m, it, :, :]   = ut[m, :, :, 0]
+
+            stds = _N.std(oo.smpx[:, 2:, 0], axis=1)
+            oo.mnStds[it] = _N.mean(stds, axis=0)
+            print "mnStd  %.3f" % oo.mnStds[it]
+            t6 = _tm.time()

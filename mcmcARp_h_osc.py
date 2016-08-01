@@ -428,10 +428,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 _N.savetxt("%(dir)srstlwfs%(it)d.dat" % {"dir" : oo.mcmcRunDir, "it" : it}, arstwfs, fmt=("%.3f " * 2*W))
                 _N.savetxt("%(dir)ssmpx%(it)d.dat" % {"dir" : oo.mcmcRunDir, "it" : it}, oo.smpx[:, 2:, 0].T, fmt=("%.3f " * oo.TR))
 
-
-
         oo.VIS = ARo
-            
 
 
     def dump(self, dir=None):
@@ -546,7 +543,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
         BaS = _N.empty(oo.N+1)
         _N.dot(oo.B.T, oo.aS, out=BaS)
-
         oo.loghist = _N.dot(oo.Hbf, oo.hS)
 
         if oo.processes > 1:
@@ -607,12 +603,12 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                     oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                     oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
 
-            ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
-            oo.allalfas[it] = oo.F_alfa_rep
+            #ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
+            #oo.allalfas[it] = oo.F_alfa_rep
 
-            for m in xrange(ooTR):
-                oo.wts[m, it, :, :]   = wt[m, :, :, 0]
-                oo.uts[m, it, :, :]   = ut[m, :, :, 0]
+            # for m in xrange(ooTR):
+            #     oo.wts[m, it, :, :]   = wt[m, :, :, 0]
+            #     oo.uts[m, it, :, :]   = ut[m, :, :, 0]
 
             stds = _N.std(oo.smpx[:, 2:, 0], axis=1)
             oo.mnStds[it] = _N.mean(stds, axis=0)

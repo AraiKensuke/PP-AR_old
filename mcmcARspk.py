@@ -30,6 +30,7 @@ class mcmcARspk(mAR.mcmcAR):
     use_prior     = _cd.__COMP_REF__
     AR2lims       = None
     F_alfa_rep    = None
+    pkldalfas     = None
 
     noAR          = False    #  no oscillation
     #  Sampled 
@@ -246,7 +247,16 @@ class mcmcARspk(mAR.mcmcAR):
         oo.smp_q2       = _N.zeros((oo.TR, iters))
         oo.smp_x00      = _N.empty((oo.TR, iters, oo.k))
         #  store samples of
+
         oo.allalfas     = _N.empty((iters, oo.k), dtype=_N.complex)
+        if oo.pkldalfas is not None:
+            oo.allalfas[0]  = oo.pkldalfas
+            for r in xrange(oo.R):
+                oo.F_alfa_rep[r] = oo.pkldalfas[r].real
+            for c in xrange(oo.C):
+                oo.F_alfa_rep[oo.R+2*c]   = oo.pkldalfas[oo.R+2*c]
+                oo.F_alfa_rep[oo.R+2*c+1] = oo.pkldalfas[oo.R+2*c + 1]
+            print oo.F_alfa_rep
         #oo.uts          = _N.empty((oo.TR, iters, oo.R, oo.N+2))
         #oo.wts          = _N.empty((oo.TR, iters, oo.C, oo.N+3))
         oo.ranks        = _N.empty((iters, oo.C), dtype=_N.int)
@@ -306,14 +316,16 @@ class mcmcARspk(mAR.mcmcAR):
             for n in xrange(2+oo.k-2, -1, -1):  # CREATE square smpx
                 oo.smpx[m, n, 0:oo.k-1] = oo.smpx[m, n+1, 1:oo.k]
                 oo.smpx[m, n, oo.k-1] = _N.dot(oo.F0, oo.smpx[m, n:n+oo.k, oo.k-2]) # no noise
-            
-        oo.s_lrn   = _N.empty((oo.TR, oo.N+1))
-        oo.sprb   = _N.empty((oo.TR, oo.N+1))
-        oo.lrn_scr1   = _N.empty(oo.N+1)
-        oo.lrn_iscr1   = _N.empty(oo.N+1)
-        oo.lrn_scr2   = _N.empty(oo.N+1)
-        oo.lrn_scr3   = _N.empty(oo.N+1)
-        oo.lrn_scld   = _N.empty(oo.N+1)
+
+
+        # oo.s_lrn   = _N.empty((oo.TR, oo.N+1))
+        # oo.sprb   = _N.empty((oo.TR, oo.N+1))
+        # oo.lrn_scr1   = _N.empty(oo.N+1)
+        # oo.lrn_iscr1   = _N.empty(oo.N+1)
+        # oo.lrn_scr2   = _N.empty(oo.N+1)
+        # oo.lrn_scr3   = _N.empty(oo.N+1)
+        # oo.lrn_scld   = _N.empty(oo.N+1)
+
 
         if oo.bpsth:
             psthKnts, apsth, aWeights = _spknts.suggestPSTHKnots(oo.dt, oo.TR, oo.N+1, oo.y.T, iknts=4)
@@ -340,9 +352,6 @@ class mcmcARspk(mAR.mcmcAR):
             oo.B = oo.B.T    #  My convention for beta
             oo.aS = _N.zeros(4)
 
-        #oo.Hbf = patsy.bs(_N.linspace(0, 1.2, 1200), knots=_N.array([0, oo.h0_1*oo.dt, oo.h0_2*oo.dt, oo.h0_2*3*oo.dt, oo.h0_2*4*oo.dt, oo.h0_2*5*oo.dt, 1.2]), include_intercept=True)    #  spline basisp
-        #oo.Hbf = patsy.bs(_N.linspace(0, 1.2, 1200), knots=_N.array([oo.h0_1*oo.dt, oo.h0_2*oo.dt, oo.h0_2*3*oo.dt, oo.h0_2*4*oo.dt, oo.h0_2*5*oo.dt, 1.]), include_intercept=True)    #  spline basisp
-        print "h0_1 %(1)d  h0_2 %(2)d  h0_3 %(3)d  h0_4 %(4)d  h0_5 %(5)d" % {"1" : oo.h0_1, "2" : oo.h0_2, "3" : oo.h0_3, "4" : oo.h0_4, "5" : oo.h0_5}
         oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.h0_5, int(0.7*(oo.N+1))]), include_intercept=True)    #  spline basisp
 
 
@@ -482,9 +491,9 @@ class mcmcARspk(mAR.mcmcAR):
         pcklme = [aus, q, oo.allalfas[asfsInds], aSs, oo.B, hSs, oo.Hbf]
         
         if dir is None:
-            dmp = open(resFN("bestParams%d.pkl" % startIt, dir=oo.setname), "wb")
+            dmp = open(resFN("posteriorModes%d.pkl" % startIt, dir=oo.setname), "wb")
         else:
-            dmp = open(resFN("%(sn)s/bestParams%(it)d.pkl" % {"sn" : dir, "it" : startIt}, dir=oo.setname), "wb")
+            dmp = open(resFN("%(sn)s/posteriorModes%(it)d.pkl" % {"sn" : dir, "it" : startIt}, dir=oo.setname), "wb")
         pickle.dump(pcklme, dmp, -1)
         dmp.close()
 
@@ -503,12 +512,11 @@ class mcmcARspk(mAR.mcmcAR):
         pcklme["mnStds"]= oo.mnStds
         pcklme["allalfas"]= oo.allalfas
         pcklme["smpx"] = oo.smpx
+        pcklme["ws"]   = oo.ws
         if oo.Hbf is not None:
             pcklme["spkhist"] = oo.smp_hist
             pcklme["Hbf"]    = oo.Hbf
             pcklme["h_coeffs"]    = oo.smp_hS
-
-
 
         if dir is None:
             dmp = open("smpls.dump", "wb")

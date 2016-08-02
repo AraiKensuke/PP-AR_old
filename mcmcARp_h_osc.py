@@ -83,6 +83,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
     VIS           = None
     def gibbsSamp(self):  ###########################  GIBBSSAMPH
         oo          = self
+
         ooTR        = oo.TR
         ook         = oo.k
         ooNMC       = oo.NMC
@@ -96,7 +97,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
         print "oo.mcmcRunDir    %s" % oo.mcmcRunDir
         if oo.mcmcRunDir is None:
-            print "here!!!!!!!!!!!!!!"
             oo.mcmcRunDir = ""
         elif (len(oo.mcmcRunDir) > 0) and (oo.mcmcRunDir[-1] != "/"):
             oo.mcmcRunDir += "/"
@@ -106,11 +106,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         kpOws = _N.empty((ooTR, ooN+1))
         lv_f     = _N.zeros((ooN+1, ooN+1))
         lv_u     = _N.zeros((ooTR, ooTR))
-        alpR   = oo.F_alfa_rep[0:oo.R]
-        alpC   = oo.F_alfa_rep[oo.R:]
         Bii    = _N.zeros((ooN+1, ooN+1))
 
-        oo.smpx[:, :, :] = 0
         #alpC.reverse()
         #  F_alfa_rep = alpR + alpC  already in right order, no?
 
@@ -131,10 +128,11 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         it    = -1
 
         oous_rs = oo.us.reshape((ooTR, 1))
-        lrnBadLoc = _N.empty((oo.TR, oo.N+1), dtype=_N.bool)
         #runTO = ooNMC + oo.burn - 1 if (burns is None) else (burns - 1)
         runTO = ooNMC + oo.burn - 1
         oo.allocateSmp(runTO+1)
+        alpR   = oo.F_alfa_rep[0:oo.R]
+        alpC   = oo.F_alfa_rep[oo.R:]
 
         BaS = _N.zeros(oo.N+1)#_N.empty(oo.N+1)
 
@@ -176,6 +174,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 HbfExpd[i, m, sts[-1]+1:] = 0
 
         _N.dot(oo.B.T, oo.aS, out=BaS)
+
         while (it < runTO):
             t1 = _tm.time()
             it += 1
@@ -193,11 +192,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             ###  PG latent variable sample
             t2 = _tm.time()
 
-            # print  "^^^^^^^^^^"
-            # print BaS
-            # print ARo
-            # print oo.us
-            # print  "^^^^^^^^^^"
             for m in xrange(ooTR):
                 lw.rpg_devroye(oo.rn, oo.smpx[m, 2:, 0] + oo.us[m] + BaS + ARo[m] + oo.knownSig[m], out=oo.ws[m])  ######  devryoe
             t3 = _tm.time()
@@ -454,7 +448,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         # with open("mARp.dump", "rb") as f:
         # lm = pickle.load(f)
 
-    def run(self, runDir=None, trials=None, minSpkCnt=0): ###########  RUN
+    def run(self, runDir=None, trials=None, minSpkCnt=0, pckl=None, runlatent=False): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line
         if oo.processes > 1:
             os.system("taskset -p 0xffffffff %d" % os.getpid())
@@ -467,53 +461,47 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         #  x0  --  Gaussian prior
         oo.u_x00        = _N.zeros(oo.k)
         oo.s2_x00       = _arl.dcyCovMat(oo.k, _N.ones(oo.k), 0.4)
-
-        oo.rs=-1
-        if runDir == None:
-            runDir="%(sn)s/AR%(k)d_[%(t0)d-%(t1)d]" % \
-                {"sn" : oo.setname, "ar" : oo.k, "t0" : oo.t0, "t1" : oo.t1}
-
-        if oo.rs >= 0:
-            unpickle(runDir, oo.rs)
-        else:   #  First run
-            oo.restarts = 0
+        oo.restarts = 0
 
         oo.loadDat(trials)
         oo.setParams()
-        t1    = _tm.time()
-        oo.gibbsSamp()
-        t2    = _tm.time()
+        if pckl is not None:
+            oo.restarts = 1
+            oo.F0 = _N.zeros(oo.k)
+            if type(pckl) == list:   #  format for posterior mode
+                oo.us = pckl[0]
+                oo.B  = pckl[4]
+                oo.hS = pckl[5]
+                oo.Hbf = pckl[6]
+                oo.q2 = _N.ones(oo.TR)*pckl[1]
+
+                for l in xrange(len(pckl[2])):
+                    oo.F0 += (-1*_Npp.polyfromroots(pckl[2][l])[::-1].real)[1:]
+                oo.F0 /= len(pckl[2]) # mean
+                oo.aS = pckl[3]
+            else:   #  format for last
+                pckldITERS = pckl["allalfas"].shape[0]
+                print "found %d Gibbs iterations samples" % pckldITERS
+                oo.pkldalfas  = pckl["allalfas"][pckldITERS-1]
+                oo.aS     = pckl["aS"][pckldITERS-1]
+                oo.B      = pckl["B"]
+                oo.hS     = pckl["h_coeffs"][:, pckldITERS-1]
+                oo.q2     = pckl["q2"][:, pckldITERS-1]
+                oo.us     = pckl["u"][:, pckldITERS-1]
+                oo.smpx   = pckl["smpx"]
+                oo.ws     = pckl["ws"]
+                oo.Hbf    = oo.Hbf
+                oo.F0     = (-1*_Npp.polyfromroots(oo.pkldalfas)[::-1].real)[1:]
+
+            if runlatent:    #  just generate latent states
+                t1 = _tm.time()
+                oo.latentState()
+                t2 = _tm.time()
+        if not runlatent:    #  regular Gibbs sampling
+            t1    = _tm.time()
+            oo.gibbsSamp()
+            t2    = _tm.time()
         print (t2-t1)
-
-    def runLatent(self, pckl, trials=None, useMeanOffset=False): ###########  RUN
-        """
-        """
-        oo     = self    #  call self oo.  takes up less room on line
-        oo.setname = os.getcwd().split("/")[-1]
-
-        oo.Cs          = len(oo.freq_lims)
-        oo.C           = oo.Cn + oo.Cs
-        oo.R           = 1
-        oo.k           = 2*oo.C + oo.R
-        #  x0  --  Gaussian prior
-        oo.u_x00        = _N.zeros(oo.k)
-        oo.s2_x00       = _arl.dcyCovMat(oo.k, _N.ones(oo.k), 0.4)
-
-        oo.loadDat(trials)
-        oo.setParams()
-        oo.us = pckl[0]
-        oo.B  = pckl[4]
-        oo.hS = pckl[5]
-        oo.Hbf = pckl[6]
-        oo.q2 = _N.ones(oo.TR)*pckl[1]
-        oo.F0 = _N.zeros(oo.k)
-        print len(pckl[2])
-        for l in xrange(len(pckl[2])):
-            oo.F0 += (-1*_Npp.polyfromroots(pckl[2][l])[::-1].real)[1:]
-        oo.F0 /= len(pckl[2])
-        oo.aS = pckl[3]
-        
-        oo.latentState(useMeanOffset=useMeanOffset)
 
     def latentState(self, burns=None, useMeanOffset=False):  ###########################  GIBBSSAMPH
         oo          = self
@@ -534,8 +522,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
         it    = -1
 
-        if useMeanOffset:
-            oo.us[:] = _N.mean(oo.us)
+        #if useMeanOffset:
+        #    oo.us[:] = _N.mean(oo.us)
         oous_rs = oo.us.reshape((ooTR, 1))
         
         runTO = ooNMC + oo.burn - 1 if (burns is None) else (burns - 1)

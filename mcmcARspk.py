@@ -431,14 +431,38 @@ class mcmcARspk(mAR.mcmcAR):
         oo.aS  = lm[0].aS
         oo.us  = lm[0].us
 
-    def CIF(self, us, alps, osc):
+    """
+    def CIF(TR, N, us, B, alps, osc, it):
+        ARo   = _N.empty((TR, N+1))
+
+        BaS = _N.dot(B.T, alps).reshape((1, 1200))
+        usr = us.reshape((40, 1))
+
+        Msts = []
+        for m in xrange(TR):
+            Msts.append(_N.where(y[m] == 1)[0])
+
+        oo.stitch_Hist(ARo, smp_hist[:, it], Msts)
+
+        usr + ARo 
+        cif = _N.exp(usr + ARo + osc + BaS) / (1 + _N.exp(usr + ARo + osc + BaS))
+
+        return cif
+    """
+
+    def CIF(self, us, B, alps, hS, osc):
         oo = self
-        ooTR = oo.TR
-        ooN  = oo.N
         ARo   = _N.empty((oo.TR, oo.N+1))
 
         BaS = _N.dot(oo.B.T, alps)
-        oo.build_addHistory(ARo, osc, BaS, us, oo.knownSig)
+        Msts = []
+        for m in xrange(oo.TR):
+            Msts.append(_N.where(oo.y[m] == 1)[0])
+
+        oo.loghist = _N.zeros(oo.N+1)
+        _N.dot(oo.Hbf, hS, out=oo.loghist)
+
+        oo.stitch_Hist(ARo, oo.loghist, Msts)
 
         cif = _N.exp(us + ARo + osc + BaS + oo.knownSig) / (1 + _N.exp(us + ARo + osc + BaS + oo.knownSig))
 

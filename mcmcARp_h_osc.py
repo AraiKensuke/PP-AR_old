@@ -448,7 +448,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         # with open("mARp.dump", "rb") as f:
         # lm = pickle.load(f)
 
-    def run(self, runDir=None, trials=None, minSpkCnt=0, pckl=None, runlatent=False): ###########  RUN
+    def run(self, runDir=None, trials=None, minSpkCnt=0, pckl=None, runlatent=False, dontrun=False): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line
         if oo.processes > 1:
             os.system("taskset -p 0xffffffff %d" % os.getpid())
@@ -493,11 +493,11 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.Hbf    = oo.Hbf
                 oo.F0     = (-1*_Npp.polyfromroots(oo.pkldalfas)[::-1].real)[1:]
 
-            if runlatent:    #  just generate latent states
+            if runlatent and (not dontrun):    #  just generate latent states
                 t1 = _tm.time()
                 oo.latentState()
                 t2 = _tm.time()
-        if not runlatent:    #  regular Gibbs sampling
+        if (not runlatent) and (not dontrun):    #  regular Gibbs sampling
             t1    = _tm.time()
             oo.gibbsSamp()
             t2    = _tm.time()

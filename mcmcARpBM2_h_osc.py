@@ -55,6 +55,7 @@ class mcmcARpBM2(mARspk.mcmcARspk):
 
     #  initial value
     lowStates     = None   #  
+    loghist       = None
 
     def allocateSmp(self, iters):   ################################ INITGIBBS
         oo   = self
@@ -113,8 +114,9 @@ class mcmcARpBM2(mARspk.mcmcARspk):
         oo.x00         = _N.array(oo.smpx[:, 2])
         oo.V00         = _N.zeros((ooTR, ook, ook))
 
+        oo.loghist = _N.zeros(oo.N+1)
+
         ARo     = _N.empty((ooTR, oo._d.N+1))
-        ARo01   = _N.empty((oo.nStates, ooTR, oo._d.N+1))
         
         kpOws = _N.empty((ooTR, ooN+1))
         lv_f     = _N.zeros((ooN+1, ooN+1))
@@ -150,7 +152,6 @@ class mcmcARpBM2(mARspk.mcmcARspk):
         _N.fill_diagonal(sd01[1], oo.s[1])
 
         smpx01 = _N.zeros((oo.nStates, oo.TR, oo.N+1))
-        ARo01  = _N.empty((oo.nStates, oo.TR, oo.N+1))
         zsmpx  = _N.empty((oo.TR, oo.N+1))
 
         #  zsmpx created
@@ -213,6 +214,9 @@ class mcmcARpBM2(mARspk.mcmcARspk):
                 HbfExpd[i, m, sts[-1]+1:] = 0
 
         _N.dot(oo.B.T, oo.aS, out=BaS)
+        if oo.hS is None:
+            oo.hS = _N.zeros(oo.histknots)
+
         _N.dot(Hbf, oo.hS, out=oo.loghist)
         oo.stitch_Hist(ARo, oo.loghist, Msts)
 
@@ -247,7 +251,7 @@ class mcmcARpBM2(mARspk.mcmcARspk):
                     #  p0, p1 not normalized
                     ll[tryZ] = 0
                     #  Ber(0 | ) and Ber(1 | )
-                    _N.exp(smpx01[tryZ, m] + BaS + ARo[m] + oo.us[m] + oo.knownSigs, out=expT)
+                    _N.exp(smpx01[tryZ, m] + BaS + ARo[m] + oo.us[m] + oo.knownSig[m], out=expT)
                     Bp[0]   = 1 / (1 + expT)
                     Bp[1]   = expT / (1 + expT)
 
@@ -260,15 +264,12 @@ class mcmcARpBM2(mARspk.mcmcARspk):
                 ll  -= ofs
                 nc = oo.m[0]*_N.exp(ll[0]) + oo.m[1]*_N.exp(ll[1])
 
-                iARo = 1
                 oo.Z[m, 0] = 0;  oo.Z[m, 1] = 1
                 THR[m] = (oo.m[0]*_N.exp(ll[0]) / nc)
                 if _N.random.rand() < THR[m]:
                     oo.Z[m, 0] = 1;  oo.Z[m, 1] = 0
-                    iARo = 0
                 oo.smp_zs[m, it] = oo.Z[m]
-                ####  did we forget to do this?
-                ARo[m] = ARo01[iARo, m]
+
             for m in oo.fxdz: #####  outside BM loop
                 oo.smp_zs[m, it] = oo.Z[m]
             t2 = _tm.time()
@@ -292,7 +293,8 @@ class mcmcARpBM2(mARspk.mcmcARspk):
                 lw.rpg_devroye(oo.rn, zsmpx[m] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe  ####TRD change
             _N.divide(oo.kp, oo.ws, out=kpOws)
 
-            O = kpOws - zsmpx[..., 2:, 0] - oo.us.reshape((ooTR, 1)) - BaS -  oo.knownSig
+
+            O = kpOws - zsmpx - oo.us.reshape((ooTR, 1)) - BaS -  oo.knownSig
 
             iOf = vInds[0]   #  offset HcM index with RHS index.
             for i in vInds:
@@ -349,7 +351,7 @@ class mcmcARpBM2(mARspk.mcmcARspk):
             BaS = _N.dot(oo.B.T, oo.aS)
 
             ########     per trial offset sample
-            Ons  = kpOws - oo.zsmpx - ARo - BaS - oo.knownSig
+            Ons  = kpOws - zsmpx - ARo - BaS - oo.knownSig
 
             #  solve for the mean of the distribution
             H    = _N.ones((oo.TR-1, oo.TR-1)) * _N.sum(oo.ws[0])
@@ -363,8 +365,7 @@ class mcmcARpBM2(mARspk.mcmcARspk):
 
             oo.us[1:] = _N.random.multivariate_normal(MM, Cov, size=1)
             oo.us[0]  = -_N.sum(oo.us[1:])
-            if not oo.bIndOffset:
-                oo.us[:] = _N.mean(oo.us)
+            oo.us[:] = _N.mean(oo.us)
             oo.smp_u[:, it] = oo.us
 
             t4 = _tm.time()
@@ -443,37 +444,10 @@ class mcmcARpBM2(mARspk.mcmcARspk):
             t7 = _tm.time()
             print "gibbs iter %.3f" % (t7-t1)
 
-    def runDirAlloc(self, pckl, trials=None): ###########  RUN
-        """
-        """
-        oo     = self    #  call self oo.  takes up less room on line
-        oo.setname = os.getcwd().split("/")[-1]
-
-        oo.Cs          = len(oo.freq_lims)
-        oo.C           = oo.Cn + oo.Cs
-        oo.R           = 1
-        oo.k           = 2*oo.C + oo.R
-        #  x0  --  Gaussian prior
-        oo.u_x00        = _N.zeros(oo.k)
-        oo.s2_x00       = _arl.dcyCovMat(oo.k, _N.ones(oo.k), 0.4)
-
-        oo.loadDat(trials)
-        oo.setParams()
-        oo.us = pckl[0]
-        oo.q2 = _N.ones(oo.TR)*pckl[1]
-        oo.F0 = _N.zeros(oo.k)
-        print len(pckl[2])
-        for l in xrange(len(pckl[2])):
-            oo.F0 += (-1*_Npp.polyfromroots(pckl[2][l])[::-1].real)[1:]
-        oo.F0 /= len(pckl[2])
-        oo.aS = pckl[3]
-        
-        oo.dirichletAllocate()
-
-    def run(self, runDir=None, trials=None, minSpkCnt=0): ###########  RUN
+    def runDirAlloc(self, runDir=None, trials=None, minSpkCnt=0, pckl=None, runlatent=False, dontrun=False): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line
         if oo.processes > 1:
-            os.system("taskset -p 0xff %d" % os.getpid())
+            os.system("taskset -p 0xffffffff %d" % os.getpid())
         oo.setname = os.getcwd().split("/")[-1]
 
         oo.Cs          = len(oo.freq_lims)
@@ -483,28 +457,45 @@ class mcmcARpBM2(mARspk.mcmcARspk):
         #  x0  --  Gaussian prior
         oo.u_x00        = _N.zeros(oo.k)
         oo.s2_x00       = _arl.dcyCovMat(oo.k, _N.ones(oo.k), 0.4)
-
-        oo.rs=-1
-        if runDir == None:
-            runDir="%(sn)s/AR%(k)d_[%(t0)d-%(t1)d]" % \
-                {"sn" : oo.setname, "ar" : oo.k, "t0" : oo.t0, "t1" : oo.t1}
-
-        if oo.rs >= 0:
-            unpickle(runDir, oo.rs)
-        else:   #  First run
-            oo.restarts = 0
+        oo.restarts = 0
 
         oo.loadDat(trials)
         oo.setParams()
-        t1    = _tm.time()
-        tmpNOAR = oo.noAR
-        oo.noAR = True
-        oo.gibbsSamp()
+        if pckl is not None:
+            oo.restarts = 1
+            oo.F0 = _N.zeros(oo.k)
+            if type(pckl) == list:   #  format for posterior mode
+                oo.us = pckl[0]
+                oo.B  = pckl[4]
+                oo.hS = pckl[5]
+                oo.Hbf = pckl[6]
+                oo.q2 = _N.ones(oo.TR)*pckl[1]
 
-        # oo.noAR = tmpNOAR
-        # oo.gibbsSamp()
-        # t2    = _tm.time()
-        # print (t2-t1)
+                for l in xrange(len(pckl[2])):
+                    oo.F0 += (-1*_Npp.polyfromroots(pckl[2][l])[::-1].real)[1:]
+                oo.F0 /= len(pckl[2]) # mean
+                oo.aS = pckl[3]
+            else:   #  format for last
+                pckldITERS = pckl["allalfas"].shape[0]
+                print "found %d Gibbs iterations samples" % pckldITERS
+                oo.pkldalfas  = pckl["allalfas"][pckldITERS-1]
+                oo.aS     = pckl["aS"][pckldITERS-1]
+                oo.B      = pckl["B"]
+                oo.hS     = pckl["h_coeffs"][:, pckldITERS-1]
+                oo.q2     = pckl["q2"][:, pckldITERS-1]
+                oo.us     = pckl["u"][:, pckldITERS-1]
+                oo.smpx   = pckl["smpx"]
+                oo.ws     = pckl["ws"]
+                if pckl.has_key("m"):
+                    oo.m      = pckl["m"]
+                    oo.Z      = pckl["Z"]
+                oo.Hbf    = oo.Hbf
+                oo.F0     = (-1*_Npp.polyfromroots(oo.pkldalfas)[::-1].real)[1:]
+
+        t1 = _tm.time()
+        oo.dirichletAllocate()
+        t2    = _tm.time()
+        print (t2-t1)
 
     def dumpSamples(self, dir=None):
         pcklme     = {}

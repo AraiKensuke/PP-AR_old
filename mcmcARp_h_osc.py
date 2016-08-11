@@ -174,6 +174,9 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 HbfExpd[i, m, sts[-1]+1:] = 0
 
         _N.dot(oo.B.T, oo.aS, out=BaS)
+        if oo.hS is None:
+            oo.hS = _N.zeros(oo.histknots)
+
         _N.dot(Hbf, oo.hS, out=oo.loghist)
         oo.stitch_Hist(ARo, oo.loghist, Msts)
 

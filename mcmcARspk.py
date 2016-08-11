@@ -97,6 +97,8 @@ class mcmcARspk(mAR.mcmcAR):
     h0_4      = None        # far
     h0_5      = None        # farther
 
+    hS        = None
+
     def __init__(self):
         if (self.noAR is not None) or (self.noAR == False):
             self.lfc         = _lfc.logerfc()

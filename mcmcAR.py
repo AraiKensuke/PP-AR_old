@@ -1,21 +1,3 @@
-import pickle
-import numpy as _N
-import re as _re
-
-from mcmcARpFuncs import loadL2, runNotes
-import kfardat as _kfardat
-
-import utilities as _U
-
-import ARlib as _arl
-import kfARlibMPmv as _kfar
-from ARcfSmpl import ARcfSmpl, FilteredTimeseries
-
-import commdefs as _cd
-
-from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
-import os
-
 class mcmcAR:
     #  Simulation params
     processes     = 1

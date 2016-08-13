@@ -8,11 +8,13 @@ timing
 FFBS  1.02443
 5  0.03322
 """
+
 import pickle
 from kflib import createDataAR
 import numpy as _N
 import patsy
 import re as _re
+import matplotlib.pyplot as _plt
 
 import scipy.stats as _ss
 from kassdirs import resFN, datFN
@@ -29,9 +31,9 @@ from ARcfSmpl import ARcfSmpl, FilteredTimeseries
 import commdefs as _cd
 
 from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
-
 import os
 
+from multiprocessing import Pool
 import mcmcARspk1_h
 
 #  add slow AR1 component

@@ -1,4 +1,4 @@
-from mcmcARpFuncs import loadL2, runNotes
+from mcmcARpFuncs import loadL2, runNotes, loadKnown
 from filter import bpFilt, lpFilt, gauKer
 import mcmcAR as mAR
 import ARlib as _arl
@@ -13,7 +13,28 @@ import re as _re
 from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
 import numpy.polynomial.polynomial as _Npp
 from kflib import createDataAR
+#
+import splineknots as _spknts
 import patsy
+import pickle
+import matplotlib.pyplot as _plt
+
+# from mcmcARpFuncs import loadL2, runNotes
+# from filter import bpFilt, lpFilt, gauKer
+# import mcmcAR as mAR
+# import ARlib as _arl
+# import pyPG as lw
+# import kfardat as _kfardat
+# import logerfc as _lfc
+# import commdefs as _cd
+# import os
+# import numpy as _N
+# from kassdirs import resFN, datFN
+# import re as _re
+# from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
+# import numpy.polynomial.polynomial as _Npp
+# from kflib import createDataAR
+# import patsy
 
 class mcmcARspk1(mAR.mcmcAR):
     ##  
@@ -160,18 +181,17 @@ class mcmcARspk1(mAR.mcmcAR):
 
         oo.us    = _N.zeros(oo.TR)
 
+
         tot_isi = 0
         nisi    = 0
-        for tr in xrange(oo.TR):
-            spkts = _N.where(oo.y[tr] == 1)
-            if len(spkts[0]) > 2:
-                nisi += 1
-                tot_isi += spkts[0][1] - spkts[0][0]
-
         isis = []
         for tr in xrange(oo.TR):
             spkts = _N.where(oo.y[tr] == 1)[0]
             isis.extend(_N.diff(spkts))
+        
+        #  cnts will always be 0 in frist bin
+        sisis = _N.sort(isis)
+        Lisi  = len(sisis)
         
         cnts, bins = _N.histogram(isis, bins=_N.linspace(0, oo.N+1, oo.N+2))
 
@@ -182,10 +202,11 @@ class mcmcARspk1(mAR.mcmcAR):
                 ii += 1
             oo.h0_1 = ii  #  firing prob is 0, oo.h0_1 ms postspike
             oo.h0_2 = _N.where(cnts == _N.max(cnts))[0][0]
+            oo.h0_2 = oo.h0_1 + 1 if oo.h0_1 >= oo.h0_2 else oo.h0_2
             # while cnts[ii] < 0.5*(cnts[ii+1]+cnts[ii+2]):
             #     ii += 1
             # oo.h0_2 = ii  #  approx peak of post-spike rebound
-
+            
         oo.h0_3= oo.h0_2*3
         oo.h0_4 = int(sisis[int(Lisi*0.7)])
         oo.h0_5 = int(sisis[int(Lisi*0.8)])

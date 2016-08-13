@@ -1,15 +1,22 @@
-from kflib import createDataAR, disjointSubset
-#import matplotlib.pyplot as _plt
+"""
+timing
+1  0.00005
+2  0.00733
+2a 0.08150
+2b 0.03315
+3  0.11470
+FFBS  1.02443
+5  0.03322
+"""
+import pickle
+from kflib import createDataAR
 import numpy as _N
+import patsy
 import re as _re
-from filter import bpFilt, lpFilt, gauKer
+import matplotlib.pyplot as _plt
 
 import scipy.stats as _ss
 from kassdirs import resFN, datFN
-
-from   mcmcARpPlot import plotFigs, plotARcomps, plotQ2
-from mcmcARpFuncs import loadL2, runNotes
-import kfardat as _kfardat
 
 import utilities as _U
 
@@ -23,16 +30,13 @@ from ARcfSmpl import ARcfSmpl, FilteredTimeseries
 import commdefs as _cd
 
 from ARcfSmplFuncs import ampAngRep, buildLims, FfromLims, dcmpcff, initF
-from multiprocessing import Pool
-
 import os
-import mcmcARspk as mARspk
+
+import mcmcARspk as mcmcARspk
 
 from multiprocessing import Pool
 
-import matplotlib.pyplot as _plt
-
-class mcmcARpBM2(mARspk.mcmcARspk):
+class mcmcARpBM2(mcmcARspk.mcmcARspk):
     ###########  TEMP
     THR           = None
     startZ        = 0
@@ -237,6 +241,13 @@ class mcmcARpBM2(mARspk.mcmcARspk):
             t1 = _tm.time()
             it += 1
             print "****------------  %d" % it
+            oo._d.f_x[:, 0, :, 0]     = oo.x00
+            if it == 0:
+                for m in xrange(ooTR):
+                    oo._d.f_V[m, 0]     = oo.s2_x00
+            else:
+                oo._d.f_V[:, 0]     = _N.mean(oo._d.f_V[:, 1:], axis=1)
+
 
             #  generate latent AR state
 
@@ -290,7 +301,7 @@ class mcmcARpBM2(mARspk.mcmcARspk):
 
             ######  PG generate
             for m in xrange(ooTR):
-                lw.rpg_devroye(oo.rn, zsmpx[m] + oo.us[m] + BaS + ARo[m], out=oo.ws[m])  ######  devryoe  ####TRD change
+                lw.rpg_devroye(oo.rn, zsmpx[m] + oo.us[m] + BaS + ARo[m] + oo.knownSig[m], out=oo.ws[m])  ######  devryoe  ####TRD change
             _N.divide(oo.kp, oo.ws, out=kpOws)
 
 
@@ -365,7 +376,6 @@ class mcmcARpBM2(mARspk.mcmcARspk):
 
             oo.us[1:] = _N.random.multivariate_normal(MM, Cov, size=1)
             oo.us[0]  = -_N.sum(oo.us[1:])
-            oo.us[:] = _N.mean(oo.us)
             oo.smp_u[:, it] = oo.us
 
             t4 = _tm.time()
@@ -412,7 +422,7 @@ class mcmcARpBM2(mARspk.mcmcARspk):
             sts2chg = hists
             if (it > oo.startZ) and (len(sts2chg) > 0):
                 AL = 0.5*_N.sum(oo.smpx[sts2chg, 2:, 0]*oo.smpx[sts2chg, 2:, 0]*oo.ws[sts2chg])
-                BRL = kpOws[sts2chg] - BaS - oous_rs[sts2chg] - ARo[sts2chg] 
+                BRL = kpOws[sts2chg] - BaS - oous_rs[sts2chg] - ARo[sts2chg] - oo.knownSig[sts2chg]
                 BL = _N.sum(oo.ws[sts2chg]*BRL*oo.smpx[sts2chg, 2:, 0])
                 UL = BL / (2*AL)
                 sgL= 1/_N.sqrt(2*AL)
@@ -498,6 +508,7 @@ class mcmcARpBM2(mARspk.mcmcARspk):
         print (t2-t1)
 
     def dumpSamples(self, dir=None):
+        oo         = self
         pcklme     = {}
         
         pcklme["ss"]  = oo.smp_ss

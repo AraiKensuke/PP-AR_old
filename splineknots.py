@@ -1,6 +1,6 @@
+import numpy as _N
 import patsy
 import utilities as _U
-import numpy as _N
 import matplotlib.pyplot as _plt
 from utildirs import setFN
 

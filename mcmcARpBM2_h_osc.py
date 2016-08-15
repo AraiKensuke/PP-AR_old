@@ -175,6 +175,9 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
         expT= _N.empty(ooN+1)
         BaS = _N.dot(oo.B.T, oo.aS)
 
+        alpR   = oo.F_alfa_rep[0:oo.R]
+        alpC   = oo.F_alfa_rep[oo.R:]
+
         oo.nSMP_smpxC = 0
         if oo.processes > 1:
             print oo.processes
@@ -415,6 +418,23 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
             oo.mnStds[it] = _N.mean(stds, axis=0)
             print "mnStd  %.3f" % oo.mnStds[it]
             ###  
+            if not oo.bFixF:   
+                ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H)  
+                oo.F_alfa_rep = alpR + alpC   #  new constructed
+                prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
+                print prt
+            #ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
+            #ranks[it]    = rank
+            oo.allalfas[it] = oo.F_alfa_rep
+
+            for m in xrange(ooTR):
+                #oo.wts[m, it, :, :]   = wt[m, :, :, 0]
+                #oo.uts[m, it, :, :]   = ut[m, :, :, 0]
+                if not oo.bFixF:
+                    oo.amps[it, :]  = amp
+                    oo.fs[it, :]    = f
+
+            oo.F0          = (-1*_Npp.polyfromroots(oo.F_alfa_rep)[::-1].real)[1:]
 
             lwsts = _N.where(oo.Z[:, 0] == 1)[0]
             hists = _N.where(oo.Z[:, 1] == 1)[0]

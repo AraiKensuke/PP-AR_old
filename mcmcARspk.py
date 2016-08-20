@@ -99,6 +99,8 @@ class mcmcARspk(mAR.mcmcAR):
 
     hS        = None
 
+    outSmplFN = "smpls.dump"
+
     def __init__(self):
         if (self.noAR is not None) or (self.noAR == False):
             self.lfc         = _lfc.logerfc()
@@ -524,30 +526,32 @@ class mcmcARspk(mAR.mcmcAR):
         dmp.close()
 
     
-    def dump_smps(self, pcklme=None, dir=None):
+    def dump_smps(self, pcklme=None, dir=None, toiter=None):
         oo    = self
         if pcklme is None:
             pcklme = {}
 
-        pcklme["aS"]   = oo.smp_aS  #  this is last
+        toiter         = oo.NMC + oo.burn if (toiter is None) else toiter
+        pcklme["aS"]   = oo.smp_aS[0:toiter]  #  this is last
         pcklme["B"]    = oo.B
-        pcklme["q2"]   = oo.smp_q2
-        pcklme["amps"] = oo.amps
-        pcklme["fs"]   = oo.fs
-        pcklme["u"]    = oo.smp_u
-        pcklme["mnStds"]= oo.mnStds
-        pcklme["allalfas"]= oo.allalfas
+        pcklme["q2"]   = oo.smp_q2[:, 0:toiter]
+        pcklme["amps"] = oo.amps[0:toiter]
+        pcklme["fs"]   = oo.fs[0:toiter]
+        pcklme["u"]    = oo.smp_u[:, 0:toiter]
+        pcklme["mnStds"]= oo.mnStds[0:toiter]
+        pcklme["allalfas"]= oo.allalfas[0:toiter]
         pcklme["smpx"] = oo.smpx
         pcklme["ws"]   = oo.ws
         if oo.Hbf is not None:
-            pcklme["spkhist"] = oo.smp_hist
+            pcklme["spkhist"] = oo.smp_hist[:, 0:toiter]
             pcklme["Hbf"]    = oo.Hbf
-            pcklme["h_coeffs"]    = oo.smp_hS
+            pcklme["h_coeffs"]    = oo.smp_hS[:, 0:toiter]
 
+        print "saving state in %s" % oo.outSmplFN
         if dir is None:
-            dmp = open("smpls.dump", "wb")
+            dmp = open(oo.outSmplFN, "wb")
         else:
-            dmp = open("%s/smpls.dump" % dir, "wb")
+            dmp = open("%(d)s/%(sfn)s" % {"d" : dir, "sfn" : oo.outSmplFN}, "wb")
         pickle.dump(pcklme, dmp, -1)
         dmp.close()
 

@@ -60,6 +60,7 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
     #  initial value
     lowStates     = None   #  
     loghist       = None
+    doS           = False
 
     def allocateSmp(self, iters):   ################################ INITGIBBS
         oo   = self
@@ -89,9 +90,9 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
         oo.s         = _N.array([0.1, 1])
         oo.smp_ss       = _N.zeros(oo.burn + oo.NMC)
         oo.sd        = _N.zeros((oo.TR, oo.TR))
-        oo.m         = _N.array([0.1, 0.9])
+        oo.m         = _N.array([0, 1.])
 
-        oo.alp       = _N.array([1, 1])
+        oo.alp       = _N.array([1., 1.])
 
         if (oo.varz is None) and (oo.fxdz is None):
             ##  
@@ -254,50 +255,58 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
 
             #  generate latent AR state
 
-            for tryZ in xrange(oo.nStates):
-                _N.dot(sd01[tryZ], oo.smpx[..., 2:, 0], out=smpx01[tryZ])
+            if it > oo.startZ:
+                for tryZ in xrange(oo.nStates):
+                    _N.dot(sd01[tryZ], oo.smpx[..., 2:, 0], out=smpx01[tryZ])
 
-            for m in oo.varz:
-                for tryZ in xrange(oo.nStates):  #  only allow certain trials to change
+                for m in oo.varz:
+                    for tryZ in xrange(oo.nStates):  #  only allow certain trials to change
 
-                    #  calculate p0, p1  p0 = m_0 x PROD_n Ber(y_n | Z_j)
-                    #                       = m_0 x _N.exp(_N.log(  ))
-                    #  p0, p1 not normalized
-                    ll[tryZ] = 0
-                    #  Ber(0 | ) and Ber(1 | )
-                    _N.exp(smpx01[tryZ, m] + BaS + ARo[m] + oo.us[m] + oo.knownSig[m], out=expT)
-                    Bp[0]   = 1 / (1 + expT)
-                    Bp[1]   = expT / (1 + expT)
+                        #  calculate p0, p1  p0 = m_0 x PROD_n Ber(y_n | Z_j)
+                        #                       = m_0 x _N.exp(_N.log(  ))
+                        #  p0, p1 not normalized
+                        ll[tryZ] = 0
+                        #  Ber(0 | ) and Ber(1 | )
+                        _N.exp(smpx01[tryZ, m] + BaS + ARo[m] + oo.us[m] + oo.knownSig[m], out=expT)
+                        Bp[0]   = 1 / (1 + expT)
+                        Bp[1]   = expT / (1 + expT)
 
-                    #   z[:, 1]   is state label
+                        #   z[:, 1]   is state label
 
-                    for n in xrange(oo.N+1):
-                        ll[tryZ] += _N.log(Bp[oo.y[m, n], n])
+                        for n in xrange(oo.N+1):
+                            ll[tryZ] += _N.log(Bp[oo.y[m, n], n])
 
-                ofs = _N.min(ll)
-                ll  -= ofs
-                nc = oo.m[0]*_N.exp(ll[0]) + oo.m[1]*_N.exp(ll[1])
+                    ofs = _N.min(ll)
+                    ll  -= ofs
+                    nc = oo.m[0]*_N.exp(ll[0]) + oo.m[1]*_N.exp(ll[1])
 
-                oo.Z[m, 0] = 0;  oo.Z[m, 1] = 1
-                THR[m] = (oo.m[0]*_N.exp(ll[0]) / nc)
-                if _N.random.rand() < THR[m]:
-                    oo.Z[m, 0] = 1;  oo.Z[m, 1] = 0
-                oo.smp_zs[m, it] = oo.Z[m]
+                    oo.Z[m, 0] = 0;  oo.Z[m, 1] = 1
+                    THR[m] = (oo.m[0]*_N.exp(ll[0]) / nc)
+                    if _N.random.rand() < THR[m]:
+                        oo.Z[m, 0] = 1;  oo.Z[m, 1] = 0
+                    oo.smp_zs[m, it] = oo.Z[m]
 
-            for m in oo.fxdz: #####  outside BM loop
-                oo.smp_zs[m, it] = oo.Z[m]
-            t2 = _tm.time()
+                for m in oo.fxdz: #####  outside BM loop
+                    oo.smp_zs[m, it] = oo.Z[m]
+                t2 = _tm.time()
 
-            #  Z  set
-            _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
-            _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])
-            #for kkk in xrange(oo.TR):
-            #    print zd[kkk, kkk]
-            _N.dot(zd, oo.smpx[..., 2:, 0], out=zsmpx)
-            ######  sample m's
-            _N.add(oo.alp, _N.sum(oo.Z[oo.varz], axis=0), out=dirArgs)
-            oo.m[:] = _N.random.dirichlet(dirArgs)
-            oo.smp_ms[it] = oo.m
+                #  Z  set
+                _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
+                _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])
+                #for kkk in xrange(oo.TR):
+                #    print zd[kkk, kkk]
+                _N.dot(zd, oo.smpx[..., 2:, 0], out=zsmpx)
+                ######  sample m's
+                _N.add(oo.alp, _N.sum(oo.Z[oo.varz], axis=0), out=dirArgs)
+                oo.m[:] = _N.random.dirichlet(dirArgs)
+                oo.smp_ms[it] = oo.m
+            else:
+                _N.fill_diagonal(zd, oo.s[oo.Z[:, 1]])
+                _N.fill_diagonal(izd, 1./oo.s[oo.Z[:, 1]])
+
+                _N.dot(zd, oo.smpx[..., 2:, 0], out=zsmpx)
+                ######  sample m's
+                oo.smp_ms[it] = oo.m
             print oo.m
 
             t3 = _tm.time()
@@ -440,7 +449,7 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
             hists = _N.where(oo.Z[:, 1] == 1)[0]
 
             sts2chg = hists
-            if (it > oo.startZ) and (len(sts2chg) > 0):
+            if (it > oo.startZ) and oo.doS:
                 AL = 0.5*_N.sum(oo.smpx[sts2chg, 2:, 0]*oo.smpx[sts2chg, 2:, 0]*oo.ws[sts2chg])
                 BRL = kpOws[sts2chg] - BaS - oous_rs[sts2chg] - ARo[sts2chg] - oo.knownSig[sts2chg]
                 BL = _N.sum(oo.ws[sts2chg]*BRL*oo.smpx[sts2chg, 2:, 0])
@@ -473,6 +482,20 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
             oo.smp_q2[:, it]= oo.q2
             t7 = _tm.time()
             print "gibbs iter %.3f" % (t7-t1)
+            if (it > 1) and (it % oo.peek == 0):
+                fig = _plt.figure(figsize=(8, 8))
+                fig.add_subplot(3, 1, 1)
+                _plt.plot(oo.amps[1:it, 0])
+                fig.add_subplot(3, 1, 2)
+                _plt.plot(oo.fs[1:it, 0])
+                fig.add_subplot(3, 1, 3)
+                _plt.plot(oo.mnStds[1:it])
+
+                _plt.savefig("%(dir)stmp-fsamps%(it)d" % {"dir" : oo.mcmcRunDir, "it" : it})
+                _plt.close()
+
+                oo.dump_smps(toiter=it, dir=oo.mcmcRunDir)
+        oo.dump_smps(dir=oo.mcmcRunDir)
 
     def runDirAlloc(self, runDir=None, trials=None, minSpkCnt=0, pckl=None, runlatent=False, dontrun=False): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line
@@ -515,7 +538,8 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
                 oo.q2     = pckl["q2"][:, pckldITERS-1]
                 oo.us     = pckl["u"][:, pckldITERS-1]
                 oo.smpx   = pckl["smpx"]
-                oo.ws     = pckl["ws"]
+                if pckl.has_key("ws"):
+                    oo.ws     = pckl["ws"]
                 if pckl.has_key("m"):
                     oo.m      = pckl["m"]
                     oo.Z      = pckl["Z"]
@@ -527,11 +551,12 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
         t2    = _tm.time()
         print (t2-t1)
 
-    def dumpSamples(self, dir=None):
+    def dump_smps(self, dir=None, toiter=None):
         oo         = self
         pcklme     = {}
         
-        pcklme["ss"]  = oo.smp_ss
-        pcklme["zs"]  = oo.smp_zs
-        pcklme["ms"]  = oo.smp_ms
-        oo.__class__.__bases__[0].dumpSamples(pcklme=pcklme, dir=dir)
+        toiter         = oo.NMC + oo.burn if (toiter is None) else toiter
+        pcklme["ss"]  = oo.smp_ss[0:toiter]
+        pcklme["zs"]  = oo.smp_zs[:, 0:toiter]
+        pcklme["ms"]  = oo.smp_ms[0:toiter]
+        oo.__class__.__bases__[0].dump_smps(pcklme=pcklme, dir=dir, toiter=toiter)

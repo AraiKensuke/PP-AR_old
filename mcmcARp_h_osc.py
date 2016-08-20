@@ -398,45 +398,9 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 _plt.savefig("%(dir)stmp-fsamps%(it)d" % {"dir" : oo.mcmcRunDir, "it" : it})
                 _plt.close()
 
-                # fig = _plt.figure(figsize=(8, 8))
-                # fig.add_subplot(2, 1, 1)
-                # _plt.plot(oo.smpx[0, 2:, 0])
-                # _plt.plot(oo.y[0])
-                # fig.add_subplot(2, 1, 2)
-                # _plt.plot(oo.smpx[1, 2:, 0])
-                # _plt.plot(oo.y[1])
-                # _plt.savefig("%(dir)smpxs%(it)d" % {"dir" : oo.mcmcRunDir, "it" : it})                
-                # _plt.close()
+                oo.dump_smps(toiter=it, dir=oo.mcmcRunDir)
 
-                # W   = 60
-                # #  do an sta of inferred state
-                # stwfs = []
-                # for tr in xrange(oo.TR):
-                #     sts = _N.where(oo.y[tr] == 1)[0]
-    
-                # for t in sts:
-                #     if (t > oo.t0+W) and (t < oo.t1-W):
-                #         stwfs.append(oo.smpx[tr, t-W:t+W, 0])
-
-
-                # rstwfs = []
-                # inds   = _N.arange(oo.TR)
-                # _N.random.shuffle(inds)
-                # for tr in xrange(oo.TR):
-                #     rtr = inds[tr]
-                #     sts = _N.where(oo.y[rtr] == 1)[0]
-    
-                #     for t in sts:
-                #         if (t > oo.t0+W) and (t < oo.t1-W):
-                #             rstwfs.append(oo.smpx[tr, t-W:t+W, 0])
-
-                # astwfs  = _N.array(stwfs)
-                # arstwfs = _N.array(rstwfs)
-
-                # _N.savetxt("%(dir)sstlwfs%(it)d.dat" % {"dir" : oo.mcmcRunDir, "it" : it}, astwfs, fmt=("%.3f " * 2*W))
-                # _N.savetxt("%(dir)srstlwfs%(it)d.dat" % {"dir" : oo.mcmcRunDir, "it" : it}, arstwfs, fmt=("%.3f " * 2*W))
-                # _N.savetxt("%(dir)ssmpx%(it)d.dat" % {"dir" : oo.mcmcRunDir, "it" : it}, oo.smpx[:, 2:, 0].T, fmt=("%.3f " * oo.TR))
-
+                
         oo.VIS = ARo
 
 

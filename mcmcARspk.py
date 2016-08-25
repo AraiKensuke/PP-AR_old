@@ -321,16 +321,6 @@ class mcmcARspk(mAR.mcmcAR):
                 oo.smpx[m, n, 0:oo.k-1] = oo.smpx[m, n+1, 1:oo.k]
                 oo.smpx[m, n, oo.k-1] = _N.dot(oo.F0, oo.smpx[m, n:n+oo.k, oo.k-2]) # no noise
 
-
-        # oo.s_lrn   = _N.empty((oo.TR, oo.N+1))
-        # oo.sprb   = _N.empty((oo.TR, oo.N+1))
-        # oo.lrn_scr1   = _N.empty(oo.N+1)
-        # oo.lrn_iscr1   = _N.empty(oo.N+1)
-        # oo.lrn_scr2   = _N.empty(oo.N+1)
-        # oo.lrn_scr3   = _N.empty(oo.N+1)
-        # oo.lrn_scld   = _N.empty(oo.N+1)
-
-
         if oo.bpsth:
             psthKnts, apsth, aWeights = _spknts.suggestPSTHKnots(oo.dt, oo.TR, oo.N+1, oo.y.T, iknts=4)
 

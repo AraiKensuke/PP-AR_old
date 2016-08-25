@@ -444,6 +444,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
         oo.loadDat(trials)
         oo.setParams()
+
         if pckl is not None:
             oo.restarts = 1
             oo.F0 = _N.zeros(oo.k)
@@ -481,6 +482,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             oo.gibbsSamp()
             t2    = _tm.time()
         print (t2-t1)
+
 
     def latentState(self, burns=None, useMeanOffset=False):  ###########################  GIBBSSAMPH
         oo          = self

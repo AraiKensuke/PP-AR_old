@@ -307,6 +307,8 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
                 _N.dot(zd, oo.smpx[..., 2:, 0], out=zsmpx)
                 ######  sample m's
                 oo.smp_ms[it] = oo.m
+                oo.smp_zs[:, it, 1] = 1
+                oo.smp_zs[:, it, 0] = 0
             print oo.m
 
             t3 = _tm.time()
@@ -317,36 +319,37 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
             _N.divide(oo.kp, oo.ws, out=kpOws)
 
 
-            O = kpOws - zsmpx - oo.us.reshape((ooTR, 1)) - BaS -  oo.knownSig
+            if not oo.bFixH:
+                O = kpOws - zsmpx - oo.us.reshape((ooTR, 1)) - BaS -  oo.knownSig
 
-            iOf = vInds[0]   #  offset HcM index with RHS index.
-            for i in vInds:
-                for j in vInds:
-                    HcM[i-iOf, j-iOf] = _N.sum(oo.ws*HbfExpd[i]*HbfExpd[j])
+                iOf = vInds[0]   #  offset HcM index with RHS index.
+                for i in vInds:
+                    for j in vInds:
+                        HcM[i-iOf, j-iOf] = _N.sum(oo.ws*HbfExpd[i]*HbfExpd[j])
 
-                RHS[i, 0] = _N.sum(oo.ws*HbfExpd[i]*O)
-                for cj in cInds:
-                    RHS[i, 0] -= _N.sum(oo.ws*HbfExpd[i]*HbfExpd[cj])*RHS[cj, 0]
+                    RHS[i, 0] = _N.sum(oo.ws*HbfExpd[i]*O)
+                    for cj in cInds:
+                        RHS[i, 0] -= _N.sum(oo.ws*HbfExpd[i]*HbfExpd[cj])*RHS[cj, 0]
 
-            # print HbfExpd
-            # print HcM
-            # print RHS[vInds]
-            vm = _N.linalg.solve(HcM, RHS[vInds])
-            Cov = _N.linalg.inv(HcM)
-            print vm
-            cfs = _N.random.multivariate_normal(vm[:, 0], Cov, size=1)
+                # print HbfExpd
+                # print HcM
+                # print RHS[vInds]
+                vm = _N.linalg.solve(HcM, RHS[vInds])
+                Cov = _N.linalg.inv(HcM)
+                print vm
+                cfs = _N.random.multivariate_normal(vm[:, 0], Cov, size=1)
 
-            RHS[vInds,0] = cfs[0]
-            oo.smp_hS[:, it] = RHS[:, 0]
+                RHS[vInds,0] = cfs[0]
+                oo.smp_hS[:, it] = RHS[:, 0]
 
-            #RHS[2:6, 0] = vm[:, 0]
-            #print HcM
-            #vv = _N.dot(Hbf, RHS)
-            #print vv.shape
-            #print oo.loghist.shape
-            _N.dot(Hbf, RHS[:, 0], out=oo.loghist)
-            oo.smp_hist[:, it] = oo.loghist
-            oo.stitch_Hist(ARo, oo.loghist, Msts)
+                #RHS[2:6, 0] = vm[:, 0]
+                #print HcM
+                #vv = _N.dot(Hbf, RHS)
+                #print vv.shape
+                #print oo.loghist.shape
+                _N.dot(Hbf, RHS[:, 0], out=oo.loghist)
+                oo.smp_hist[:, it] = oo.loghist
+                oo.stitch_Hist(ARo, oo.loghist, Msts)
 
             ########     PSTH sample  Do PSTH after we generate zs
             if oo.bpsth:
@@ -494,8 +497,8 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
                 _plt.savefig("%(dir)stmp-fsamps%(it)d" % {"dir" : oo.mcmcRunDir, "it" : it})
                 _plt.close()
 
-                oo.dump_smps(toiter=it, dir=oo.mcmcRunDir)
-        oo.dump_smps(dir=oo.mcmcRunDir)
+                oo.dump_smpsS(toiter=it, dir=oo.mcmcRunDir)
+        oo.dump_smpsS(dir=oo.mcmcRunDir)
 
     def runDirAlloc(self, runDir=None, trials=None, minSpkCnt=0, pckl=None, runlatent=False, dontrun=False): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line
@@ -518,15 +521,19 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
             oo.restarts = 1
             oo.F0 = _N.zeros(oo.k)
             if type(pckl) == list:   #  format for posterior mode
+                oo.bFixF  = True
+                #oo.bFixH  = True
                 oo.us = pckl[0]
                 oo.B  = pckl[4]
                 oo.hS = pckl[5]
                 oo.Hbf = pckl[6]
                 oo.q2 = _N.ones(oo.TR)*pckl[1]
 
-                for l in xrange(len(pckl[2])):
-                    oo.F0 += (-1*_Npp.polyfromroots(pckl[2][l])[::-1].real)[1:]
-                oo.F0 /= len(pckl[2]) # mean
+                # for l in xrange(len(pckl[2])):
+                #     oo.F0 += (-1*_Npp.polyfromroots(pckl[2][l])[::-1].real)[1:]
+                # oo.F0 /= len(pckl[2]) # mean
+                oo.F_alfa_rep  = _N.mean(pckl[2], axis=0)
+                print oo.F_alfa_rep
                 oo.aS = pckl[3]
             else:   #  format for last
                 pckldITERS = pckl["allalfas"].shape[0]
@@ -545,13 +552,14 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
                     oo.Z      = pckl["Z"]
                 oo.Hbf    = oo.Hbf
                 oo.F0     = (-1*_Npp.polyfromroots(oo.pkldalfas)[::-1].real)[1:]
+                oo.F_alfa_rep  = _N.mean(oo.pkldalfas, axis=0)
+        if not dontrun:
+            t1 = _tm.time()
+            oo.dirichletAllocate()
+            t2    = _tm.time()
+            print (t2-t1)
 
-        t1 = _tm.time()
-        oo.dirichletAllocate()
-        t2    = _tm.time()
-        print (t2-t1)
-
-    def dump_smps(self, dir=None, toiter=None):
+    def dump_smpsS(self, dir=None, toiter=None):
         oo         = self
         pcklme     = {}
         
@@ -559,4 +567,5 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
         pcklme["ss"]  = oo.smp_ss[0:toiter]
         pcklme["zs"]  = oo.smp_zs[:, 0:toiter]
         pcklme["ms"]  = oo.smp_ms[0:toiter]
-        oo.__class__.__bases__[0].dump_smps(pcklme=pcklme, dir=dir, toiter=toiter)
+        #oo.__class__.__bases__[0].dump_smps(pcklme=pcklme, dir=dir, toiter=toiter)
+        oo.dump_smps(pcklme=pcklme, dir=dir, toiter=toiter)

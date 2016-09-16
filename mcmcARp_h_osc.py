@@ -130,7 +130,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oous_rs = oo.us.reshape((ooTR, 1))
         #runTO = ooNMC + oo.burn - 1 if (burns is None) else (burns - 1)
         runTO = ooNMC + oo.burn - 1
-        oo.allocateSmp(runTO+1)
+        oo.allocateSmp(runTO+1, Bsmpx=oo.doBsmpx)
         alpR   = oo.F_alfa_rep[0:oo.R]
         alpC   = oo.F_alfa_rep[oo.R:]
 
@@ -215,36 +215,37 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.ws   = oo.ws.reshape(1, ooN+1)
             _N.divide(oo.kp, oo.ws, out=kpOws)
 
-            O = kpOws - oo.smpx[..., 2:, 0] - oo.us.reshape((ooTR, 1)) - BaS -  oo.knownSig
+            if oo.dohist:
+                O = kpOws - oo.smpx[..., 2:, 0] - oo.us.reshape((ooTR, 1)) - BaS -  oo.knownSig
 
-            iOf = vInds[0]   #  offset HcM index with RHS index.
-            for i in vInds:
-                for j in vInds:
-                    HcM[i-iOf, j-iOf] = _N.sum(oo.ws*HbfExpd[i]*HbfExpd[j])
+                iOf = vInds[0]   #  offset HcM index with RHS index.
+                for i in vInds:
+                    for j in vInds:
+                        HcM[i-iOf, j-iOf] = _N.sum(oo.ws*HbfExpd[i]*HbfExpd[j])
 
-                RHS[i, 0] = _N.sum(oo.ws*HbfExpd[i]*O)
-                for cj in cInds:
-                    RHS[i, 0] -= _N.sum(oo.ws*HbfExpd[i]*HbfExpd[cj])*RHS[cj, 0]
+                    RHS[i, 0] = _N.sum(oo.ws*HbfExpd[i]*O)
+                    for cj in cInds:
+                        RHS[i, 0] -= _N.sum(oo.ws*HbfExpd[i]*HbfExpd[cj])*RHS[cj, 0]
 
-            # print HbfExpd
-            # print HcM
-            # print RHS[vInds]
-            vm = _N.linalg.solve(HcM, RHS[vInds])
-            Cov = _N.linalg.inv(HcM)
-            print vm
-            cfs = _N.random.multivariate_normal(vm[:, 0], Cov, size=1)
+                # print HbfExpd
+                # print HcM
+                # print RHS[vInds]
+                vm = _N.linalg.solve(HcM, RHS[vInds])
+                Cov = _N.linalg.inv(HcM)
+                print vm
+                cfs = _N.random.multivariate_normal(vm[:, 0], Cov, size=1)
 
-            RHS[vInds,0] = cfs[0]
-            oo.smp_hS[:, it] = RHS[:, 0]
+                RHS[vInds,0] = cfs[0]
+                oo.smp_hS[:, it] = RHS[:, 0]
 
-            #RHS[2:6, 0] = vm[:, 0]
-            #print HcM
-            #vv = _N.dot(Hbf, RHS)
-            #print vv.shape
-            #print oo.loghist.shape
-            _N.dot(Hbf, RHS[:, 0], out=oo.loghist)
-            oo.smp_hist[:, it] = oo.loghist
-            oo.stitch_Hist(ARo, oo.loghist, Msts)
+                #RHS[2:6, 0] = vm[:, 0]
+                #print HcM
+                #vv = _N.dot(Hbf, RHS)
+                #print vv.shape
+                #print oo.loghist.shape
+                _N.dot(Hbf, RHS[:, 0], out=oo.loghist)
+                oo.smp_hist[:, it] = oo.loghist
+                oo.stitch_Hist(ARo, oo.loghist, Msts)
 
             #  Now that we have PG variables, construct Gaussian timeseries
             #  ws(it+1)    using u(it), F0(it), smpx(it)
@@ -322,7 +323,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                         oo.smpx[m, 2:], oo._d.f_x[m], oo._d.f_V[m] = _kfar.armdl_FFBS_1itrMP(tpl_args[m])
                         oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                         oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                        #oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+                        if oo.doBsmpx and (it % oo.BsmpxSkp == 0):
+                            oo.Bsmpx[m, it / oo.BsmpxSkp, 2:]    = oo.smpx[m, 2:, 0]
                 else:
                     sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
                     for m in xrange(ooTR):
@@ -331,11 +333,13 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                         oo._d.f_V[m] = sxv[m][2]
                         oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                         oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                        #oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+                        if oo.doBsmpx and (it % oo.BsmpxSkp == 0):
+                            oo.Bsmpx[m, it / oo.BsmpxSkp, 2:]    = oo.smpx[m, 2:, 0]
                         
                 stds = _N.std(oo.smpx[:, 2:, 0], axis=1)
                 oo.mnStds[it] = _N.mean(stds, axis=0)
                 print "mnStd  %.3f" % oo.mnStds[it]
+
                 t5 = _tm.time()
                 if not oo.bFixF:   
                     ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H)  
@@ -399,8 +403,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 _plt.close()
 
                 oo.dump_smps(toiter=it, dir=oo.mcmcRunDir)
-
-                
         oo.VIS = ARo
 
 
@@ -446,6 +448,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oo.setParams()
 
         if pckl is not None:
+
             oo.restarts = 1
             oo.F0 = _N.zeros(oo.k)
             if type(pckl) == list:   #  format for posterior mode
@@ -470,18 +473,20 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.us     = pckl["u"][:, pckldITERS-1]
                 oo.smpx   = pckl["smpx"]
                 oo.ws     = pckl["ws"]
-                oo.Hbf    = oo.Hbf
+                oo.t0_is_t_since_1st_spk = pckl["t0_is_t_since_1st_spk"]  #overwrite
                 oo.F0     = (-1*_Npp.polyfromroots(oo.pkldalfas)[::-1].real)[1:]
+                oo.F_alfa_rep = oo.pkldalfas.tolist()
 
             if runlatent and (not dontrun):    #  just generate latent states
                 t1 = _tm.time()
                 oo.latentState()
                 t2 = _tm.time()
+                print (t2-t1)
         if (not runlatent) and (not dontrun):    #  regular Gibbs sampling
             t1    = _tm.time()
             oo.gibbsSamp()
             t2    = _tm.time()
-        print (t2-t1)
+            print (t2-t1)
 
 
     def latentState(self, burns=None, useMeanOffset=False):  ###########################  GIBBSSAMPH
@@ -522,6 +527,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             Msts.append(_N.where(oo.y[m] == 1)[0])
 
         oo.stitch_Hist(ARo, oo.loghist, Msts)
+
         while (it < runTO):
             t1 = _tm.time()
             it += 1

@@ -49,7 +49,7 @@ class mcmcARspk(mAR.mcmcAR):
     fx            = None   #  filtered latent state
     px            = None   #  phase of latent state
 
-    histknots     = 10
+    histknots     = 10     #  histknots == 9 if p(isi) == max at isi = 1
     #histknots     = 11
     #  LFC
     lfc           = None
@@ -69,6 +69,7 @@ class mcmcARspk(mAR.mcmcAR):
     lrn_scr3           = None   #  scratch space
     lrn_scld           = None   #  scratch space
     mean_isi_1st2spks  = None   #  mean isis for all trials of 1st 2 spikes
+    maxISI             = None
 
     #  Gibbs
     ARord         = _cd.__NF__
@@ -100,6 +101,10 @@ class mcmcARspk(mAR.mcmcAR):
     hS        = None
 
     outSmplFN = "smpls.dump"
+    doBsmpx   = False
+    BsmpxSkp  = 1
+
+    t0_is_t_since_1st_spk = None    #  o set up spike history, generate a virtual spike before 1st spike in each trial
 
     def __init__(self):
         if (self.noAR is not None) or (self.noAR == False):
@@ -203,13 +208,24 @@ class mcmcARspk(mAR.mcmcAR):
             #     ii += 1
             # oo.h0_2 = ii  #  approx peak of post-spike rebound
             
-        oo.h0_3= oo.h0_2*3
-        oo.h0_4 = int(sisis[int(Lisi*0.7)])
-        oo.h0_5 = int(sisis[int(Lisi*0.8)])
+        #oo.h0_3= int(sisis[int(Lisi*0.5)])#oo.h0_2*3
+        #oo.h0_4 = int(sisis[int(Lisi*0.7)])
+        #oo.h0_3= int(sisis[int(Lisi*0.6)])#oo.h0_2*3
+        oo.h0_3= int(sisis[int(Lisi*0.4)])#oo.h0_2*3
+        oo.h0_4 = int(sisis[int(Lisi*0.6)])
+        if oo.h0_2 > oo.h0_3:
+            oo.h0_3 = int(0.5*(oo.h0_2 + oo.h0_4))
         if oo.h0_3 > oo.h0_4:
-            oo.h0_4 = oo.h0_2 * 4
-        if oo.h0_4 > oo.h0_5:
-            oo.h0_5 = oo.h0_4 + 10
+            oo.h0_4 = int(sisis[int(Lisi*0.7)])
+        oo.h0_5 = int(sisis[int(Lisi*0.8)])
+        oo.maxISI  = int(sisis[int(Lisi*0.99)])
+
+        #oo.h0_5 = int(sisis[int(Lisi*0.8)])
+
+        # if oo.h0_3 > oo.h0_4:
+        #     oo.h0_4 = oo.h0_2 * 4
+        # if oo.h0_4 > oo.h0_5:
+        #     oo.h0_5 = oo.h0_4 + 10
 
         crats = _N.zeros(oo.N+2)
         for n in xrange(0, oo.N+1):
@@ -217,18 +233,21 @@ class mcmcARspk(mAR.mcmcAR):
         crats /= crats[-1]
 
         ####  generate spike before time=0.  PSTH estimation
-        oo.t0_is_t_since_1st_spk = _N.empty(oo.TR, dtype=_N.int)
-        rands = _N.random.rand(oo.TR)
-        for tr in xrange(oo.TR):
-            spkts = _N.where(oo.y[tr] == 1)[0]
+        if oo.t0_is_t_since_1st_spk is None:
+            oo.t0_is_t_since_1st_spk = _N.empty(oo.TR, dtype=_N.int)
+            rands = _N.random.rand(oo.TR)
+            for tr in xrange(oo.TR):
+                spkts = _N.where(oo.y[tr] == 1)[0]
 
-            if len(spkts) > 0:
-                t0 = spkts[0]
-                r0 = crats[t0]   # say 0.3   
-                adjRnd = (1 - r0) * rands[tr]
-                isi = _N.where(crats >= adjRnd)[0][0]  # isi in units of bin sz
+                if len(spkts) > 0:
+                    t0 = spkts[0]
+                    r0 = crats[t0]   # say 0.3   
+                    adjRnd = (1 - r0) * rands[tr]
+                    isi = _N.where(crats >= adjRnd)[0][0]  # isi in units of bin sz
 
-                oo.t0_is_t_since_1st_spk[tr] = isi
+                    oo.t0_is_t_since_1st_spk[tr] = isi
+        else:
+            print "using saved t0_is_t_since_1st_spk"
 
         oo.knownSig = loadKnown(oo.setname, trials=oo.useTrials, fn=oo.knownSigFN) 
         if oo.knownSig is None:
@@ -241,7 +260,7 @@ class mcmcARspk(mAR.mcmcAR):
         print "^^^^^^   allocateSmp  %d" % iters
         ####  initialize
         if Bsmpx:
-            oo.Bsmpx        = _N.zeros((oo.TR, iters, (oo.N+1) + 2))
+            oo.Bsmpx        = _N.zeros((oo.TR, iters/oo.BsmpxSkp, (oo.N+1) + 2))
         oo.smp_u        = _N.zeros((oo.TR, iters))
         oo.smp_hS        = _N.zeros((oo.histknots, iters))   # history spline
         oo.smp_hist        = _N.zeros((oo.N+1, iters))   # history spline
@@ -346,7 +365,14 @@ class mcmcARspk(mAR.mcmcAR):
             oo.B = oo.B.T    #  My convention for beta
             oo.aS = _N.zeros(4)
 
-        oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.h0_5, int(0.7*(oo.N+1))]), include_intercept=True)    #  spline basisp
+            #oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.h0_5, int(0.7*(oo.N+1))]), include_intercept=True)    #  spline basisp
+        print oo.h0_1
+        print oo.h0_2
+        print oo.h0_3
+        print oo.h0_4
+        print oo.h0_5
+        print oo.maxISI
+        oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.h0_5, oo.maxISI*2]), include_intercept=True)    #  spline basisp
 
 
     def stitch_Hist(self, ARo, hcrv, stsM):  # history curve
@@ -532,10 +558,14 @@ class mcmcARspk(mAR.mcmcAR):
         pcklme["allalfas"]= oo.allalfas[0:toiter]
         pcklme["smpx"] = oo.smpx
         pcklme["ws"]   = oo.ws
+        pcklme["t0_is_t_since_1st_spk"] = oo.t0_is_t_since_1st_spk
         if oo.Hbf is not None:
             pcklme["spkhist"] = oo.smp_hist[:, 0:toiter]
             pcklme["Hbf"]    = oo.Hbf
             pcklme["h_coeffs"]    = oo.smp_hS[:, 0:toiter]
+        if oo.doBsmpx:
+            pcklme["Bsmpx"]    = oo.Bsmpx
+            
 
         print "saving state in %s" % oo.outSmplFN
         if dir is None:

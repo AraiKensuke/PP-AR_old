@@ -6,6 +6,7 @@ class mcmcAR:
     datafn        = None
     rs            = -1
     bFixF         = False
+    bFixH         = False
     burn          = None;    NMC           = None
     t0            = None;    t1            = None
     useTrials     = None;    restarts      = 0

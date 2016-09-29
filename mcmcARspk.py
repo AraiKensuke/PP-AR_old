@@ -100,6 +100,7 @@ class mcmcARspk(mAR.mcmcAR):
 
     hS        = None
 
+    dohist    = True
     outSmplFN = "smpls.dump"
     doBsmpx   = False
     BsmpxSkp  = 1
@@ -194,41 +195,58 @@ class mcmcARspk(mAR.mcmcAR):
         sisis = _N.sort(isis)
         Lisi  = len(sisis)
         
-        cnts, bins = _N.histogram(isis, bins=_N.linspace(0, oo.N+1, oo.N+2))
-
         ###  look at the isi distribution
-        if (oo.h0_1 is None) or (oo.h0_2 is None):
-            ii = 0
+
+        #  cnts will always be 0 in frist bin
+        maxisi = max(isis)
+        minisi = min(isis)    #  >= 1
+
+        cnts, bins = _N.histogram(isis, bins=_N.linspace(1, maxisi, maxisi))
+        p9 = sisis[int(len(sisis)*0.9)]
+
+        x = bins[minisi:p9]
+        y = cnts[minisi-1:p9-1]
+        z = _N.polyfit(x, y, 4)
+        ply = _N.poly1d(z)
+        plyx= ply(x)
+        imax = _N.where(plyx == _N.max(plyx))[0][0] + minisi
+
+        if (imax == 1):   #  no rebound excitation or pause
+            oo.h0_1 = 1
+            oo.h0_2 = int(sisis[int(Lisi*0.5)])#oo.h0_2*3
+            oo.h0_3 = int(sisis[int(Lisi*0.65)])#oo.h0_2*3
+            oo.h0_4 = int(sisis[int(Lisi*0.8)])#oo.h0_2*3
+            print "%(1)d  %(2)d  %(3)d  %(4)d" % {"1" : oo.h0_1, "2" : oo.h0_2, "3" : oo.h0_3, "4" : oo.h0_4}
+            oo.hist_max_at_0 = True
+            oo.histknots = 9
+        else:      #  a pause
+            ii = 1
             while cnts[ii] == 0:
                 ii += 1
             oo.h0_1 = ii  #  firing prob is 0, oo.h0_1 ms postspike
-            oo.h0_2 = _N.where(cnts == _N.max(cnts))[0][0]
-            oo.h0_2 = oo.h0_1 + 1 if oo.h0_1 >= oo.h0_2 else oo.h0_2
-            # while cnts[ii] < 0.5*(cnts[ii+1]+cnts[ii+2]):
-            #     ii += 1
-            # oo.h0_2 = ii  #  approx peak of post-spike rebound
-            
-        #oo.h0_3= int(sisis[int(Lisi*0.5)])#oo.h0_2*3
-        #oo.h0_4 = int(sisis[int(Lisi*0.7)])
-        #oo.h0_3= int(sisis[int(Lisi*0.6)])#oo.h0_2*3
-        oo.h0_3= int(sisis[int(Lisi*0.4)])#oo.h0_2*3
-        oo.h0_4 = int(sisis[int(Lisi*0.6)])
-        if oo.h0_2 > oo.h0_3:
-            oo.h0_3 = int(0.5*(oo.h0_2 + oo.h0_4))
-        if oo.h0_3 > oo.h0_4:
-            oo.h0_4 = int(sisis[int(Lisi*0.7)])
-        oo.h0_5 = int(sisis[int(Lisi*0.8)])
+
+            oo.h0_2 = imax
+
+            if oo.h0_2 > 9:   #  rebound peak coming 10ms 
+                oo.h0_2 = 10
+                oo.h0_3 = 15
+                oo.h0_4 = 22
+                oo.h0_5 = 30  #  enforce it
+            oo.h0_3 = int(sisis[int(Lisi*0.5)])
+            oo.h0_3 = 15 if (oo.h0_3 > 15) else oo.h0_3
+            oo.h0_4 = int(sisis[int(Lisi*0.65)])
+            oo.h0_4 = 22 if (oo.h0_4 > 22) else oo.h0_4
+            oo.h0_5 = int(sisis[int(Lisi*0.8)])
+            oo.h0_5 = 30 if (oo.h0_5 > 30) else oo.h0_5
+
+            print "%(1)d  %(2)d  %(3)d  %(4)d  %(5)d" % {"1" : oo.h0_1, "2" : oo.h0_2, "3" : oo.h0_3, "4" : oo.h0_4, "5" : oo.h0_5}
+            oo.hist_max_at_0 = False
+            oo.histknots = 10
         oo.maxISI  = int(sisis[int(Lisi*0.99)])
 
-        #oo.h0_5 = int(sisis[int(Lisi*0.8)])
 
-        # if oo.h0_3 > oo.h0_4:
-        #     oo.h0_4 = oo.h0_2 * 4
-        # if oo.h0_4 > oo.h0_5:
-        #     oo.h0_5 = oo.h0_4 + 10
-
-        crats = _N.zeros(oo.N+2)
-        for n in xrange(0, oo.N+1):
+        crats = _N.zeros(maxisi-1)
+        for n in xrange(0, maxisi-2):
             crats[n+1] = crats[n] + cnts[n]
         crats /= crats[-1]
 
@@ -327,7 +345,7 @@ class mcmcARspk(mAR.mcmcAR):
             gk[m] =  gk[m] - _N.mean(gk[m])
             gk[m] /= 5*_N.std(gk[m])
             fgk[m] = bpFilt(15, 100, 1, 135, 500, gk[m])   #  we want
-            fgk[m, :] /= 2*_N.std(fgk[m, :])
+            fgk[m, :] /= 3*_N.std(fgk[m, :])
 
             if oo.noAR:
                 oo.smpx[m, 2:, 0] = 0
@@ -366,13 +384,10 @@ class mcmcARspk(mAR.mcmcAR):
             oo.aS = _N.zeros(4)
 
             #oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.h0_5, int(0.7*(oo.N+1))]), include_intercept=True)    #  spline basisp
-        print oo.h0_1
-        print oo.h0_2
-        print oo.h0_3
-        print oo.h0_4
-        print oo.h0_5
-        print oo.maxISI
-        oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.h0_5, oo.maxISI*2]), include_intercept=True)    #  spline basisp
+        if oo.hist_max_at_0:
+            oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.maxISI*2]), include_intercept=True)    #  spline basisp
+        else:
+            oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.h0_5, oo.maxISI*2]), include_intercept=True)    #  spline basisp
 
 
     def stitch_Hist(self, ARo, hcrv, stsM):  # history curve

@@ -81,6 +81,9 @@ class mcmcARp(mcmcARspk.mcmcARspk):
     loghist       = None
 
     VIS           = None
+
+    ignr          = 0
+
     def gibbsSamp(self):  ###########################  GIBBSSAMPH
         oo          = self
 
@@ -141,13 +144,20 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
         RHS = _N.empty((oo.histknots, 1))
 
-        if oo.h0_1 > 1:   #  first few are 0s   
+        print "-----------    histknots %d" % oo.histknots
+        if oo.h0_1 > 1:   #  no spikes in first few time bins
             #cInds = _N.array([0, 1, 5, 6, 7, 8, 9, 10])
             cInds = _N.array([0, 4, 5, 6, 7, 8, 9])
             #vInds = _N.array([2, 3, 4])
             vInds = _N.array([1, 2, 3,])
             RHS[cInds, 0] = 0
             RHS[0, 0] = -5
+        elif oo.hist_max_at_0:   #  no refractory period
+            #cInds = _N.array([5, 6, 7, 8, 9, 10])
+            cInds = _N.array([3, 4, 5, 6, 7, 8, ])
+            vInds = _N.array([0, 1, 2, ])
+            #vInds = _N.array([0, 1, 2, 3, 4])
+            RHS[cInds, 0] = 0
         else:
             #cInds = _N.array([5, 6, 7, 8, 9, 10])
             cInds = _N.array([4, 5, 6, 7, 8, 9,])
@@ -239,7 +249,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.smp_hS[:, it] = RHS[:, 0]
 
                 #RHS[2:6, 0] = vm[:, 0]
-                #print HcM
                 #vv = _N.dot(Hbf, RHS)
                 #print vv.shape
                 #print oo.loghist.shape
@@ -336,13 +345,13 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                         if oo.doBsmpx and (it % oo.BsmpxSkp == 0):
                             oo.Bsmpx[m, it / oo.BsmpxSkp, 2:]    = oo.smpx[m, 2:, 0]
                         
-                stds = _N.std(oo.smpx[:, 2:, 0], axis=1)
+                stds = _N.std(oo.smpx[:, 2+oo.ignr:, 0], axis=1)
                 oo.mnStds[it] = _N.mean(stds, axis=0)
                 print "mnStd  %.3f" % oo.mnStds[it]
 
                 t5 = _tm.time()
                 if not oo.bFixF:   
-                    ARcfSmpl(oo.lfc, ooN+1, ook, oo.AR2lims, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H)  
+                    ARcfSmpl(oo.lfc, ooN+1-oo.ignr, ook, oo.AR2lims, oo.smpx[:, 1+oo.ignr:, 0:ook], oo.smpx[:, oo.ignr:, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H)  
                     oo.F_alfa_rep = alpR + alpC   #  new constructed
                     prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
                     print prt
@@ -366,14 +375,14 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                     for m in xrange(ooTR):
                         #####################    sample q2
                         a = oo.a_q2 + 0.5*(ooN+1)  #  N + 1 - 1
-                        rsd_stp = oo.smpx[m, 3:,0] - _N.dot(oo.smpx[m, 2:-1], oo.F0).T
+                        rsd_stp = oo.smpx[m, 3+oo.ignr:,0] - _N.dot(oo.smpx[m, 2+oo.ignr:-1], oo.F0).T
                         BB = oo.B_q2 + 0.5 * _N.dot(rsd_stp, rsd_stp.T)
                         oo.q2[m] = _ss.invgamma.rvs(a, scale=BB)
                         oo.x00[m]      = oo.smpx[m, 2]*0.1
                         oo.smp_q2[m, it]= oo.q2[m]
                 else:
                     #oo.a2 = oo.a_q2 + 0.5*(ooTR*ooN + 2)  #  N + 1 - 1
-                    oo.a2 = 0.5*(ooTR*ooN + 2)  #  N + 1 - 1
+                    oo.a2 = 0.5*(ooTR*(ooN-oo.ignr) + 2)  #  N + 1 - 1
                     #BB2 = oo.B_q2
                     BB2 = 0
                     for m in xrange(ooTR):
@@ -381,7 +390,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                         oo.x00[m]      = oo.smpx[m, 2]*0.1
 
                         #####################    sample q2
-                        rsd_stp = oo.smpx[m, 3:,0] - _N.dot(oo.smpx[m, 2:-1], oo.F0).T
+                        rsd_stp = oo.smpx[m, 3+oo.ignr:,0] - _N.dot(oo.smpx[m, 2+oo.ignr:-1], oo.F0).T
                         #oo.rsds[it, m] = _N.dot(rsd_stp, rsd_stp.T)
                         BB2 += 0.5 * _N.dot(rsd_stp, rsd_stp.T)
                     oo.q2[:] = _ss.invgamma.rvs(oo.a2, scale=BB2)

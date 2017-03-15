@@ -104,7 +104,7 @@ class mcmcARcntMW(mAR.mcmcAR):
         oo.smp_zs       = _N.zeros((oo.NMC + oo.burn, oo.N+1), dtype=_N.int)
         oo.smp_rn       = _N.zeros((oo.NMC + oo.burn, oo.W), dtype=_N.int)
         oo.smp_u        = _N.zeros((oo.NMC + oo.burn, oo.W))
-        oo.smp_dty      = _N.zeros((oo.NMC + oo.burn, oo.J), dtype=_N.int)
+        oo.smp_dty      = _N.zeros((oo.NMC + oo.burn, oo.W), dtype=_N.int)
         oo.smp_q2       = _N.zeros(oo.NMC + oo.burn)
 
         oo.ws   = _N.ones((oo.N + 1, oo.W))*0.1   #  start at 0 + u
@@ -137,7 +137,7 @@ class mcmcARcntMW(mAR.mcmcAR):
         cts     = _N.array(oo.y).reshape(oo.N+1, oo.W, 1)
         rn     = _N.array(oo.rn).reshape(1, oo.W, oo.J)
 
-        cntMCMCiters = 80
+        cntMCMCiters = 40
         oo.mrns = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W), dtype=_N.int)
         oo.mus  = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W))
         oo.mdty = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W), dtype=_N.int)
@@ -198,6 +198,8 @@ class mcmcARcntMW(mAR.mcmcAR):
                 oo.smp_rn[it] = oo.rn
             else:
                 oo.smp_rn[it] = oo.rn[:, 0]
+            oo.smp_dty[it] = oo.model[:, 0]
+
             print oo.rn[:, 0]
             ###  now, adjust
             # print smpxOffset
@@ -212,7 +214,7 @@ class mcmcARcntMW(mAR.mcmcAR):
 
             # _N.mean(oo.ws, axis=0)    - not much diff between W=1,2
             for iw in xrange(oo.W):
-                wAw[:, iw] /= 1./oo.ws[:, iw]
+                wAw[:, iw] *= oo.ws[:, iw]
             #print _N.mean(wAw[:, 0])
             #print _N.mean(wAw[:, 1])
             #print "^^^^^^^^^^^"
@@ -260,8 +262,8 @@ class mcmcARcntMW(mAR.mcmcAR):
                 oo._d.copyParams(_N.array([oo.F0]), oo.q2, onetrial=True)
 
                 #  generate latent AR state
-                oo._d.f_x[0, 0, 0]     = 0#-0.1+0.1*_N.random.randn()
-                oo._d.f_V[0, 0, 0]     = oo.V00
+                oo._d.f_x[0, 0, 0]     = 0.1*_N.random.randn()
+                oo._d.f_V[0, 0, 0]     = 1.+0.1*_N.random.randn()
 
                 oo.smpx = _kfar.armdl_FFBS_1itr(oo._d)
                 #oo.smpx = oo.smpx - _N.mean(oo.smpx)

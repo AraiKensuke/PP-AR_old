@@ -59,6 +59,7 @@ class mcmcARspk(mAR.mcmcAR):
 
     #  input data
     histFN        = None
+    loghist       = None
     l2            = None
     lrn           = None
     s_lrn           = None   #  saturated lrn
@@ -111,7 +112,7 @@ class mcmcARspk(mAR.mcmcAR):
         if (self.noAR is not None) or (self.noAR == False):
             self.lfc         = _lfc.logerfc()
 
-    def loadDat(self, trials): #################  loadDat
+    def loadDat(self, trials, h0_1=None, h0_2=None, h0_3=None, h0_4=None, h0_5=None): #################  loadDat
         oo = self
         bGetFP = False
 
@@ -206,7 +207,7 @@ class mcmcARspk(mAR.mcmcAR):
 
         x = bins[minisi:p9]
         y = cnts[minisi-1:p9-1]
-        z = _N.polyfit(x, y, 4)
+        z = _N.polyfit(x, y, 5)
         ply = _N.poly1d(z)
         plyx= ply(x)
         imax = _N.where(plyx == _N.max(plyx))[0][0] + minisi
@@ -216,7 +217,7 @@ class mcmcARspk(mAR.mcmcAR):
             oo.h0_2 = int(sisis[int(Lisi*0.5)])#oo.h0_2*3
             oo.h0_3 = int(sisis[int(Lisi*0.65)])#oo.h0_2*3
             oo.h0_4 = int(sisis[int(Lisi*0.8)])#oo.h0_2*3
-            print "%(1)d  %(2)d  %(3)d  %(4)d" % {"1" : oo.h0_1, "2" : oo.h0_2, "3" : oo.h0_3, "4" : oo.h0_4}
+            print "-----  %(1)d  %(2)d  %(3)d  %(4)d" % {"1" : oo.h0_1, "2" : oo.h0_2, "3" : oo.h0_3, "4" : oo.h0_4}
             oo.hist_max_at_0 = True
             oo.histknots = 9
         else:      #  a pause
@@ -225,21 +226,46 @@ class mcmcARspk(mAR.mcmcAR):
                 ii += 1
             oo.h0_1 = ii  #  firing prob is 0, oo.h0_1 ms postspike
 
-            oo.h0_2 = imax
+            imnisi = int(_N.mean(isis))
+            #imnisi = int(_N.mean(isis)*0.9)
+            pts = _N.array([imax, imnisi, int(0.4*(sisis[int(Lisi*0.97)] - imnisi) + imnisi), int(sisis[int(Lisi*0.97)])])
+            #pts = _N.array([int(imax*0.9), imnisi, int(0.3*(sisis[int(Lisi*0.9)] - imnisi) + imnisi), int(sisis[int(Lisi*0.9)])])
+            #pts = _N.array([imax, imnisi, int(0.25*(sisis[int(Lisi*0.85)] - imnisi) + imnisi), int(sisis[int(Lisi*0.85)])])
+            #pts = _N.array([imax, imnisi, int(0.5*(sisis[int(Lisi*0.995)] - imnisi) + imnisi), int(sisis[int(Lisi*0.995)])])
+            #pts = _N.array([imax, imnisi, int(0.4*(sisis[int(Lisi*0.995)] - imnisi) + imnisi), int(sisis[int(Lisi*0.995)])])
 
-            if oo.h0_2 > 9:   #  rebound peak coming 10ms 
-                oo.h0_2 = 10
-                oo.h0_3 = 15
-                oo.h0_4 = 22
-                oo.h0_5 = 30  #  enforce it
-            oo.h0_3 = int(sisis[int(Lisi*0.5)])
-            oo.h0_3 = 15 if (oo.h0_3 > 15) else oo.h0_3
-            oo.h0_4 = int(sisis[int(Lisi*0.65)])
-            oo.h0_4 = 22 if (oo.h0_4 > 22) else oo.h0_4
-            oo.h0_5 = int(sisis[int(Lisi*0.8)])
-            oo.h0_5 = 30 if (oo.h0_5 > 30) else oo.h0_5
+            #pts = _N.array([19, 21, 23, 33])  #  quick hack for f64-1-Xaa/wp_0-60_5_1a
+            spts = _N.sort(pts)
+            for i in xrange(3):
+                if spts[i] == spts[i+1]:
+                    spts[i+1] += 1
+            oo.h0_2 = spts[0]
+            oo.h0_3 = spts[1]
+            oo.h0_4 = spts[2]
+            oo.h0_5 = spts[3]
+            # #  max of ISI dist, mean of ISI dist   2, 3, 4, 5 (80th)
+            # oo.h0_2 = imax
+            # #oo.h0_2 = imax if (imax < 8) else 8
+            # #oo.h0_3 = int(sisis[int(Lisi*0.35)])
+            # #oo.h0_3 = 15 if (oo.h0_3 > 15) else oo.h0_3
+            # #oo.h0_4 = int(sisis[int(Lisi*0.55)])
+            # #oo.h0_4 = 22 if (oo.h0_4 > 22) else oo.h0_4
+            # oo.h0_5 = int(sisis[int(Lisi*0.85)])
+            # oo.h0_3 = int((oo.h0_5 - oo.h0_2)*0.33 + oo.h0_2)
+            # oo.h0_4 = int((oo.h0_5 - oo.h0_2)*0.66 + oo.h0_2)
 
-            print "%(1)d  %(2)d  %(3)d  %(4)d  %(5)d" % {"1" : oo.h0_1, "2" : oo.h0_2, "3" : oo.h0_3, "4" : oo.h0_4, "5" : oo.h0_5}
+            #oo.h0_5 = 35 if (oo.h0_5 > 35) else oo.h0_5
+
+            print "-----  %(1)d  %(2)d  %(3)d  %(4)d  %(5)d" % {"1" : oo.h0_1, "2" : oo.h0_2, "3" : oo.h0_3, "4" : oo.h0_4, "5" : oo.h0_5}
+
+            oo.h0_1 = oo.h0_1 if h0_1 is None else h0_1
+            oo.h0_2 = oo.h0_2 if h0_2 is None else h0_2
+            oo.h0_3 = oo.h0_3 if h0_3 is None else h0_3
+            oo.h0_4 = oo.h0_4 if h0_4 is None else h0_4
+            oo.h0_5 = oo.h0_5 if h0_5 is None else h0_5
+
+            print "-----  %(1)d  %(2)d  %(3)d  %(4)d  %(5)d   (overridden?)" % {"1" : oo.h0_1, "2" : oo.h0_2, "3" : oo.h0_3, "4" : oo.h0_4, "5" : oo.h0_5}
+
             oo.hist_max_at_0 = False
             oo.histknots = 10
         oo.maxISI  = int(sisis[int(Lisi*0.99)])
@@ -259,6 +285,7 @@ class mcmcARspk(mAR.mcmcAR):
 
                 if len(spkts) > 0:
                     t0 = spkts[0]
+                    t0 = t0 if t0 < len(crats) else len(crats) - 1
                     r0 = crats[t0]   # say 0.3   
                     adjRnd = (1 - r0) * rands[tr]
                     isi = _N.where(crats >= adjRnd)[0][0]  # isi in units of bin sz
@@ -267,11 +294,16 @@ class mcmcARspk(mAR.mcmcAR):
         else:
             print "using saved t0_is_t_since_1st_spk"
 
+        oo.loghist = loadL2(oo.setname, fn=oo.histFN)
+        oo.dohist = True if oo.loghist is None else False
+
         oo.knownSig = loadKnown(oo.setname, trials=oo.useTrials, fn=oo.knownSigFN) 
         if oo.knownSig is None:
             oo.knownSig = _N.zeros((oo.TR, oo.N+1))
         else:
             oo.knownSig *= oo.xknownSig
+
+        ###  override knot locations
 
     def allocateSmp(self, iters, Bsmpx=False):
         oo = self
@@ -360,6 +392,8 @@ class mcmcARspk(mAR.mcmcAR):
 
         if oo.bpsth:
             psthKnts, apsth, aWeights = _spknts.suggestPSTHKnots(oo.dt, oo.TR, oo.N+1, oo.y.T, iknts=4)
+            _N.savetxt("apsth.txt", apsth, fmt="%.4f")
+            _N.savetxt("psthKnts.txt", psthKnts, fmt="%.4f")
 
             apprx_ps = _N.array(_N.abs(aWeights))
             oo.u_a   = -_N.log(1/apprx_ps - 1)

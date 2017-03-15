@@ -162,6 +162,9 @@ class mcmcARcntM(mAR.mcmcAR):
                 if len(lht[j]) > 0:  #  
                     oo.us[j], oo.rn[j], oo.model[j] = cntmdlMCMCOnly(cntMCMCiters, oo.us[j], oo.rn[j], oo.model[j], oo.y[lht[j]], oo.mrns[it], oo.mus[it], oo.mdty[it], oo.smpx[lht[j]])
 
+                #######    THIS LOOKS SUSPICIOUS
+                #######   7/27   because for j == 0, oo.smpx for locations where lht[j] == 1, will be old values
+            for j in xrange(oo.J):
                 p[:, j] = 1 / (1 + _N.exp(-(oo.us[j] + oo.smpx)))        
 
             oo.smp_dty[it] = oo.model
@@ -175,6 +178,9 @@ class mcmcARcntM(mAR.mcmcAR):
             if len(zrs) == 0:
                 CtDistLogNorm2(oo.model, oo.J, oo.y, oo.rn, oo.LN)
                 for j in xrange(oo.J):  #  for ratio of this state
+                    #######    THIS LOOKS SUSPICIOUS
+                    #######7/27
+
                     if oo.model[j] == _cd.__BNML__:
                         p1p[:, j] = p[:, j]**oo.y * (1 - p[:, j])**(oo.rn[j] - oo.y)
                     else:
@@ -249,7 +255,7 @@ class mcmcARcntM(mAR.mcmcAR):
             oo._d.f_x[0, 0, 0]     = oo.x00
             oo._d.f_V[0, 0, 0]     = oo.V00
             oo._d.y[:]             = oo.kp/oo.ws - usJ
-            oo._d.Rv[:] = 1 / oo.ws   #  time dependent noise
+            oo._d.Rv[:] = 1 / oo.ws   #  Rv is inverse variance
 
             if not oo.smpxOff:
                 oo.smpx = _kfar.armdl_FFBS_1itr(oo._d)

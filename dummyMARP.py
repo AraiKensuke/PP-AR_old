@@ -39,11 +39,12 @@ class dummyMARPN:
     u       = None
     y       = None
 
-    def __init__(self, burn, NMC, TR, N, y, fs, amps, allalfas, q2, mnStds, B, u):
+    def __init__(self, burn, NMC, TR, N, x, y, fs, amps, allalfas, q2, mnStds, B, u):
         self.burn     = burn
         self.NMC      = NMC
         self.TR       = TR
         self.N        = N
+        self.x        = x
         self.y        = y
         self.fs       = fs
         self.amps     = amps

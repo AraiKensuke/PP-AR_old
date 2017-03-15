@@ -150,6 +150,11 @@ class mcmcARcntM(mAR.mcmcAR):
         usJ = _N.empty(oo.N+1)
         if oo.smpxOff:
             oo.smpx[:] = 0
+
+        trms = _N.empty(oo.J)
+        rats  = _N.empty(oo.J)
+        crats= _N.zeros(oo.J+1)
+
         for it in xrange(oo.burn+oo.NMC):
             print "iter %d" % it
 
@@ -157,17 +162,13 @@ class mcmcARcntM(mAR.mcmcAR):
                 oo.us[j], oo.rnM[j], oo.model[j] = cntmdlMCMCOnly(cntMCMCiters, oo.us[j], oo.rnM[j], oo.model[j], oo.y[lht[j]], oo.mrns[it], oo.mus[it], oo.mdty[it], oo.smpx[lht[j]])
                 p[:, j] = 1 / (1 + _N.exp(-(oo.us[j] + oo.smpx)))        
 
-            CtDistLogNorm2(oo.model, oo.J, oo.y, oo.rnM, oo.LN)
-
-            trms = _N.empty(oo.J)
             rands= _N.random.rand(oo.N+1)
-            crats= _N.zeros(oo.J+1)
-            rats  = _N.empty(oo.J)
 
             z = _N.zeros(oo.J, dtype=_N.int)
             zrs = _N.where(oo.m == 0)[0]
             
             if len(zrs) == 0:
+                CtDistLogNorm2(oo.model, oo.J, oo.y, oo.rnM, oo.LN)
                 for j in xrange(oo.J):  #  for ratio of this state
                     if oo.model[j] == _cd.__BNML__:
                         p1p[:, j] = p[:, j]**oo.y * (1 - p[:, j])**(oo.rnM[j] - oo.y)
@@ -180,9 +181,6 @@ class mcmcARcntM(mAR.mcmcAR):
                         for jo in xrange(oo.J):
                             trms[jo] = _N.exp(oo.LN[m, jo] - oo.LN[m, j]) * ((oo.m[jo] * p1p[m, jo])/(oo.m[j]* p1p[m, j]))
                         rats[j] = 1 / _N.sum(trms)
-                    #print rats
-
-                    #print "m:  %(m)d    %(r)s" % {"m" : m, "r" : str(rats)}
 
                     for j in xrange(1, oo.J):
                         rats[j] += rats[j-1]
@@ -198,7 +196,6 @@ class mcmcARcntM(mAR.mcmcAR):
                     else:
                         st = _N.where((rands[m] >= crats[0:-1]) &\
                                   (rands[m] <= crats[1:]))[0]
-                        #print "m:  %(m)d    %(r)d" % {"m" : m, "r" : st}
 
                         z[st] = 1
                     oo.zs[m] = z
@@ -210,9 +207,10 @@ class mcmcARcntM(mAR.mcmcAR):
             oo.smp_zs[it] = oo.zs
             for j in xrange(oo.J):
                 trls = _N.where(oo.zs[:, j] == 1)[0]
-                u    = _N.mean(oo.y[trls])
-                s    = _N.std(oo.y[trls])
-                print "mean counts for st %(j)d   %(ct).1f   %(tr)d    %(cv).3f" % {"j" : j, "ct" : u, "tr" : len(trls), "cv" : ((s*s)/u)}
+                if len(trls) > 0:
+                    u    = _N.mean(oo.y[trls])
+                    s    = _N.std(oo.y[trls])
+                    print "mean counts for st %(j)d   %(ct).1f   %(tr)d    %(cv).3f" % {"j" : j, "ct" : u, "tr" : len(trls), "cv" : ((s*s)/u)}
 
             _N.add(oo.alp, _N.sum(oo.zs, axis=0), out=dirArgs)
 

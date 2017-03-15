@@ -480,15 +480,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
         oo.loadDat(trials)
         oo.setParams()
-        t1    = _tm.time()
-        tmpNOAR = oo.noAR
-        oo.noAR = True
-        if self.__class__.__name__ == "mcmcARp":  #  
-            oo.gibbsSamp(burns=oo.psthBurns)
-        else:
-            oo.__class__.__bases__[0].gibbsSamp(self, burns=oo.psthBurns)
 
-        oo.noAR = tmpNOAR
+        t1    = _tm.time()
         oo.gibbsSamp()
         t2    = _tm.time()
         print (t2-t1)

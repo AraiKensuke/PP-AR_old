@@ -286,32 +286,56 @@ def plotPSTH(mARp):
     _plt.close()
     return meanPSTH
 
-def plotFsAmp(mARp, tr0=None, tr1=None, xticks=None, yticksFrq=None, yticksMod=None, yticksAmp=None, fMult=1, dir=None, fn="fs_amps"):
+def plotFsAmp(mARp, tr0=None, tr1=None, xticks=None, yticksFrq=None, yticksMod=None, yticksAmp=None, fMult=1, dir=None, fn="fs_amps", ylimAmp=None):
+    __plotFsAmp(mARp.burn, mARp.NMC, mARp.fs, mARp.amps, mARp.mnStds, tr0=tr0, tr1=tr1, xticks=xticks, yticksFrq=yticksFrq, yticksMod=yticksMod, yticksAmp=yticksAmp, fMult=fMult, dir=dir, fn=fn, ylimAmp=ylimAmp)
+
+def plotFsAmpDUMP(lm, burn, NMC, tr0=None, tr1=None, xticks=None, yticksFrq=None, yticksMod=None, yticksAmp=None, fMult=1, dir=None, fn="fs_amps", ylimAmp=None):
+    fs     = lm["fs"]
+    amps   = lm["amps"]
+    mnStds = lm["mnStds"]
+
+    if xticks is None:
+        xticks = range(0, fs.shape[0]+1, fs.shape[0]/2)
+    __plotFsAmp(burn, NMC, fs, amps, mnStds, tr0=tr0, tr1=tr1, xticks=xticks, yticksFrq=yticksFrq, yticksMod=yticksMod, yticksAmp=yticksAmp, fMult=fMult, dir=dir, fn=fn, ylimAmp=ylimAmp)
+
+    # for it in xrange(burn + NMC):
+    #     prt, rank, f, amp = ampAngRep(afs[it], f_order=True)
+    # __plotFsAmp(burn, NMC, lm["fs"], tr0=tr0, tr1=tr1, xticks=xticks, yticksFrq=yticksFrq, yticksMod=yticksMod, yticksAmp=yticksAmp, fMult=fMulti, dir=dir, fn=fn)
+
+def __plotFsAmp(burn, NMC, fs, amps, mnStds, mARp=None, dump=None, tr0=None, tr1=None, xticks=None, yticksFrq=None, yticksMod=None, yticksAmp=None, fMult=1, dir=None, fn="fs_amps", ylimAmp=None):
     if tr0 is None:
         tr0 = 1
     if tr1 is None:
-        tr1 = mARp.burn + mARp.NMC
+        tr1 = burn + NMC
     fig = _plt.figure(figsize=(12, 3))
     ax  = fig.add_subplot(1, 3, 1)
-    _plt.plot(range(tr0, tr1, 5), (mARp.fs[tr0:tr1:5, 0]/fMult)*1000, color=mC.msurd)
-    setTicksAndLims(xlabel="iterations", ylabel="Hz", xticks=xticks, yticks=yticksFrq, xlim=tr1, tickFS=20, labelFS=20)
+    fs_vals = (fs[tr0:tr1:5, 0]/fMult)*1000
+    max_fs_vals = _N.max(fs_vals)
+    _plt.plot(range(tr0, tr1, 5), fs_vals, color=mC.smpld)
+    setTicksAndLims(xlabel="iterations", ylabel="Hz", xticks=xticks, yticks=yticksFrq, xlim=tr1, tickFS=20, labelFS=20, ylim=[0, max_fs_vals*1.1])
     bottomLeftAxes(ax)
+    ax.locator_params(axis="y", nbins=3)
     ######
     ax = fig.add_subplot(1, 3, 2)
-    _plt.plot(range(tr0, tr1, 5), mARp.amps[tr0:tr1:5, 0], color=mC.msurd)
+    _plt.plot(range(tr0, tr1, 5), amps[tr0:tr1:5, 0], color=mC.smpld)
+    _plt.ylim(0.97, 1)
+    _plt.yticks([0.97, 0.98, 0.99, 1])
     setTicksAndLims(xlabel="iterations", ylabel="modulus", xticks=xticks, yticks=yticksMod, xlim=tr1, tickFS=20, labelFS=20)
     bottomLeftAxes(ax)
     ######
     ax = fig.add_subplot(1, 3, 3)
-    _plt.plot(range(tr0, tr1, 5), mARp.mnStds[tr0:tr1:5], color=mC.msurd)
-    setTicksAndLims(xlabel="iterations", ylabel="amplitude", xticks=xticks, yticks=yticksAmp, xlim=tr1, tickFS=20, labelFS=20)
+    amplim = ylimAmp if ylimAmp is not None else [0, _N.max(mnStds[tr0:tr1:5])*1.1]
+    _plt.plot(range(tr0, tr1, 5), mnStds[tr0:tr1:5], color=mC.smpld)
+    setTicksAndLims(xlabel="iterations", ylabel="amplitude", xticks=xticks, yticks=yticksAmp, xlim=tr1, ylim=amplim, tickFS=20, labelFS=20)
     bottomLeftAxes(ax)
+    ax.locator_params(axis="y", nbins=4)
     fig.subplots_adjust(left=0.1, bottom=0.25, top=0.95, right=0.95, wspace=0.4, hspace=0.4)
     if dir is None:
         _plt.savefig("%s.eps" % fn, transparent=True)
     else:
         _plt.savefig("%(d)s/%(f)s.eps" % {"d" : dir, "f" :fn}, transparent=True)
     _plt.close()
+
 
 def corrcoeffs(mARp, mdn, bRealDat=False):
     xLFPGT =mARp.x

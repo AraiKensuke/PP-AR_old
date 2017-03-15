@@ -2,14 +2,14 @@ import numpy as _N
 from kassdirs import resFN
 import matplotlib.pyplot as _plt
 
-def timeRescaleTest(fr, spkts, dt, TR, m, nohist=False, loP=0.00001):
+def timeRescaleTest(fr, spks01, dt, TR, m, nohist=False, loP=0.00001):
     """
     t in units of 1.
     """
 
     Lspkts   = []
     for tr in xrange(TR):
-        Lspkts.append(_N.where(spkts[tr] == 1)[0])
+        Lspkts.append(_N.where(spks01[tr] == 1)[0])
         #print "%(tr)d   %(l)d" % {"l" : len(Lspkts[tr]), "tr" : tr}
 
     if m > 1:

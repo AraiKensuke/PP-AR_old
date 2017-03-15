@@ -158,14 +158,22 @@ def plot_cmptSpksAndX(N, z, x, y):  #  a component
     _plt.yticks(fontsize=20)
     _plt.grid()
 
-def loadL2(setname, fn="lambda2.dat"):
-    fn = resFN(fn, dir=setname)
-    if os.access(fn, os.F_OK):
-        print "***  loaded spike history file \"%s\" ***" % fn
-        return _N.loadtxt(fn)
-    print "!!!  NO history file loaded !!!"
+def loadL2(setname, fn=None):
     if fn is not None:
-        print "!!!  Couldn't find \"%s\" !!!" % fn
+        fn = resFN(fn, dir=setname)
+        if os.access(fn, os.F_OK):
+            print "***  loaded spike history file \"%s\" ***" % fn
+            spkhist = _N.loadtxt(fn)
+            print spkhist[0:50]
+            loghist = _N.log(spkhist)
+            print loghist[0:50]
+            print "-----------------"
+            tooneg = _N.where(loghist < -6)[0]
+            loghist[tooneg] = -6
+            return loghist
+        print "!!!  NO history file loaded !!!"
+        if fn is not None:
+            print "!!!  Couldn't find short-term history \"%s\" !!!" % fn
         
     return None
 

@@ -60,7 +60,7 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
     #  initial value
     lowStates     = None   #  
     loghist       = None
-    doS           = False
+    doS           = True
 
     def allocateSmp(self, iters):   ################################ INITGIBBS
         oo   = self
@@ -183,6 +183,12 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
         if oo.processes > 1:
             print oo.processes
             pool = Pool(processes=oo.processes)
+        print "oo.mcmcRunDir    %s" % oo.mcmcRunDir
+        if oo.mcmcRunDir is None:
+            oo.mcmcRunDir = ""
+        elif (len(oo.mcmcRunDir) > 0) and (oo.mcmcRunDir[-1] != "/"):
+            oo.mcmcRunDir += "/"
+
 
         #  H shape    100 x 9
         Hbf = oo.Hbf
@@ -486,15 +492,17 @@ class mcmcARpBM2(mcmcARspk.mcmcARspk):
             t7 = _tm.time()
             print "gibbs iter %.3f" % (t7-t1)
             if (it > 1) and (it % oo.peek == 0):
-                fig = _plt.figure(figsize=(8, 8))
-                fig.add_subplot(3, 1, 1)
+                fig = _plt.figure(figsize=(12, 8))
+                fig.add_subplot(4, 1, 1)
                 _plt.plot(oo.amps[1:it, 0])
-                fig.add_subplot(3, 1, 2)
+                fig.add_subplot(4, 1, 2)
                 _plt.plot(oo.fs[1:it, 0])
-                fig.add_subplot(3, 1, 3)
+                fig.add_subplot(4, 1, 3)
                 _plt.plot(oo.mnStds[1:it])
+                fig.add_subplot(4, 1, 4)
+                _plt.plot(oo.smp_ms[1:it, 0])
 
-                _plt.savefig("%(dir)stmp-fsamps%(it)d" % {"dir" : oo.mcmcRunDir, "it" : it})
+                _plt.savefig("%(dir)s/tmp-fsamps%(it)d" % {"dir" : oo.mcmcRunDir, "it" : it})
                 _plt.close()
 
                 oo.dump_smpsS(toiter=it, dir=oo.mcmcRunDir)

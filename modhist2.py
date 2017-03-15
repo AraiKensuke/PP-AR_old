@@ -9,7 +9,7 @@ import myColors as mC
 import itertools as itls
 
 #  [3.3, 11, 1, 15]
-def modhistAll(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, maxY=None, yticks=None, normed=False, surrogates=1, color=None, nofig=False, flatten=False, filtCol=0):
+def modhistAll(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None, tr0=0, tr1=None, trials=None, fn=None, maxY=None, yticks=None, normed=False, surrogates=1, color=None, nofig=False, flatten=False, filtCol=0, xlabel=None, smFnt=20, bgFnt=22):
     """
     shftPhase from 0 to 1.  
     yticks should look like [[0.5, 1, 1.5], ["0.5", "1", "1.5"]]
@@ -32,6 +32,8 @@ def modhistAll(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None,
     
     if m == None:
         bRealDat, COLS, sub = False, 3, 1
+
+    print "realDat is %s" % str(bRealDat)
 
     TR   = cols / COLS
     tr1 = TR if (tr1 is None) else tr1
@@ -72,7 +74,7 @@ def modhistAll(setname, shftPhase=0, fltPrms=[3.3, 11, 1, 15], t0=None, t1=None,
             for i in xrange(len(phs)):
                 fl.extend(phs[i])
             return fl
-    return figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, surrogates=surrogates, normed=normed, fn=fn, maxY=maxY, yticks=yticks, setname=setname, color=color)
+    return figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, surrogates=surrogates, normed=normed, fn=fn, maxY=maxY, yticks=yticks, setname=setname, color=color, xlabel=xlabel, smFnt=smFnt, bgFnt=bgFnt)
 
 def histPhase0_phaseInfrdAll(mARp, _mdn, t0=None, t1=None, bRealDat=False, trials=None, fltPrms=None, maxY=None, yticks=None, fn=None, normed=False, surrogates=1, shftPhase=0, color=None):
     if not bRealDat:
@@ -147,7 +149,7 @@ def _histPhase0_phaseInfrdAll(TR, N, x, _mdn, t0=None, t1=None, bRealDat=False, 
         #    if (ph_mdn[i] < 1) and (ph_mdn[i] > 0.5) and (ph_mdn[i+1] < -0.5):
         #        pInfrdAt0.append(ph_fx[i]/2.)
 
-    return figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, surrogates=surrogates, normed=normed, fn=fn, maxY=maxY, yticks=yticks, color=color)
+    return figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, surrogates=surrogates, normed=normed, fn=fn, maxY=maxY, yticks=yticks, color=color, xlabel=xlabel)
 
 def getPhases(_mdn, offset=0):
     """
@@ -176,7 +178,7 @@ def getPhases(_mdn, offset=0):
 
     return ph
 
-def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surrogates=1, normed=False, fn=None, maxY=None, yticks=None, color=None):  #  phase histogram
+def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surrogates=1, normed=False, fn=None, maxY=None, yticks=None, color=None, smFnt=20, bgFnt=22, xlabel="phase"):  #  phase histogram
     ltr = len(trials)
     inorderTrials = _N.arange(ltr)   #  original trial IDs no lnger necessary
     R2s = _N.empty(surrogates)
@@ -200,8 +202,6 @@ def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surroga
 
 
     vPhs  = _N.fromiter(itls.chain.from_iterable(phs), _N.float)
-    bgFnt = 22
-    smFnt = 20
     fig, ax = _plt.subplots(figsize=(6, 4.2))
     if color is None:
         ec = mC.hist1
@@ -214,8 +214,8 @@ def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surroga
     elif normed:
         _plt.ylim(0, 1)
     #_plt.title("R = %.3f" % _N.sqrt(R2), fontsize=smFnt)
-    _plt.xlabel("phase", fontsize=bgFnt)
-    _plt.ylabel("probability", fontsize=bgFnt)
+    _plt.xlabel(xlabel, fontsize=bgFnt)
+    _plt.ylabel("prob. density", fontsize=bgFnt)
     _plt.xticks(fontsize=smFnt)
     _plt.yticks(fontsize=smFnt)
     if yticks is not None:
@@ -232,7 +232,7 @@ def figCircularDistribution(phs, cSpkPhs, sSpkPhs, trials, setname=None, surroga
     #    for tic in ax.xaxis.get_major_ticks():
     #   tic.tick1On = tic.tick2On = False
 
-    fig.subplots_adjust(left=0.17, bottom=0.17, right=0.95, top=0.9)
+    fig.subplots_adjust(left=0.17, bottom=0.19, right=0.95, top=0.92)
 
     if fn is None:
         fn = "modulationHistogram,R=%.3f.eps" % R2s[0]

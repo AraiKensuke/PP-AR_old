@@ -34,7 +34,7 @@ class mcmcARcntMW(mAR.mcmcAR):
     W      = 1
 
     ###################################   RUN   #########
-    def loadDat(self):
+    def loadDat(self, usewin=None):
         oo     = self    #  call self oo.  takes up less room on line
         #  READ parameters of generative model from file
         #  contains N, k, singleFreqAR, u, beta, dt, stNz
@@ -47,7 +47,14 @@ class mcmcARcntMW(mAR.mcmcAR):
         
         cols= x_st_cnts.shape[1]
         nWinsInData = cols - 2   #  latent x, true state, win 1, win 2, ...
-        oo.W = nWinsInData
+
+        if usewin is not None:
+            oo.W = len(usewin)
+            for l in xrange(len(usewin)):
+                usewin[l] = usewin[l]+2
+            x_st_cnts[:, range(2, 2+oo.W)] = x_st_cnts[:, usewin]
+        else:
+            oo.W = nWinsInData
 
         oo.xT  = x_st_cnts[oo.t0:oo.t1, 0]
         #######  Initialize z
@@ -132,7 +139,10 @@ class mcmcARcntMW(mAR.mcmcAR):
 
         rns = _N.empty((oo.N+1, oo.W), dtype=_N.int)  #  an rn for each trial
         oo.LN  = _N.empty((oo.N+1, oo.W, oo.J))  #  an rn for each trial
-        lht = [_N.where(oo.zs[:, 0] == 1)[0], _N.where(oo.zs[:, 1] == 1)[0]]
+        if oo.J > 1:
+            lht = [_N.where(oo.zs[:, 0] == 1)[0], _N.where(oo.zs[:, 1] == 1)[0]]
+        else:
+            lht = [_N.where(oo.zs[:, 0] == 1)[0]]
 
         oo.kp = _N.empty((oo.N+1, oo.W))
         for w in xrange(oo.W):
@@ -144,7 +154,7 @@ class mcmcARcntMW(mAR.mcmcAR):
         cts     = _N.array(oo.y).reshape(oo.N+1, oo.W, 1)
         rn     = _N.array(oo.rn).reshape(1, oo.W, oo.J)
 
-        cntMCMCiters = 20
+        cntMCMCiters = 40
         oo.mrns = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W, oo.J), dtype=_N.int)
         oo.mus  = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W))
         oo.mdty = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W), dtype=_N.int)
@@ -174,20 +184,13 @@ class mcmcARcntMW(mAR.mcmcAR):
         for it in xrange(oo.burn+oo.NMC):
             print "---   iter %d" % it
 
-            # oo.us = _N.array([[-1.734, -1.734],
-            #                   [-1.734, -1.734]])
-            # oo.rn = _N.array([[130, 250],
-            #                   [130, 250]])
-            # oo.model = _N.array([[_cd.__BNML__, _cd.__BNML__],
-            #                      [_cd.__BNML__, _cd.__BNML__]])
-
             for w in xrange(oo.W):
                 for j in xrange(oo.J):
                     oo.us[w, j], oo.rn[w, j], oo.model[w, j] = cntmdlMCMCOnly(cntMCMCiters, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
 
-            oo.us[0] = oo.us[1]
-            oo.rn[0] = oo.rn[1]
-            oo.model[0] = oo.model[1]
+            # oo.us[0] = oo.us[1]
+            # oo.rn[0] = oo.rn[1]
+            # oo.model[0] = oo.model[1]
 
             for w in xrange(oo.W):
                 for j in xrange(oo.J):
@@ -220,12 +223,15 @@ class mcmcARcntMW(mAR.mcmcAR):
 
                 crats[:, 1:] = rats    #  [0.3, 0.7]  --> [0, 0.3, 1] windows
 
-                #  do regular assigning to zs
-                rs = _N.random.rand(oo.N+1).reshape(oo.N+1, 1)
-                #  we need to do something about p1p.  Log it.
-                x, y = _N.where((crats[:, 1:] >= rs) & (crats[:, 0:-1] <= rs))
-                #  x is [0, N+1].  
-                oo.zs[x, y] = 1;     oo.zs[x, 1-y] = 0
+                if oo.J > 1:
+                    #  do regular assigning to zs
+                    rs = _N.random.rand(oo.N+1).reshape(oo.N+1, 1)
+                    #  we need to do something about p1p.  Log it.
+                    x, y = _N.where((crats[:, 1:] >= rs) & (crats[:, 0:-1] <= rs))
+                    #  x is [0, N+1].  
+                    oo.zs[x, y] = 1;     oo.zs[x, 1-y] = 0
+                else:
+                    oo.zs[:, 0] = 1;     
 
                 #  in cases where BNML, cts must at most be rn-1.  
                 #  Find those trials that can't be from proposed binomial
@@ -249,14 +255,15 @@ class mcmcARcntMW(mAR.mcmcAR):
                     s    = _N.std(oo.y[trls])
                     #print "mean counts for st %(j)d   %(ct).1f   %(tr)d    %(cv).3f" % {"j" : j, "ct" : u, "tr" : len(trls), "cv" : ((s*s)/u)}
 
-            _N.add(oo.alp, _N.sum(oo.zs, axis=0), out=dirArgs)
-
             oo.m[:] = _N.random.dirichlet(dirArgs)
             oo.smp_m[it] = oo.m
 
             oo.Bsmpx[it, :] = oo.smpx
 
-            lht = [_N.where(oo.zs[:, 0] == 1)[0], _N.where(oo.zs[:, 1] == 1)[0]]
+            if oo.J > 1:
+                lht = [_N.where(oo.zs[:, 0] == 1)[0], _N.where(oo.zs[:, 1] == 1)[0]]
+            else:
+                lht = [_N.where(oo.zs[:, 0] == 1)[0]]
             for j in xrange(oo.J):
                 trls = lht[j]
                 for w in xrange(oo.W):
@@ -322,7 +329,7 @@ class mcmcARcntMW(mAR.mcmcAR):
                 oo.smp_q2[it]      = oo.q2
                 oo.smp_u[it]      = oo.us
 
-    def run(self, env_dirname=None, datafn="cnt_data.dat", batch=False): ###########  RUN    
+    def run(self, env_dirname=None, datafn="cnt_data.dat", batch=False, usewin=None): ###########  RUN    
         """
         many datafiles in each directory
         """
@@ -334,12 +341,12 @@ class mcmcARcntMW(mAR.mcmcAR):
         oo.s2_x00       = 0.3
         oo.datafn   = datafn
 
-        oo.loadDat()
+        oo.loadDat(usewin=usewin)
         oo.initGibbs()
-        # t1    = _tm.time()
+        t1    = _tm.time()
         oo.gibbsSamp()
-        # t2    = _tm.time()
-        # print (t2-t1)
+        t2    = _tm.time()
+        print (t2-t1)
 
 
     def getZs(self, lowst=0):

@@ -141,6 +141,11 @@ def getGLMphases(TR, t0, t1, est, X, spkHist, dat, gkW=20, useRefr=True):
     return stT, cglmAll
 
 def compareWF(mARp, ests, Xs, spkHists, oscMn, dat, gkW=20, useRefr=True, dspW=None):
+    """
+    instead of subplots, plot 3 different things with 3 largely separated y-values
+    """
+    
+    
     glmsets = len(ests)     #  horrible hack
     TR  = oscMn.shape[0]
     infrdAll = _N.zeros((TR, mARp.N+1))
@@ -150,7 +155,7 @@ def compareWF(mARp, ests, Xs, spkHists, oscMn, dat, gkW=20, useRefr=True, dspW=N
 
     paramss = [];    ocifss = [];    stTs   = []
 
-    for gs in xrange(glmsets):
+    for gs in xrange(glmsets):  #  for the 2 glm conditions
         params = _N.array(ests[gs].params)
         X      = Xs[gs]
         spkHist = spkHists[gs]
@@ -167,8 +172,9 @@ def compareWF(mARp, ests, Xs, spkHists, oscMn, dat, gkW=20, useRefr=True, dspW=N
 
     xt = _N.arange(stT, mARp.N+1)
     xts = [_N.arange(stTs[0], mARp.N+1), _N.arange(stTs[1], mARp.N+1)]
-    lss  = ["-", "--"]
-    lws  = [2, 3.8]
+    lss  = [":", "-"]
+    lws  = [3.8, 2]
+    cls  = [myC.infrdM]
     for tr in xrange(spkHist.startTR, TR):
         _gt = dat[stT:, tr*3]
         gt = _N.convolve(_gt, gk, mode="same")
@@ -186,8 +192,7 @@ def compareWF(mARp, ests, Xs, spkHists, oscMn, dat, gkW=20, useRefr=True, dspW=N
         up1 = _N.max(gt) - _N.min(gt)
         ##  mirror
         _plt.plot(xt, gt + up1*1.25, color=myC.grndTruth, lw=4)
-        _plt.plot(xt, infrd+up1*1.25, color="brown", lw=2.5)
-
+        _plt.plot(xt, infrd+up1*1.25, color=myC.infrdM, lw=2)
 
         for gs in xrange(glmsets):
             ocifs = ocifss[gs]

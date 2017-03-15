@@ -78,8 +78,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
     bIndOffset    = True
     peek          = 400
 
-    loghist       = None
-
     VIS           = None
 
     ignr          = 0
@@ -93,7 +91,11 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         ooN         = oo.N
         oo.x00         = _N.array(oo.smpx[:, 2])
         oo.V00         = _N.zeros((ooTR, ook, ook))
-        oo.loghist = _N.zeros(oo.N+1)
+        if oo.dohist:
+            oo.loghist = _N.zeros(oo.N+1)
+        else:
+            print "fixed hist is"
+            print oo.loghist
 
         if oo.processes > 1:
             pool = Pool(processes=oo.processes)
@@ -187,7 +189,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         if oo.hS is None:
             oo.hS = _N.zeros(oo.histknots)
 
-        _N.dot(Hbf, oo.hS, out=oo.loghist)
+        if oo.dohist:
+            _N.dot(Hbf, oo.hS, out=oo.loghist)
         oo.stitch_Hist(ARo, oo.loghist, Msts)
 
         ##  ORDER OF SAMPLING
@@ -253,6 +256,9 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 #print vv.shape
                 #print oo.loghist.shape
                 _N.dot(Hbf, RHS[:, 0], out=oo.loghist)
+                oo.smp_hist[:, it] = oo.loghist
+                oo.stitch_Hist(ARo, oo.loghist, Msts)
+            else:
                 oo.smp_hist[:, it] = oo.loghist
                 oo.stitch_Hist(ARo, oo.loghist, Msts)
 
@@ -438,7 +444,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         # with open("mARp.dump", "rb") as f:
         # lm = pickle.load(f)
 
-    def run(self, runDir=None, trials=None, minSpkCnt=0, pckl=None, runlatent=False, dontrun=False): ###########  RUN
+    def run(self, runDir=None, trials=None, minSpkCnt=0, pckl=None, runlatent=False, dontrun=False, h0_1=None, h0_2=None, h0_3=None, h0_4=None, h0_5=None, readSmpls=False): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line
         if oo.processes > 1:
             os.system("taskset -p 0xffffffff %d" % os.getpid())
@@ -453,11 +459,13 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oo.s2_x00       = _arl.dcyCovMat(oo.k, _N.ones(oo.k), 0.4)
         oo.restarts = 0
 
-        oo.loadDat(trials)
+        oo.loadDat(trials, h0_1=h0_1, h0_2=h0_2, h0_3=h0_3, h0_4=h0_4, h0_5=h0_5)
         oo.setParams()
 
-        if pckl is not None:
+        print "readSmpls   "
+        print readSmpls
 
+        if pckl is not None:
             oo.restarts = 1
             oo.F0 = _N.zeros(oo.k)
             if type(pckl) == list:   #  format for posterior mode
@@ -485,6 +493,17 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.t0_is_t_since_1st_spk = pckl["t0_is_t_since_1st_spk"]  #overwrite
                 oo.F0     = (-1*_Npp.polyfromroots(oo.pkldalfas)[::-1].real)[1:]
                 oo.F_alfa_rep = oo.pkldalfas.tolist()
+
+
+                if readSmpls:  #  probably not a run, later going to findMode
+                    print "here, in readSmpls"
+                    oo.allalfas  = pckl["allalfas"]
+                    oo.smp_u = pckl["u"]
+                    oo.smp_hS= pckl["h_coeffs"]
+                    oo.smp_q2= pckl["q2"]
+                    oo.smp_aS= pckl["aS"]
+                    oo.fs    = pckl["fs"]
+                    oo.amps  = pckl["amps"]
 
             if runlatent and (not dontrun):    #  just generate latent states
                 t1 = _tm.time()
@@ -585,7 +604,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                     oo._d.f_V[m] = sxv[m][2]
                     oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                     oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                    oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
+                    if oo.doBsmpx and (it % oo.BsmpxSkp == 0):
+                        oo.Bsmpx[m, it / oo.BsmpxSkp, 2:]    = oo.smpx[m, 2:, 0]
 
             #ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
             #oo.allalfas[it] = oo.F_alfa_rep

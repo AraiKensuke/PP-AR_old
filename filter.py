@@ -37,7 +37,7 @@ def lpFiltSpec(fp, fs, nyqf):
     w, h = freqz(b, a)
     fig = _plt.figure()
     _plt.plot(w * (nyqf/_N.pi), _N.abs(h))
-    
+
 def bpFilt(fpL, fpH, fsL, fsH, nyqf, y):
     nyqf = float(nyqf)
     ord, wn = filter_design.buttord((fpL/nyqf, fpH/nyqf), (fsL/nyqf, fsH/nyqf), 1, 12, analog=0)
@@ -49,6 +49,13 @@ def lpFilt(fp, fs, nyqf, y, disp=False):
     nyqf = float(nyqf)
     ord, wn = filter_design.buttord(fp/nyqf, fs/nyqf, 1, 12, analog=0)
     b, a = butter(ord, wn, btype="lowpass", analog=0, output='ba')
+    fy  =    filtfilt(b, a, y)
+    return fy
+
+def hpFilt(fp, fs, nyqf, y, disp=False):
+    nyqf = float(nyqf)
+    ord, wn = filter_design.buttord(fp/nyqf, fs/nyqf, 1, 12, analog=0)
+    b, a = butter(ord, wn, btype="highpass", analog=0, output='ba')
     fy  =    filtfilt(b, a, y)
     return fy
 

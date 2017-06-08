@@ -58,67 +58,23 @@ def Llklhds(type, ks, rn1, p1):
 
         raise
 
-def CtDistLogNorm(type, ks, rnM, LN):
-    """
-    Log of the normalization constant for count distributions
-    """
-    l1gt = 0
-    l1lt = 0
-    gt = _N.where(ks > 10)[0]
-    lt = _N.where(ks <= 10)[0]
-
-    try:
-        if type == _cd.__BNML__:
-            # if p large, rn1-ksf small   we are not dealing with this region
-            # if p small, ks small
-            if len(gt) > 0:
-                #print len(gt)
-                ksf = ks[gt]
-                top = 0.5*_N.log(2*_N.pi*rnM) + rnM*_N.log(rnM) - rnM
-                b1  = 0.5*_N.log(2*_N.pi*ksf) + ksf*_N.log(ksf) - ksf
-                b2  = 0.5*_N.log(2*_N.pi*(rnM-ksf)) + (rnM-ksf)*_N.log(rnM-ksf) - (rnM-ksf)
-                LN[gt]  = top - b1 - b2
-            if len(lt) > 0:
-                ksf = ks[lt]
-                LN[lt]  = _N.log(_sm.comb(rnM, ksf))
-        if type == _cd.__NBML__:
-            ksrnMm1 = ks+rnM-1   #  ks + rn1 -1 > ks
-            rnMm1  = rnM-1
-
-            if len(gt) > 0:  # if gt, ksrn1m1 will also be OK to use Stirling
-                ksf = ks[gt]
-                ksrnMm1f = ksrnMm1[gt]
-                top = 0.5*_N.log(2*_N.pi*(ksrnMm1f)) + (ksrnMm1f)*_N.log(ksrnMm1f) - (ksrnMm1f)
-                b1  = 0.5*_N.log(2*_N.pi*ksf) + ksf*_N.log(ksf) - ksf
-                b2  =  0.5*_N.log(2*_N.pi*rnMm1) + rnMm1*_N.log(rnMm1) - rnMm1
-
-                LN[gt]  = top - b1 - b2
-            if len(lt) > 0:
-                ksf = ks[lt]
-                LN[lt] = _N.log(_sm.comb(ksf + rnM-1, ksf))
-
-    except Warning:
-        print "!!!!!!!!"
-        print "type %d" % type
-        print "rn1  %d" % rn1
-
-        raise
-
 
 def CtDistLogNorm2(mdl, J, ks, rnM, LN):
-    """
-    Log of the normalization constant for count distributions
-    High and low states can be separate distributions
+    # Log of the normalization constant for count distributions
+    # High and low states can be separate distributions
 
-    if counts are too high for a proposed binomial binomial model, 
-    we will artifically set counts to be as low as necessary, and
-    in step where we choose z occupancy, all those with too high
-    counts will automatically be disqualified to be binomial
-    """
+    # if counts are too high for a proposed binomial binomial model, 
+    # we will artifically set counts to be as low as necessary, and
+    # in step where we choose z occupancy, all those with too high
+    # counts will automatically be disqualified to be binomial
+
     l1gt = 0
     l1lt = 0
     gt = _N.where(ks > 10)[0]
     lt = _N.where(ks <= 10)[0]
+
+    #print lt
+    #print gt
 
     try:
         for j in xrange(J):
@@ -143,6 +99,9 @@ def CtDistLogNorm2(mdl, J, ks, rnM, LN):
             if mdl[j] == _cd.__NBML__:
                 ksrnMm1 = ks+rn-1   #  ks + rn1 -1 > ks
                 rnMm1  = rn-1
+                if rnMm1 == 0:
+                    print "rnMm1 is 0"
+                    
 
                 if len(gt) > 0:  # if gt, ksrn1m1 will also be OK to use Stirling
                     ksf = ks[gt]
@@ -208,11 +167,6 @@ def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
 
     ##########################  estimate xn
     xn     = _N.array(mns)
-    print "cts*******"
-    print cts
-    print "mns-------"
-    print mns
-
     xoff   = _N.empty(Nss)
 
     xoff[0:Npcs*epS] = _N.repeat(xn, epS)
@@ -264,109 +218,6 @@ def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
     return u0, bestRN, mdl
     #  For cv~1, r~n 
 
-def startingValuesM(cts, J, zs, fillsmpx=None, indLH=False):
-    epS  = 20   #  in 20 trial segments
-    Nss = len(cts)  #  N same state
-
-    ##########################  estimate cv0, p0, u0
-    Npcs = Nss / epS   #  20 trials each
-
-    mns= _N.empty(Npcs)
-    for ep in xrange(Npcs):
-        mns[ep]  = _N.mean(cts[ep*epS:(ep+1)*epS]) # OK even if overshoot 
-        loInds = (_N.where(cts[ep*epS:(ep+1)*epS] < mns[ep])[0])  + ep*epS
-        hiInds = (_N.where(cts[ep*epS:(ep+1)*epS] >= mns[ep])[0]) + ep*epS
-        zs[loInds, 0] = 1
-        zs[hiInds, 1] = 1
-
-    cv0s = _N.empty(J)
-    u0s  = _N.empty(J)
-    bestRNs = _N.empty(J, dtype=_N.int)
-    models = _N.empty(J, dtype=_N.int)
-
-    for j in xrange(J):
-        trls = _N.where(zs[:, j] == 1)[0]
-
-        #  1 / (1-p) = c      1/c = 1-p   p = 1 - 1/c
-        u0, bestRN, mdl = startingValues(cts, fillsmpx=fillsmpx, trials=trls)
-        p0    = 1 / (1 + _N.exp(-u0))
-        cv0s[j] = (1 - p0) if (mdl == _cd.__BNML__) else 1 / (1 - p0)
-        print cv0s[j]
-        cv0s[j] *= float(len(trls)) / Nss    # weighted cv0
-        bestRNs[j] = bestRN
-        models[j]  = mdl
-        u0s[j] = u0
-
-    if indLH:
-        return u0s, bestRNs, models
-    cv0 = _N.sum(cv0s)
-
-    for j in xrange(J):
-        trls = _N.where(zs[:, j] == 1)[0]
-
-        #  1 / (1-p) = c      1/c = 1-p   p = 1 - 1/c
-        u0, bestRNs[j], mdl = startingValues(cts, fillsmpx=fillsmpx, cv0=cv0, trials=trls)
-    return u0, bestRNs, mdl
-
-# def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
-#     epS  = 20   #  in 20 trial segments
-#     Nss = cts.shape[0]
-#     WNS   = cts.shape[1]
-#     print "WNS   %d" % WNS
-
-#     ##########################  estimate cv0, p0, u0
-#     Npcs = Nss / epS   #  20 trials each
-
-#     mns= _N.empty((Npcs, WNS))
-#     zsW= _N.zeros((WNS, Nss, J), dtype=_N.int)
-
-#     for ep in xrange(Npcs):
-#         mns[ep]  = _N.mean(cts[ep*epS:(ep+1)*epS], axis=0) # overshoot OK
-#         for w in xrange(WNS):
-#             loInds = (_N.where(cts[ep*epS:(ep+1)*epS,w] < mns[ep,w])[0])  + ep*epS
-#             hiInds = (_N.where(cts[ep*epS:(ep+1)*epS,w] >= mns[ep,w])[0]) + ep*epS
-
-#             if J > 1:
-#                 zsW[w, loInds, 0] = 1
-#                 zsW[w, hiInds, 1] = 1
-#             else:
-#                 zsW[w, :, 0] = 1
-
-#     if J > 1:
-#         loInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) >= 0.5)[0]
-#         hiInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) <  0.5)[0]
-#         zs[loInds, 0] = 1
-#         zs[hiInds, 1] = 1
-#     else:
-#         zs[:, 0] = 1
-
-#     cv0s = _N.empty((WNS, J))
-#     u0s  = _N.empty((WNS, J))
-#     bestRNs = _N.empty((WNS, J), dtype=_N.int)
-#     models = _N.empty((WNS, J), dtype=_N.int)
-
-#     fs   = _N.zeros((WNS, Nss))
-#     for w in xrange(WNS-1, -1, -1):
-#         for j in xrange(J):
-#             print "j is %d" % j
-#             trls = _N.where(zs[:, j] == 1)[0]
-#             print trls
-
-#             #  1 / (1-p) = c      1/c = 1-p   p = 1 - 1/c
-#             u0, bestRN, mdl = startingValues(cts[:, w], fillsmpx=fs[w], trials=trls)
-#             #print "mean cts %.3f" % _N.mean(cts[trls, w])
-#             p0    = 1 / (1 + _N.exp(-u0))
-#             cv0s[w, j] = (1 - p0) if (mdl == _cd.__BNML__) else 1 / (1 - p0)
-#             #print cv0s[w, j]
-#             cv0s[w, j] *= float(len(trls)) / Nss    # weighted cv0
-#             bestRNs[w, j] = bestRN
-#             models[w, j]  = mdl
-#             u0s[w, j] = u0
-#             #_plt.plot(fs[w])
-#     _N.mean(fs, axis=0, out=fillsmpx)
-    
-#     return u0s, bestRNs, models
-
 
 def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
     epS  = 20   #  in 20 trial segments
@@ -382,9 +233,9 @@ def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
 
     for w in xrange(WNS):
         for ep in xrange(Npcs):
-            mns[ep]  = _N.mean(cts[ep*epS:(ep+1)*epS], axis=0) # overshoot OK
-            loInds = (_N.where(cts[ep*epS:(ep+1)*epS,w] < 0.6*mns[ep,w])[0])  + ep*epS
-            hiInds = (_N.where(cts[ep*epS:(ep+1)*epS,w] >= 0.6*mns[ep,w])[0]) + ep*epS
+            mns[ep]  = _N.mean(cts[ep*epS:(ep+1)*epS,w], axis=0) # overshoot OK
+            loInds = (_N.where(cts[ep*epS:(ep+1)*epS,w] < mns[ep,w])[0])  + ep*epS
+            hiInds = (_N.where(cts[ep*epS:(ep+1)*epS,w] >= mns[ep,w])[0]) + ep*epS
 
             if J > 1:
                 zsW[w, loInds, 0] = 1
@@ -410,7 +261,6 @@ def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
         for j in xrange(J):
             print "j is %d" % j
             trls = _N.where(zs[:, j] == 1)[0]
-            print trls
 
             #  1 / (1-p) = c      1/c = 1-p   p = 1 - 1/c
             u0, bestRN, mdl = startingValues(cts[:, w], fillsmpx=fs[w], trials=trls)
@@ -427,36 +277,6 @@ def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
     
     return u0s, bestRNs, models
 
-
-def startingValuesW(cts, fillsmpx=None):
-    epS  = 20   #  in 20 trial segments
-    Nss = cts.shape[0]
-    WNS   = cts.shape[1]
-    print "WNS   %d" % WNS
-
-    ##########################  estimate cv0, p0, u0
-    Npcs = Nss / epS   #  20 trials each
-
-    mns= _N.empty((Npcs, WNS))
-
-    cv0s = _N.empty(WNS)
-    u0s  = _N.empty(WNS)
-    bestRNs = _N.empty((WNS), dtype=_N.int)
-    models = _N.empty((WNS), dtype=_N.int)
-
-    fs   = _N.zeros((WNS, Nss))
-    for w in xrange(WNS-1, -1, -1):
-        #  1 / (1-p) = c      1/c = 1-p   p = 1 - 1/c
-        u0, bestRN, mdl = startingValues(cts[:, w], fillsmpx=fs[w])
-        #print "mean cts %.3f" % _N.mean(cts[trls, w])
-        p0    = 1 / (1 + _N.exp(-u0))
-        cv0s[w] = (1 - p0) if (mdl == _cd.__BNML__) else 1 / (1 - p0)
-        bestRNs[w] = bestRN
-        models[w]  = mdl
-        u0s[w] = u0
-    _N.mean(fs, axis=0, out=fillsmpx)
-    
-    return u0s, bestRNs, models
 
 def bestrn(dist, cnt, lmd0, llsV, p1x):
     dn   = int(lmd0*0.02)
@@ -510,9 +330,11 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
     stdu2= stdu**2;
     istdu2= 1./ stdu2
 
-    Mk = _N.mean(cts)  #  1comp if nWins=1, 2comp
-    iMk = 1./Mk
-    nmin= _N.max(cts)   #  if n too small, can't generate data
+    Mk = _N.mean(cts) if len(cts) > 0 else 0  #  1comp if nWins=1, 2comp
+    if Mk == 0:
+        return u0, rn0, dist   # no data assigned to this
+    iMk = 1./Mk   #  if Mk == 0, just make it a small number?
+    nmin= _N.max(cts) if len(cts) > 0 else 0   #  if n too small, can't generate data
     rmin= 1
 
     lFlB = _N.empty(2)
@@ -538,8 +360,7 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
         #
         if dist == _cd.__BNML__:
             uu1  = -_N.log(rn0 * iMk - 1) # mean of proposal density
-            u1 = uu1 + stdu * rdns[it]
-            #print "BNML   uu1  %(uu1).3e    u1  %(u1).3e" % {"uu1" : uu1, "u1" : u1}
+            u1 = uu1 + stdu * rdns[it]    #  proposed u1
 
             if u1 > uTH:       ###########   Stay in Binomial ##########
                 todist = _cd.__BNML__;    cross  = False
@@ -657,174 +478,6 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
     #print "ll Bg %(b).3e   ll En %(e).3e" % {"b" : lBg, "e" : lEn}
     return u0, rn0, dist
 
-def cntmdlMCMCOnlyM(iters, J, zs, u0, rn0, dist, cts, rns, us, dty, xn):
-    """
-    We need starting values for rn, u0, model
-    """
-    #  if one of the mix categories has 0 occupancy, default to cntmdlMCMCOnly
-    emptyCats = _N.where(_N.sum(zs, axis=0) == 0)[0]
-    if len(emptyCats) > 0:
-        print "empty cats"
-        nonEmpty = 1 - emptyCats[0]
-        ru0, rrn0, rdist = cntmdlMCMCOnly(iters, u0, rn0[nonEmpty], dist, cts, rns[:, nonEmpty], us, dty, xn)
-        rn0M= _N.empty(J, dtype=_N.int)
-        rn0M[emptyCats] = rn0[emptyCats]
-        rn0M[nonEmpty] = rn0[nonEmpty]
-        return ru0, rn0M, rdist
-
-    llsV = _N.empty(20)
-
-    #  Pick mu.  Optimize rn for both states
-    lFlB = _N.zeros(2)
-
-    p0  = 1 / (1 + _N.exp(-u0))
-
-    Mks = _N.empty(J)
-    iMks= _N.empty(J)
-    rn0M= _N.empty(J, dtype=_N.int)
-    rn1M= _N.empty(J, dtype=_N.int)
-    nmin= _N.empty(J, dtype=_N.int)
-    uu0M= _N.empty(J)
-    uu1M= _N.empty(J)
-    wgM = _N.empty(J)
-    rmin= 1
-    rds  = _N.random.rand(iters)
-    rdns = _N.random.randn(iters)
-
-    trls = []
-    lFlB[1] = 0
-    for j in xrange(J):
-        trls.append(_N.where(zs[:, j] == 1)[0])
-        p0x = 1 / (1 + _N.exp(-(u0+xn[trls[j]])))
-        Mks[j] = _N.mean(cts[trls[j]])  #  1comp if nWins=1, 2comp
-        iMks[j] = 1./Mks[j]
-        nmin[j]= _N.max(cts[trls[j]])   #  if n too small, can't generate data
-        rn0M[j] = rn0[j]
-        wgM[j]  = float(len(trls[j])) / len(cts)
-
-        lFlB[1] += Llklhds(dist, cts[trls[j]], rn0M[j], p0x)
-    lBg = lFlB[1]
-
-    cross  = False
-    lls   = []
-
-    for it in xrange(iters):
-        #
-        if dist == _cd.__BNML__:
-            _N.log(rn0M * iMks - 1, out=uu1M) # mean of proposal density
-            uu1M *= -1
-            #print uu1M
-            uu1 = _N.sum(uu1M * wgM)
-            #print uu1
-            u1 = uu1 + stdu * rdns[it]
-
-            if u1 > uTH:       ###########   Stay in Binomial ##########
-                todist = _cd.__BNML__;    cross  = False
-                p1 = 1 / (1 + _N.exp(-u1))
-
-                for j in xrange(J):
-                    p1x = 1 / (1 + _N.exp(-(u1+xn[trls[j]])))
-                    lmd0= int(Mks[j]/p1)  #  bestrn for lo and hi state
-                    rn1M[j] = bestrn(todist, cts[trls[j]], lmd0, llsV, p1x)
-
-                _N.log(rn1M * iMks - 1, out=uu0M) # mean of proposal density
-                uu0M*=-1
-                uu0 = _N.sum(uu0M*wgM)
-                #print "--  %(uu0).3f   %(u0).3f" % {"uu0" : uu0, "u0" : u0}
-                # log of probability
-                lpPR = 0.5*istdu2*(((u1 - uu1)*(u1 - uu1)) - ((u0 - uu0)*(u0 - uu0)))  #  - (lnc0 - lnc1), lnc reciprocal of norm
-            else:   ########  Switch to __NBML__  ####################
-                todist = _cd.__NBML__;   cross  = True
-                u1 = 2*uTH - u1  #  u1 now a parameter of NB distribution   
-                p1 = 1 / (1 + _N.exp(-u1))
-                for j in xrange(J):
-                    p1x = 1 / (1 + _N.exp(-(u1+xn[trls[j]])))
-                    lmd0= int((1./p1 - 1)*Mks[j])  #  bestrn for lo and hi state
-                    rn1M[j] = bestrn(todist, cts[trls[j]], lmd0, llsV, p1x)
-
-                _N.log(rn1M * iMks - 1, out=uu0M) # mean of proposal density
-                uu0M*=-1
-                uu0 = _N.sum(uu0M*wgM)
-
-                lpPR = 0.5*istdu2*((((uTH-u1) - uu1)*((uTH-u1) - uu1)) - (((uTH-u0) - uu0)*((uTH-u0) - uu0)))
-        elif dist == _cd.__NBML__:
-            _N.log(rn0M * iMks, out=uu1M) # mean of proposal density
-            uu1M *= -1
-            #print uu1M
-            uu1 = _N.sum(uu1M * wgM)
-            #print uu1
-            u1 = uu1 + stdu * rdns[it]
-
-            if u1 > uTH:       ######   Stay in Negative binomial ######
-                todist = _cd.__NBML__;    cross  = False
-                p1 = 1 / (1 + _N.exp(-u1))
-                for j in xrange(J):
-                    p1x = 1 / (1 + _N.exp(-(u1+xn[trls[j]])))
-                    lmd0= int((1./p1 - 1)*Mks[j])  #  bestrn for lo and hi state
-                    rn1M[j] = bestrn(todist, cts[trls[j]], lmd0, llsV, p1x)
-
-                _N.log(rn1M * iMks, out=uu0M) # mean of proposal density
-                uu0M*=-1
-                uu0 = _N.sum(uu0M*wgM)
-                #print "--  %(uu0).3f   %(u0).3f" % {"uu0" : uu0, "u0" : u0}
-
-                lpPR = 0.5*istdu2*(((u1 - uu1)*(u1 - uu1)) - ((u0 - uu0)*(u0 - uu0)))
-            else:   ########  Switch to __BNML__  ####################
-                #print "here"
-                todist = _cd.__BNML__;    cross  = True
-                u1 = 2*uTH - u1  #  u in NB distribution
-                p1 = 1 / (1 + _N.exp(-u1))
-                for j in xrange(J):
-                    p1x = 1 / (1 + _N.exp(-(u1+xn[trls[j]])))
-                    lmd0= int(Mks[j]/p1)  #  bestrn for lo and hi state
-                    rn1M[j] = bestrn(todist, cts[trls[j]], lmd0, llsV, p1x)
-
-                _N.log(rn1M * iMks - 1, out=uu0M) # mean of proposal density
-                uu0M*=-1
-                uu0 = _N.sum(uu0M*wgM)
-
-                lpPR = 0.5*istdu2*(-(((uTH-u1) - uu1)*((uTH-u1) - uu1)) + (((uTH-u0) - uu0)*((uTH-u0) - uu0)))
-
-        lFlB[0] = 0
-        for j in xrange(J):
-            p1x = 1 / (1 + _N.exp(-(u1+xn[trls[j]])))
-            lFlB[0] += Llklhds(todist, cts[trls[j]], rn1M[j], p1x)
-
-        ########  log of proposal probabilities
-
-        lnPR = 0
-        lPR = lnPR + lpPR
-
-        if lPR > 50:
-            prRat = 1e+10
-        else:
-            prRat = _N.exp(lPR)
-
-        #  lFlB[0] - lFlB[1] >> 0  -->  new state has higher likelihood
-        posRat = 1.01e+200 if (lFlB[0] - lFlB[1] > 500) else _N.exp(lFlB[0]-lFlB[1])
-        rat  = posRat*prRat
-
-        aln  = rat if (rat < 1)  else 1   #  if aln == 1, always accept
-        if rds[it] < aln:   #  accept
-            u0 = u1
-            rn0M[:] = rn1M
-            p0 = p1
-            lFlB[1] = lFlB[0]
-            dist = todist
-        lls.append(lFlB[1])
-
-        dty[it] = dist
-        us[it] = u0
-        rns[it] = rn0M    #  rn0 is the newly sampled value if accepted
-
-    lEn = lFlB[0]
-
-    
-    iInd = 0
-
-
-    print "ll Bg %(b).3e   ll En %(e).3e" % {"b" : lBg, "e" : lEn}
-    return u0, rn0M, dist
 
 
 

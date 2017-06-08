@@ -12,7 +12,7 @@ from kassdirs import resFN, datFN
 import re as _re
 import matplotlib.pyplot as _plt
 import scipy.stats as _ss
-from cntUtil import Llklhds, cntmdlMCMCOnly, startingValues, startingValuesMw, CtDistLogNorm2
+from cntUtil import Llklhds, cntmdlMCMCOnly, startingValuesMw, CtDistLogNorm2
 import time as _tm
 
 class mcmcARcntMW(mAR.mcmcAR):
@@ -62,8 +62,8 @@ class mcmcARcntMW(mAR.mcmcAR):
         stCol = 1   #  column containing counts
         ctCol = 2   #  column containing counts
 
-        oo.y   = x_st_cnts[oo.t0:oo.t1, ctCol:ctCol+oo.W]
-        oo.st  = x_st_cnts[oo.t0:oo.t1, stCol]
+        oo.y   = _N.array(x_st_cnts[oo.t0:oo.t1, ctCol:ctCol+oo.W], dtype=_N.int)
+        oo.st  = _N.array(x_st_cnts[oo.t0:oo.t1, stCol], dtype=_N.int)
         oo.x   = x_st_cnts[oo.t0:oo.t1, 0]
         oo.zs  = _N.zeros((oo.N+1, oo.J), dtype=_N.int)
         oo.m   = _N.empty(oo.J)
@@ -131,20 +131,20 @@ class mcmcARcntMW(mAR.mcmcAR):
 
         oo.alp       = _N.array([1, 1])
 
-    def gibbsSamp(self):  #########  GIBBS SAMPLER  ############
+    def gibbsSamp(self, logfact, cntMCMCiters=50):  #########  GIBBS SAMPLER  ############
         #####  MCMC start
         oo   = self
         #  F, q2, u, rn, model
 
         rns = _N.empty((oo.N+1, oo.W), dtype=_N.int)  #  an rn for each trial
         oo.LN  = _N.empty((oo.N+1, oo.W, oo.J))  #  log of normlz constant
+        oo.LN_old  = _N.empty((oo.N+1, oo.W, oo.J))  #  log of normlz constant
         oo.kp = _N.empty((oo.N+1, oo.W))
 
         cts     = _N.array(oo.y).reshape(oo.N+1, oo.W, 1)
         rn     = _N.array(oo.rn).reshape(1, oo.W, oo.J)
 
         soox   = _N.std(oo.x)
-        cntMCMCiters = 80
         oo.mrns = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W, oo.J), dtype=_N.int)
         oo.mus  = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W))
         oo.mdty = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W), dtype=_N.int)
@@ -172,8 +172,10 @@ class mcmcARcntMW(mAR.mcmcAR):
 
         usr   = oo.us.reshape((1, oo.W, oo.J))
         rsmpx = oo.smpx.reshape((oo.N+1, 1, 1))
+        bads  = _N.empty(oo.N+1, dtype=_N.int)
 
         for it in xrange(oo.burn+oo.NMC):
+            #dbtt1 = _tm.time()
             print "---   iter %d" % it
 
             ########  Allocate into Binary L,H states
@@ -187,37 +189,57 @@ class mcmcARcntMW(mAR.mcmcAR):
 
             z = _N.zeros(oo.J, dtype=_N.int)
             zrs = _N.where(oo.m == 0)[0]
-
+            #
+            #  win1  (st1 st2)   win2      if 
+            #
+            #dbtt2 = _tm.time()
+            ######  sTochastic allocation
             if len(zrs) == 0:
+                bads[:] = -1   # for all trials n
                 for w in xrange(oo.W):
-                    CtDistLogNorm2(oo.model[w], oo.J, oo.y[:, w], oo.rn[w], oo.LN[:, w])
+                    #CtDistLogNorm2(oo.model[w], oo.J, oo.y[:, w], oo.rn[w], oo.LN_old[:, w])
 
+                    #  if we have 20 cts in a trial, and state we want to 
+                    #  switch to has a binomial with n = 19, 20 can't be generated.  On a window-by
+                    #  from such a disribution
                     for j in xrange(oo.J):  #  for ratio of this state
                         if oo.model[w, j] == _cd.__BNML__:
-                            lp1p[:, w, j] = oo.y[:, w]*_N.log(p[:, w, j]) + (oo.rn[w, j] - oo.y[:, w]) * _N.log(1 - p[:, w, j])
-                        else:
-                            lp1p[:, w, j] = oo.y[:, w]*_N.log(p[:, w, j]) + oo.rn[w, j] * _N.log(1 - p[:, w, j])
+                            oo.LN[:, w, j] = logfact[oo.rn[w,j]] - logfact[oo.y[:,w]] - logfact[oo.rn[w,j]-oo.y[:,w]]
+                            bads[_N.where(oo.LN[:, w, j] < 0)[0]] = j
 
+                            lp1p[:, w, j]  = oo.y[:, w]*_N.log(p[:, w, j]) + (oo.rn[w, j] - oo.y[:, w]) * _N.log(1 - p[:, w, j])
+                        else:
+                            oo.LN[:, w, j] = logfact[oo.y[:,w]+oo.rn[w,j]-1] - logfact[oo.y[:,w]] - logfact[oo.rn[w,j]-1]
+                            lp1p[:, w, j] = oo.y[:, w]*_N.log(p[:, w, j]) + oo.rn[w, j] * _N.log(1 - p[:, w, j])
+                
+                canBgenrtd  = _N.where(bads < 0)[0]  #  ct can b generated
+                cantBgenrtd = _N.where(bads >= 0)[0]  #  ct can't b generated
+                #print len(cantBgenrtd)
+                #print len(cangenrtd)
+                            
                 for j in xrange(oo.J):  #  for ratio of this state
                     for jo in xrange(oo.J):
-                        _N.subtract(lp1p[:, :, jo], lp1p[:, :, j], out=dlp1p)
-                        _N.exp(dlp1p, out=ppd)  # p1p*p1p may be small
-                        trms[:, jo] = _N.exp(_N.sum(oo.LN[:, :, jo], axis=1) - _N.sum(oo.LN[:, :, j], axis=1)) * ((oo.m[jo]/oo.m[j]) * _N.product(ppd, axis=1))
+                        dlp1p[canBgenrtd] = _N.subtract(lp1p[canBgenrtd, :, jo], lp1p[canBgenrtd, :, j])
+                        #_N.subtract(lp1p[:, :, jo], lp1p[:, :, j], out=dlp1p)
+                        ppd[canBgenrtd] = _N.exp(dlp1p[canBgenrtd])  # p1p*p1p may be small
+                        trms[canBgenrtd, jo] = _N.exp(_N.sum(oo.LN[canBgenrtd, :, jo], axis=1) - _N.sum(oo.LN[canBgenrtd, :, j], axis=1)) * ((oo.m[jo]/oo.m[j]) * _N.product(ppd[canBgenrtd], axis=1))
 
-                    rats[:, j] = 1 / _N.sum(trms, axis=1)
+                    rats[canBgenrtd, j] = 1 / _N.sum(trms[canBgenrtd], axis=1)
 
                     for j in xrange(1, oo.J):
-                        rats[:, j] += rats[:, j-1]
+                        rats[canBgenrtd, j] += rats[canBgenrtd, j-1]
 
-                crats[:, 1:] = rats    #  [0.3, 0.7]  --> [0, 0.3, 1] windows
-
+                crats[canBgenrtd, 1:] = rats[canBgenrtd]    #  [0.3, 0.7]  --> [0, 0.3, 1] windows
                 if oo.J > 1:
                     #  do regular assigning to zs
-                    rs = _N.random.rand(oo.N+1).reshape(oo.N+1, 1)
+                    rs = _N.random.rand(len(canBgenrtd)).reshape(len(canBgenrtd), 1)
                     #  we need to do something about p1p.  Log it.
-                    x, y = _N.where((crats[:, 1:] >= rs) & (crats[:, 0:-1] <= rs))
+                    x, y = _N.where((crats[canBgenrtd, 1:] >= rs) & (crats[canBgenrtd, 0:-1] <= rs))
                     #  x is [0, N+1].  
-                    oo.zs[x, y] = 1;     oo.zs[x, 1-y] = 0
+                    oo.zs[canBgenrtd[x], y] = 1;     oo.zs[canBgenrtd[x], 1-y] = 0
+                    if len(cantBgenrtd) > 0:
+                        oo.zs[cantBgenrtd, bads[cantBgenrtd]] = 0;     
+                        oo.zs[cantBgenrtd, 1-bads[cantBgenrtd]] = 1                      
                 else:
                     oo.zs[:, 0] = 1;     
 
@@ -236,6 +258,7 @@ class mcmcARcntMW(mAR.mcmcAR):
                 print "hit zero"
             oo.smp_zs[it] = oo.zs
 
+            #dbtt3 = _tm.time()
             ########  Now sample the other parameters
             if oo.J > 1:   #  lht[j]   the trials with lo-hi state == j
                 lht = [_N.where(oo.zs[:, 0] == 1)[0], _N.where(oo.zs[:, 1] == 1)[0]]
@@ -252,6 +275,8 @@ class mcmcARcntMW(mAR.mcmcAR):
             oo.smp_rn[it] = oo.rn
             oo.smp_dty[it] = oo.model
 
+            #dbtt4 = _tm.time()
+            ### offset
             for j in xrange(oo.J):
                 trls = lht[j]
                 for w in xrange(oo.W):
@@ -264,6 +289,8 @@ class mcmcARcntMW(mAR.mcmcAR):
                         rnsy[trls, w] = oo.rn[w, j]
                     usJ[trls, w]  = oo.us[w, j]
 
+            #dbtt5 = _tm.time()
+            ### offset
             ###  PG variables
             for w in xrange(oo.W):
                 wsTST[:]    = oo.ws[:, w]
@@ -289,6 +316,8 @@ class mcmcARcntMW(mAR.mcmcAR):
             oo._d.Rv[:] = wA/_N.sum(wAw, axis=1)  # Rv is inverse variance
             #oo._d.Rv[:] = _N.sum(wAw, axis=1)/wA  # Rv is inverse variance
 
+            #dbtt6 = _tm.time()
+            ### offset
             if not oo.smpxOff:
                 #  p3 --  samp u here
 
@@ -322,8 +351,21 @@ class mcmcARcntMW(mAR.mcmcAR):
                 oo.smp_F[it]       = oo.F0
                 oo.smp_q2[it]      = oo.q2
                 oo.smp_u[it]      = oo.us
+            #dbtt7 = _tm.time()
+            # print "#timing start"
+            # print "nt+= 1"
+            # print "t2t1+=%.4e" % (dbtt2-dbtt1)
+            # print "t3t2+=%.4e" % (dbtt3-dbtt2)
+            # print "t4t3+=%.4e" % (dbtt4-dbtt3)
+            # print "t5t4+=%.4e" % (dbtt5-dbtt4)
+            # print "t6t5+=%.4e" % (dbtt6-dbtt5)
+            # print "t7t6+=%.4e" % (dbtt7-dbtt6)
+            # print "#timing end"
 
-    def run(self, env_dirname=None, datafn="cnt_data.dat", batch=False, usewin=None): ###########  RUN    
+            ### offset
+
+
+    def run(self, logfact, env_dirname=None, datafn="cnt_data.dat", batch=False, usewin=None, cntMCMCiters=50): ###########  RUN    
         """
         many datafiles in each directory
         """
@@ -338,7 +380,7 @@ class mcmcARcntMW(mAR.mcmcAR):
         oo.loadDat(usewin=usewin)
         oo.initGibbs()
         t1    = _tm.time()
-        oo.gibbsSamp()
+        oo.gibbsSamp(logfact, cntMCMCiters=cntMCMCiters)
         t2    = _tm.time()
         print (t2-t1)
 
@@ -358,5 +400,3 @@ class mcmcARcntMW(mAR.mcmcAR):
 
         mtch = _N.where(zFt == zTr)[0]
         return zTr, zFt, (float(len(mtch))/(oo.N+1))
-
-

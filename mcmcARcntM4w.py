@@ -12,7 +12,7 @@ from kassdirs import resFN, datFN
 import re as _re
 import matplotlib.pyplot as _plt
 import scipy.stats as _ss
-from cntUtil import Llklhds, cntmdlMCMCOnly, startingValuesMw, CtDistLogNorm2
+import cntUtil as _cU
 import time as _tm
 
 class mcmcARcntMW(mAR.mcmcAR):
@@ -69,12 +69,13 @@ class mcmcARcntMW(mAR.mcmcAR):
         oo.m   = _N.empty(oo.J)
 
     #  when we don't have xn
-    def initGibbs(self):
+    def initGibbs(self, logfact):
         oo     = self    #  call self oo.  takes up less room on line
+        _cU.logfact = logfact
         #  INITIAL samples
 
         oo.smpx = _N.zeros(oo.N+1)
-        oo.us, oo.rn, oo.model = startingValuesMw(oo.y, oo.J, oo.zs, fillsmpx=oo.smpx, indLH=True)
+        oo.us, oo.rn, oo.model = _cU.startingValuesMw(oo.y, oo.J, oo.zs, fillsmpx=oo.smpx, indLH=True)
         # oo.us = _N.array([[-1.734, -1.734],
         #                   [-1.734, -1.734]])
         # oo.rn = _N.array([[130, 250],
@@ -176,7 +177,8 @@ class mcmcARcntMW(mAR.mcmcAR):
 
         for it in xrange(oo.burn+oo.NMC):
             #dbtt1 = _tm.time()
-            print "---   iter %d" % it
+            if (it % 10) == 0:
+                print it
 
             ########  Allocate into Binary L,H states
 
@@ -267,7 +269,7 @@ class mcmcARcntMW(mAR.mcmcAR):
 
             for w in xrange(oo.W):
                 for j in xrange(oo.J):
-                    oo.us[w, j], oo.rn[w, j], oo.model[w, j] = cntmdlMCMCOnly(it, cntMCMCiters, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
+                    oo.us[w, j], oo.rn[w, j], oo.model[w, j] = _cU.cntmdlMCMCOnly(it, cntMCMCiters, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
 
             _N.add(oo.alp, _N.sum(oo.zs, axis=0), out=dirArgs)
             oo.m[:] = _N.random.dirichlet(dirArgs)
@@ -344,8 +346,6 @@ class mcmcARcntMW(mAR.mcmcAR):
                 oo._d.f_V[0, 0, 0]     = oo.V00
 
                 oo.smpx = _kfar.armdl_FFBS_1itr(oo._d)
-                print "smpx mean  %(1).3f  std %(2).3f    std (x) %(3).3f" % {"1" : _N.mean(oo.smpx), "2" : _N.std(oo.smpx), "3" : soox}
-
                 oo.Bsmpx[it, :] = oo.smpx
 
                 oo.smp_F[it]       = oo.F0
@@ -378,7 +378,7 @@ class mcmcARcntMW(mAR.mcmcAR):
         oo.datafn   = datafn
 
         oo.loadDat(usewin=usewin)
-        oo.initGibbs()
+        oo.initGibbs(logfact)
         t1    = _tm.time()
         oo.gibbsSamp(logfact, cntMCMCiters=cntMCMCiters)
         t2    = _tm.time()

@@ -2,12 +2,14 @@ import numpy as _N
 import scipy.misc as _sm
 import commdefs as _cd
 import matplotlib.pyplot as _plt
+import time as _tm
 
 #  connection between 
 pTH  = 0.01
 uTH    = _N.log(pTH / (1 - pTH))
+logfact= None
 
-def Llklhds(type, ks, rn1, p1):
+def Llklhds_OLD(type, ks, rn1, p1):
     l1gt = 0
     l1lt = 0
     gt = _N.where(ks > 10)[0]
@@ -44,10 +46,12 @@ def Llklhds(type, ks, rn1, p1):
                 b2  =_N.sum(_N.log(_N.linspace(1, rn1m1, rn1m1)))  # log(fact)
 
                 l1gt  = _N.sum(top - b1 - b2 + ksf*_N.log(p1f) + rn1*_N.log(1 - p1f))
+                #l1gt  = _N.sum(top - b1 - b2 + ksf*_N.log(p1f))
             if len(lt) > 0:
                 ksf = ks[lt]
                 p1f = p1[lt]
                 l1lt  = _N.sum(_N.log(_sm.comb(ksf + rn1-1, ksf)) + ksf*_N.log(p1f) + rn1*_N.log(1 - p1f))
+                #l1lt  = _N.sum(_N.log(_sm.comb(ksf + rn1-1, ksf)))
             return l1lt + l1gt
 
     except Warning:
@@ -58,68 +62,13 @@ def Llklhds(type, ks, rn1, p1):
 
         raise
 
-
-def CtDistLogNorm2(mdl, J, ks, rnM, LN):
-    # Log of the normalization constant for count distributions
-    # High and low states can be separate distributions
-
-    # if counts are too high for a proposed binomial binomial model, 
-    # we will artifically set counts to be as low as necessary, and
-    # in step where we choose z occupancy, all those with too high
-    # counts will automatically be disqualified to be binomial
-
-    l1gt = 0
-    l1lt = 0
-    gt = _N.where(ks > 10)[0]
-    lt = _N.where(ks <= 10)[0]
-
-    #print lt
-    #print gt
-
-    try:
-        for j in xrange(J):
-            rn = rnM[j]
-            if mdl[j] == _cd.__BNML__:
-                # if p large, rn1-ksf small we are not dealing with this region
-                # if p small, ks small
-                if len(gt) > 0:
-                    #print len(gt)
-                    ksf = ks[gt]   #  returns new array
-                    notBNML = _N.where(ksf >= rn)[0]   # ct must 1 less than n
-                    ksf[notBNML] = rn-1 #  this term not used in the end anyway
-                    top = 0.5*_N.log(2*_N.pi*rn) + rn*_N.log(rn) - rn
-                    b1  = 0.5*_N.log(2*_N.pi*ksf) + ksf*_N.log(ksf) - ksf
-                    b2  = 0.5*_N.log(2*_N.pi*(rn-ksf)) + (rn-ksf)*_N.log(rn-ksf) - (rn-ksf)
-                    LN[gt, j]  = top - b1 - b2
-                if len(lt) > 0:
-                    ksf = ks[lt]
-                    notBNML = _N.where(ksf >= rn)[0]   #  
-                    ksf[notBNML] = rn-1 #  this term not used in the end anyway
-                    LN[lt, j]  = _N.log(_sm.comb(rn, ksf))
-            if mdl[j] == _cd.__NBML__:
-                ksrnMm1 = ks+rn-1   #  ks + rn1 -1 > ks
-                rnMm1  = rn-1
-                if rnMm1 == 0:
-                    print "rnMm1 is 0"
-                    
-
-                if len(gt) > 0:  # if gt, ksrn1m1 will also be OK to use Stirling
-                    ksf = ks[gt]
-                    ksrnMm1f = ksrnMm1[gt]
-                    top = 0.5*_N.log(2*_N.pi*(ksrnMm1f)) + (ksrnMm1f)*_N.log(ksrnMm1f) - (ksrnMm1f)
-                    b1  = 0.5*_N.log(2*_N.pi*ksf) + ksf*_N.log(ksf) - ksf
-                    b2  =  0.5*_N.log(2*_N.pi*rnMm1) + rnMm1*_N.log(rnMm1) - rnMm1
-
-                    LN[gt, j]  = top - b1 - b2
-                if len(lt) > 0:
-                    ksf = ks[lt]
-                    LN[lt, j] = _N.log(_sm.comb(ksf + rn-1, ksf))
-    except Warning:
-        print "!!!!!!!!"
-        print "type %s" % str(mdl)
-        print "rnM  %s" % str(rnM)
-
-        raise
+def Llklhds(typ, ks, rn1, p1):
+    global logfact
+    N = len(ks)
+    if typ == _cd.__BNML__:
+        return N*logfact[rn1]-_N.sum(logfact[ks]+logfact[rn1-ks]-ks*_N.log(p1) - (rn1-ks)*_N.log(1 - p1))
+    else:
+        return _N.sum(logfact[ks+rn1-1]-logfact[ks]  + ks*_N.log(p1) + rn1*_N.log(1 - p1))-N*logfact[rn1-1]
 
 def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
     if trials is not None:  # fillsmpx[trials] couldn't be passed as a pointer
@@ -279,6 +228,10 @@ def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
 
 
 def bestrn(dist, cnt, lmd0, llsV, p1x):
+    ##  given lmd0
+    ##
+    ##
+    tt0 = _tm.time()
     dn   = int(lmd0*0.02)
     dn   = 1 if dn == 0 else dn
 
@@ -307,6 +260,8 @@ def bestrn(dist, cnt, lmd0, llsV, p1x):
     # print len(llsV)
     # print len(candRNs)
     # print "maxI   %d" % maxI
+    tt1 = _tm.time()
+    #print "time in bestrn %.4f" % (tt1-tt0)
     return candRNs[maxI]
 
 
@@ -332,7 +287,7 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
 
     Mk = _N.mean(cts) if len(cts) > 0 else 0  #  1comp if nWins=1, 2comp
     if Mk == 0:
-        return u0, rn0, dist   # no data assigned to this
+        return u0, rn0, dist   # no data assigned to this 
     iMk = 1./Mk   #  if Mk == 0, just make it a small number?
     nmin= _N.max(cts) if len(cts) > 0 else 0   #  if n too small, can't generate data
     rmin= 1
@@ -356,11 +311,18 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
     #rn0 = bestrn(dist, cts, rn0, llsV, p0x)
 
     #print "uTH is %.3e" % uTH
+
+    #dbtt21 = 0
+    #dbtt32 = 0
+    #dbtt43 = 0
+    #dbtt54 = 0
+
     for it in xrange(iters):
         #
+        #dbtt1 = _tm.time()
         if dist == _cd.__BNML__:
             uu1  = -_N.log(rn0 * iMk - 1) # mean of proposal density
-            u1 = uu1 + stdu * rdns[it]    #  proposed u1
+            u1 = uu1 + stdu * rdns[it]    #  **PROPOSED** u1
 
             if u1 > uTH:       ###########   Stay in Binomial ##########
                 todist = _cd.__BNML__;    cross  = False
@@ -376,7 +338,7 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
                 #lpPR = 0.5*istdu2*(-((u1 - uu1)*(u1 - uu1)) + ((u0 - uu0)*(u0 - uu0)))  #  - (lnc0 - lnc1), lnc reciprocal of norm
                 lpPR = 0.5*istdu2*(((u1 - uu1)*(u1 - uu1)) - ((u0 - uu0)*(u0 - uu0)))  #  - (lnc0 - lnc1), lnc reciprocal of norm
             else:   ########  Switch to __NBML__  ####################
-                print "switch 2 NBML"
+                #print "switch 2 NBML"
                 todist = _cd.__NBML__;   cross  = True
                 u1 = 2*uTH - u1  #  u1 now a parameter of NB distribution   
                 p1 = 1 / (1 + _N.exp(-u1))
@@ -412,7 +374,7 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
                 #lpPR = 0.5*istdu2*(-((u1 - uu1)*(u1 - uu1)) + ((u0 - uu0)*(u0 - uu0)))
                 lpPR = 0.5*istdu2*(((u1 - uu1)*(u1 - uu1)) - ((u0 - uu0)*(u0 - uu0)))
             else:   ########  Switch to __BNML__  ####################
-                print "switch 2 BNML"
+                #print "switch 2 BNML"
                 todist = _cd.__BNML__;    cross  = True
                 u1 = 2*uTH - u1  #  u in NB distribution
                 p1 = 1 / (1 + _N.exp(-u1))
@@ -427,9 +389,10 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
                 lpPR = 0.5*istdu2*(-(((uTH-u1) - uu1)*((uTH-u1) - uu1)) + (((uTH-u0) - uu0)*((uTH-u0) - uu0)))
                 #lpPR = 0.5*istdu2*((((uTH-u1) - uu1)*((uTH-u1) - uu1)) - (((uTH-u0) - uu0)*((uTH-u0) - uu0)))
 
+        #dbtt2 = _tm.time()
         lFlB[0] = Llklhds(todist, cts, rn1, p1x)
         #print "proposed state  ll  %(1).3e   old state  ll  %(2).3e     new-old  %(3).3e" % {"1" : lFlB[0], "2" : lFlB[1], "3" : (lFlB[0] - lFlB[1])}
-
+        #dbtt3 = _tm.time()
         rn1rn0[0] = rn1;                   rn1rn0[1] = rn0
 
         ########  log of proposal probabilities
@@ -450,6 +413,7 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
         #print "lrat is %f" % lrat
         #rat  = _N.exp(lrat)
 
+        #dbtt4 = _tm.time()
         aln   = 1 if (lrat > 0) else _N.exp(lrat)
         #aln  = rat if (rat < 1)  else 1   #  if aln == 1, always accept
         if rds[it] < aln:   #  accept
@@ -466,8 +430,20 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
         dty[it] = dist
         us[it] = u0
         rns[it] = rn0    #  rn0 is the newly sampled value if accepted
+        #dbtt5 = _tm.time()
+        #dbtt21 += #dbtt2-#dbtt1
+        #dbtt32 += #dbtt3-#dbtt2
+        #dbtt43 += #dbtt4-#dbtt3
+        #dbtt54 += #dbtt5-#dbtt4
 
-    print "accepted %d" % accptd
+    # print "#timing start"
+    # print "t2t1+=%.4e" % #dbtt21
+    # print "t3t2+=%.4e" % #dbtt32
+    # print "t4t3+=%.4e" % #dbtt43
+    # print "t5t4+=%.4e" % #dbtt54
+    # print "#timing end"
+
+    #print "accepted %d" % accptd
     # fig = _plt.figure()
     # _plt.plot(llsV)
     # _plt.suptitle(accptd)

@@ -9,59 +9,6 @@ pTH  = 0.01
 uTH    = _N.log(pTH / (1 - pTH))
 logfact= None
 
-def Llklhds_OLD(type, ks, rn1, p1):
-    l1gt = 0
-    l1lt = 0
-    gt = _N.where(ks > 10)[0]
-    lt = _N.where(ks <= 10)[0]
-
-    try:
-        if type == _cd.__BNML__:
-            # if p large, rn1-ksf small   we are not dealing with this region
-            # if p small, ks small
-            if len(gt) > 0:
-                #print len(gt)
-                ksf = ks[gt]
-                p1f = p1[gt]
-                top = 0.5*_N.log(2*_N.pi*rn1) + rn1*_N.log(rn1) - rn1
-                b1  = 0.5*_N.log(2*_N.pi*ksf) + ksf*_N.log(ksf) - ksf
-                b2  = 0.5*_N.log(2*_N.pi*(rn1-ksf)) + (rn1-ksf)*_N.log(rn1-ksf) - (rn1-ksf)
-                l1gt  = _N.sum(top - b1 - b2 + ksf*_N.log(p1f) + (rn1-ksf)*_N.log(1 - p1f))
-            if len(lt) > 0:
-                ksf = ks[lt]
-                p1f = p1[lt]
-                l1lt  = _N.sum(_N.log(_sm.comb(rn1, ksf)) + ksf*_N.log(p1f) + (rn1-ksf)*_N.log(1 - p1f))
-
-            return l1lt + l1gt
-        if type == _cd.__NBML__:
-            ksrn1m1 = ks+rn1-1   #  ks + rn1 -1 > ks
-            rn1m1  = rn1-1
-
-            if len(gt) > 0:  # if gt, ksrn1m1 will also be OK to use Stirling
-                ksf = ks[gt]
-                p1f = p1[gt]
-                ksrn1m1f = ksrn1m1[gt]
-                top = 0.5*_N.log(2*_N.pi*(ksrn1m1f)) + (ksrn1m1f)*_N.log(ksrn1m1f) - (ksrn1m1f)
-                b1  = 0.5*_N.log(2*_N.pi*ksf) + ksf*_N.log(ksf) - ksf
-                b2  =_N.sum(_N.log(_N.linspace(1, rn1m1, rn1m1)))  # log(fact)
-
-                l1gt  = _N.sum(top - b1 - b2 + ksf*_N.log(p1f) + rn1*_N.log(1 - p1f))
-                #l1gt  = _N.sum(top - b1 - b2 + ksf*_N.log(p1f))
-            if len(lt) > 0:
-                ksf = ks[lt]
-                p1f = p1[lt]
-                l1lt  = _N.sum(_N.log(_sm.comb(ksf + rn1-1, ksf)) + ksf*_N.log(p1f) + rn1*_N.log(1 - p1f))
-                #l1lt  = _N.sum(_N.log(_sm.comb(ksf + rn1-1, ksf)))
-            return l1lt + l1gt
-
-    except Warning:
-        print "Warning raised:   !!!!!!!!"
-        print "type %d" % type
-        print "rn1  %d" % rn1
-        print ksf
-
-        raise
-
 def Llklhds(typ, ks, rn1, p1):
     global logfact
     N = len(ks)
@@ -69,6 +16,7 @@ def Llklhds(typ, ks, rn1, p1):
         return N*logfact[rn1]-_N.sum(logfact[ks]+logfact[rn1-ks]-ks*_N.log(p1) - (rn1-ks)*_N.log(1 - p1))
     else:
         return _N.sum(logfact[ks+rn1-1]-logfact[ks]  + ks*_N.log(p1) + rn1*_N.log(1 - p1))-N*logfact[rn1-1]
+
 
 def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
     if trials is not None:  # fillsmpx[trials] couldn't be passed as a pointer
@@ -149,7 +97,7 @@ def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
     xn   *= mags[maxJ]
     p1x = 1 / (1 + _N.exp(-(u0 + xoff)))
 
-    llsV = _N.empty(40)
+    llsV = _N.empty(16)
     print "printing cts"
     print cts
     bestRN = bestrn(mdl, cts, rn0, llsV, p1x)
@@ -193,8 +141,13 @@ def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
                 zsW[w, :, 0] = 1
 
     if J > 1:  # consensus of both windows
-        loInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) >= 0.5)[0]
-        hiInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) <  0.5)[0]
+        # if W > 1:
+        #     loInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) >= 0.5)[0]
+        #     hiInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) <  0.5)[0]
+        # else:
+        loInds = _N.where(zsW[0, :, 0] >= 0.5)[0]
+        hiInds = _N.where(zsW[0, :, 0] <  0.5)[0]
+
         zs[loInds, 0] = 1
         zs[hiInds, 1] = 1
     else:
@@ -228,39 +181,47 @@ def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
 
 
 def bestrn(dist, cnt, lmd0, llsV, p1x):
-    ##  given lmd0
+    ##  Conditioned on p1x's, what is the best rn?  Search around the
+    ##  vicinity of lmd0
     ##
-    ##
-    tt0 = _tm.time()
     dn   = int(lmd0*0.02)
     dn   = 1 if dn == 0 else dn
 
-    n0   = lmd0 - 20*dn
-    n1   = lmd0 + 20*dn
+    n0   = lmd0 - 8*dn
+    n1   = lmd0 + 8*dn
     n0   = 1 if n0 < 1 else n0
     if dist == _cd.__BNML__:
         n0min = _N.max(cnt) + 1
-        n0   = n0min if n0 < n0min else n0
+        if n0 < n0min:
+            n0 = n0min
+            n1 = n0min + 16
+            dn = 1
     
     candRNs = _N.arange(n0, n1, dn)
     #print len(candRNs)
     #print len(llsV)
-    j    = 0
+    j    = -1
 
     #llsV  = _N.empty(len(candRNs))
+    L      = len(candRNs)
+    if L == 0:
+        print "------------   L is 0"
+        print "n0  %(n0)d   n1  %(n1)d     dn  %(dn)d    lmd0*0.02  %(lmd0002)d" % {"n0" : n0, "n1" : n1, "dn" : dn, "lmd0002" : int(lmd0*0.02)}
+        if dist == _cd.__BNML__:
+            print "n0min is %d" % n0min
     for tryRN in candRNs:
-        llsV[j] = Llklhds(dist, cnt, tryRN, p1x)
         j += 1
-    for ij in xrange(len(candRNs), 40):
-        llsV[ij] = llsV[ij-1]
+        llsV[j] = Llklhds(dist, cnt, tryRN, p1x)
+
+    #for ij in xrange(len(candRNs), 40):
+    #    llsV[ij] = llsV[ij-1]
                      
     #fig = _plt.figure()
-    maxI = _N.where(_N.max(llsV) == llsV)[0][0]
+    maxI = _N.where(_N.max(llsV[0:L]) == llsV[0:L])[0][0]
     # print dn
     # print len(llsV)
     # print len(candRNs)
     # print "maxI   %d" % maxI
-    tt1 = _tm.time()
     #print "time in bestrn %.4f" % (tt1-tt0)
     return candRNs[maxI]
 
@@ -307,7 +268,7 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
     lls   = []
     accptd = 0
 
-    llsV = _N.empty(40)
+    llsV = _N.empty(16)
     #rn0 = bestrn(dist, cts, rn0, llsV, p0x)
 
     #print "uTH is %.3e" % uTH
@@ -330,7 +291,6 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
                 p1x = 1 / (1 + _N.exp(-(u1+xn)))
                 lmd0= int(Mk/p1)
                 rn1 = bestrn(todist, cts, lmd0, llsV, p1x)
-                #print "%(1)d   %(2)d" % {"1" : lmd0, "2" : rn1}
 
                 uu0  = -_N.log(rn1 * iMk - 1) # mean of proposal density
                 # log of probability

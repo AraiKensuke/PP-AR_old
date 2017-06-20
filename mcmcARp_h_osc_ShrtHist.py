@@ -59,8 +59,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
     Bi            = None
     rsds          = None
 
-    bOMP          = False    #  use openMP
-
     #  Gibbs
     ARord         = _cd.__NF__
     x             = None   #  true latent state
@@ -80,6 +78,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
     bIndOffset    = True
     peek          = 400
 
+    loghist       = None
+
     VIS           = None
 
     ignr          = 0
@@ -93,11 +93,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         ooN         = oo.N
         oo.x00         = _N.array(oo.smpx[:, 2])
         oo.V00         = _N.zeros((ooTR, ook, ook))
-        if oo.dohist:
-            oo.loghist = _N.zeros(oo.N+1)
-        else:
-            print "fixed hist is"
-            print oo.loghist
+        oo.loghist = _N.zeros(oo.N+1)
 
         if oo.processes > 1:
             pool = Pool(processes=oo.processes)
@@ -149,23 +145,26 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         RHS = _N.empty((oo.histknots, 1))
 
         print "-----------    histknots %d" % oo.histknots
-        if oo.h0_1 > 1:   #  no spikes in first few time bins
+        if oo.histPause:   #  no spikes in first few time bins
             #cInds = _N.array([0, 1, 5, 6, 7, 8, 9, 10])
-            cInds = _N.array([0, 4, 5, 6, 7, 8, 9])
+            #cInds = _N.array([0, 4, 5, 6, 7, 8, 9])
+            cInds = _N.array([0, 3, 4, 5, 6, 7, 8,])
             #vInds = _N.array([2, 3, 4])
-            vInds = _N.array([1, 2, 3,])
+            #vInds = _N.array([1, 2, 3,])
+            vInds = _N.array([1, 2, ])  #  bottom and top
             RHS[cInds, 0] = 0
             RHS[0, 0] = -5
         elif oo.hist_max_at_0:   #  no refractory period
             #cInds = _N.array([5, 6, 7, 8, 9, 10])
-            cInds = _N.array([3, 4, 5, 6, 7, 8, ])
-            vInds = _N.array([0, 1, 2, ])
+            #cInds = _N.array([3, 4, 5, 6, 7, 8, ])
+            cInds = _N.array([3, 4, 5, 6, 7, ])
+            vInds = _N.array([0, 1, 2])
             #vInds = _N.array([0, 1, 2, 3, 4])
             RHS[cInds, 0] = 0
-        else:
+        else:   #  
             #cInds = _N.array([5, 6, 7, 8, 9, 10])
-            cInds = _N.array([4, 5, 6, 7, 8, 9,])
-            vInds = _N.array([0, 1, 2, 3, ])
+            cInds = _N.array([3, 4, 5, 6, 7, 8, ])
+            vInds = _N.array([0, 1, 2, ])
             #vInds = _N.array([0, 1, 2, 3, 4])
             RHS[cInds, 0] = 0
 
@@ -191,8 +190,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         if oo.hS is None:
             oo.hS = _N.zeros(oo.histknots)
 
-        if oo.dohist:
-            _N.dot(Hbf, oo.hS, out=oo.loghist)
+        _N.dot(Hbf, oo.hS, out=oo.loghist)
         oo.stitch_Hist(ARo, oo.loghist, Msts)
 
         ##  ORDER OF SAMPLING
@@ -208,7 +206,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         while (it < runTO):
             t1 = _tm.time()
             it += 1
-
+            print it
             if (it % 10) == 0:
                 print it
             #  generate latent AR state
@@ -258,9 +256,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 #print vv.shape
                 #print oo.loghist.shape
                 _N.dot(Hbf, RHS[:, 0], out=oo.loghist)
-                oo.smp_hist[:, it] = oo.loghist
-                oo.stitch_Hist(ARo, oo.loghist, Msts)
-            else:
                 oo.smp_hist[:, it] = oo.loghist
                 oo.stitch_Hist(ARo, oo.loghist, Msts)
 
@@ -342,7 +337,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                         oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                         if oo.doBsmpx and (it % oo.BsmpxSkp == 0):
                             oo.Bsmpx[m, it / oo.BsmpxSkp, 2:]    = oo.smpx[m, 2:, 0]
-                elif not oo.bOMP:
+                else:
                     sxv = pool.map(_kfar.armdl_FFBS_1itrMP, tpl_args)
                     for m in xrange(ooTR):
                         oo.smpx[m, 2:] = sxv[m][0]
@@ -352,8 +347,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                         oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
                         if oo.doBsmpx and (it % oo.BsmpxSkp == 0):
                             oo.Bsmpx[m, it / oo.BsmpxSkp, 2:]    = oo.smpx[m, 2:, 0]
-                else:
-                    _kfarOMParmdl_FFBS_1itrOMP(oo.y, oo._d.Rv, oo._d.Fs, oo.q2, oo._d.Ns, oo._d.ks, oo._d.f_x[:, 0], oo._d.f_V[:, 0])
                         
                 stds = _N.std(oo.smpx[:, 2+oo.ignr:, 0], axis=1)
                 oo.mnStds[it] = _N.mean(stds, axis=0)
@@ -448,7 +441,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         # with open("mARp.dump", "rb") as f:
         # lm = pickle.load(f)
 
-    def run(self, runDir=None, trials=None, minSpkCnt=0, pckl=None, runlatent=False, dontrun=False, h0_1=None, h0_2=None, h0_3=None, h0_4=None, h0_5=None, readSmpls=False): ###########  RUN
+    def run(self, runDir=None, trials=None, minSpkCnt=0, pckl=None, runlatent=False, dontrun=False): ###########  RUN
         oo     = self    #  call self oo.  takes up less room on line
         if oo.processes > 1:
             os.system("taskset -p 0xffffffff %d" % os.getpid())
@@ -463,13 +456,11 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         oo.s2_x00       = _arl.dcyCovMat(oo.k, _N.ones(oo.k), 0.4)
         oo.restarts = 0
 
-        oo.loadDat(trials, h0_1=h0_1, h0_2=h0_2, h0_3=h0_3, h0_4=h0_4, h0_5=h0_5)
+        oo.loadDat(trials)
         oo.setParams()
 
-        print "readSmpls   "
-        print readSmpls
-
         if pckl is not None:
+
             oo.restarts = 1
             oo.F0 = _N.zeros(oo.k)
             if type(pckl) == list:   #  format for posterior mode
@@ -497,17 +488,6 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.t0_is_t_since_1st_spk = pckl["t0_is_t_since_1st_spk"]  #overwrite
                 oo.F0     = (-1*_Npp.polyfromroots(oo.pkldalfas)[::-1].real)[1:]
                 oo.F_alfa_rep = oo.pkldalfas.tolist()
-
-
-                if readSmpls:  #  probably not a run, later going to findMode
-                    print "here, in readSmpls"
-                    oo.allalfas  = pckl["allalfas"]
-                    oo.smp_u = pckl["u"]
-                    oo.smp_hS= pckl["h_coeffs"]
-                    oo.smp_q2= pckl["q2"]
-                    oo.smp_aS= pckl["aS"]
-                    oo.fs    = pckl["fs"]
-                    oo.amps  = pckl["amps"]
 
             if runlatent and (not dontrun):    #  just generate latent states
                 t1 = _tm.time()
@@ -608,8 +588,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                     oo._d.f_V[m] = sxv[m][2]
                     oo.smpx[m, 1, 0:ook-1]   = oo.smpx[m, 2, 1:]
                     oo.smpx[m, 0, 0:ook-2]   = oo.smpx[m, 2, 2:]
-                    if oo.doBsmpx and (it % oo.BsmpxSkp == 0):
-                        oo.Bsmpx[m, it / oo.BsmpxSkp, 2:]    = oo.smpx[m, 2:, 0]
+                    oo.Bsmpx[m, it, 2:]    = oo.smpx[m, 2:, 0]
 
             #ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
             #oo.allalfas[it] = oo.F_alfa_rep

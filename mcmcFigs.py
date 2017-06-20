@@ -615,26 +615,6 @@ def bottomLeftAxes(ax, bottomVis=True, leftVis=True):
     ax.spines["right"].axis.axes.tick_params(direction="outward", width=2)
     ax.spines["top"].axis.axes.tick_params(direction="outward", width=2)
 
-def arbitaryAxes(ax, axesVis=[True, True, True, True], x_tick_positions="bottom", y_tick_positions="left"):
-    """
-    Left, Bottom, Right, Top
-    "bottom", "top", "both", "none"
-    "left", "right", "both", "none"
-    """
-    ax.spines["left"].set_visible(axesVis[0])
-    ax.spines["bottom"].set_visible(axesVis[1])
-    ax.spines["right"].set_visible(axesVis[2])
-    ax.spines["top"].set_visible(axesVis[3])
-
-    ax.xaxis.set_ticks_position(x_tick_positions)
-    ax.yaxis.set_ticks_position(y_tick_positions)
-    ax.xaxis.set_label_position(x_tick_positions)
-    ax.yaxis.set_label_position(y_tick_positions)
-
-    ax.spines["right"].axis.axes.tick_params(direction="outward", width=2)
-    ax.spines["top"].axis.axes.tick_params(direction="outward", width=2)
-
-
 def vstackedPlots(ax, bottom=False):
     ax.spines["right"].set_visible(False)
     ax.spines["top"].set_visible(False)

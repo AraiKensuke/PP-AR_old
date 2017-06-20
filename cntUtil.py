@@ -3,11 +3,14 @@ import scipy.misc as _sm
 import commdefs as _cd
 import matplotlib.pyplot as _plt
 import time as _tm
+import scipy.stats as _ss
 
 #  connection between 
 pTH  = 0.01
 uTH    = _N.log(pTH / (1 - pTH))
 logfact= None
+
+ints = _N.arange(5000)
 
 def Llklhds(typ, ks, rn1, p1):
     global logfact
@@ -228,6 +231,7 @@ def bestrn(dist, cnt, lmd0, llsV, p1x):
 
 
 def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=0.5):
+    global ints, logfact
     """
     We need starting values for rn, u0, model
     """
@@ -250,7 +254,7 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
     if Mk == 0:
         return u0, rn0, dist   # no data assigned to this 
     iMk = 1./Mk   #  if Mk == 0, just make it a small number?
-    nmin= _N.max(cts) if len(cts) > 0 else 0   #  if n too small, can't generate data
+    nmin= _N.max(cts)+1 if len(cts) > 0 else 0   #  if n too small, can't generate data
     rmin= 1
 
     lFlB = _N.empty(2)
@@ -261,14 +265,14 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
 
     p0  = 1 / (1 + _N.exp(-u0))
     p0x = 1 / (1 + _N.exp(-(u0+xn)))
+
     lFlB[1] = Llklhds(dist, cts, rn0, p0x)
-    lBg = lFlB[1]
+    lBg = lFlB[1]   #  
 
     cross  = False
     lls   = []
     accptd = 0
 
-    llsV = _N.empty(16)
     #rn0 = bestrn(dist, cts, rn0, llsV, p0x)
 
     #print "uTH is %.3e" % uTH
@@ -278,7 +282,10 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
     #dbtt43 = 0
     #dbtt54 = 0
 
+    #  the poisson distribution needs to be truncated
+
     for it in xrange(iters):
+        bDone = False
         #
         #dbtt1 = _tm.time()
         if dist == _cd.__BNML__:
@@ -289,26 +296,77 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
                 todist = _cd.__BNML__;    cross  = False
                 p1 = 1 / (1 + _N.exp(-u1))
                 p1x = 1 / (1 + _N.exp(-(u1+xn)))
-                lmd0= int(Mk/p1)
-                rn1 = bestrn(todist, cts, lmd0, llsV, p1x)
+                lmd1= Mk/p1
 
-                uu0  = -_N.log(rn1 * iMk - 1) # mean of proposal density
-                # log of probability
-                #print "d1  %(1) .3f    %(2) .3f" % {"1" : (u1 - uu1), "2" : (u0 - uu0)}
-                #lpPR = 0.5*istdu2*(-((u1 - uu1)*(u1 - uu1)) + ((u0 - uu0)*(u0 - uu0)))  #  - (lnc0 - lnc1), lnc reciprocal of norm
-                lpPR = 0.5*istdu2*(((u1 - uu1)*(u1 - uu1)) - ((u0 - uu0)*(u0 - uu0)))  #  - (lnc0 - lnc1), lnc reciprocal of norm
+                llmd1 = _N.log(lmd1)
+                trms = _N.exp(ints[0:nmin]*llmd1 - logfact[0:nmin] - lmd1)
+                lC1 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
+
+                while not bDone:
+                    rnds = _ss.poisson.rvs(lmd1, size=5)
+                    pois = _N.where(rnds >= nmin)[0]
+                    if len(pois) > 0:
+                        bDone = True
+                        rn1   = rnds[pois[0]]   # bn parameter
+
+                #print rn1
+                lpm1 = rn1 * llmd1 - logfact[rn1] - lmd1 - lC1  # pmf
+
+                #  mean 
+
+                if rn1*iMk-1 <= 0:
+                    print "woa.  %(rn1)d   %(imk).3f"   % {"rn1" : rn1, "imk" : iMk}
+                uu0  = -_N.log(rn1 * iMk - 1) # mean of reverse proposal density
+                lmd0= Mk/p0
+                llmd0 = _N.log(lmd0)
+                trms = _N.exp(ints[0:nmin]*llmd0 - logfact[0:nmin] - lmd0)
+                lC0 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
+                lpm0 = rn0 * llmd0 - logfact[rn0] - lmd0 - lC0  # pmf
+
+                # print C1
+                # print lmd1
+                # print C0
+                # print lmd0
+                # print "A  pm0  %(0).3e   pm1  %(1).3e" % {"0" : pm0, "1" : pm1} 
+                
+
+                # print u1
+                # print uu1
+                # print u0
+                # print uu0
+                lpPR = 0.5*istdu2*(((u1 - uu1)*(u1 - uu1)) - ((u0 - uu0)*(u0 - uu0))) + lpm0 - lpm1   #, lnc reciprocal of norm
+                #print "---------%(1).4e   %(2).4e" % {"1" : _N.log(pm1/pm0), "2" : lpPR}
             else:   ########  Switch to __NBML__  ####################
                 #print "switch 2 NBML"
                 todist = _cd.__NBML__;   cross  = True
                 u1 = 2*uTH - u1  #  u1 now a parameter of NB distribution   
                 p1 = 1 / (1 + _N.exp(-u1))
                 p1x = 1 / (1 + _N.exp(-(u1+xn)))
-                lmd0 = int((1./p1 - 1)*Mk)
-                rn1 = bestrn(todist, cts, lmd0, llsV, p1x)
+                lmd1 = (1./p1 - 1)*Mk
+
+                llmd1 = _N.log(lmd1)
+                trms = _N.exp(ints[0:rmin]*llmd1 - logfact[0:rmin] - lmd1)
+                lC1 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
+
+                while not bDone:
+                    rnds = _ss.poisson.rvs(lmd1, size=5)
+                    pois = _N.where(rnds >= rmin)[0]  
+                    if len(pois) > 0:
+                        bDone = True
+                        rn1   = rnds[pois[0]]   #  nb parameter
+                lpm1 = rn1 * llmd1 - logfact[rn1] - lmd1 - lC1  # pmf
+
+                lmd0= (1./pTH - 1) * Mk
+                llmd0 = _N.log(lmd0)   #  param is BN parameter
+                trms = _N.exp(ints[0:nmin]*llmd0 - logfact[0:nmin] - lmd0)
+                lC0 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
+                lpm0 = rn0 * llmd0 - logfact[rn0] - lmd0 - lC0  # pmf
+
+                #print "B  pm0  %(0).3e   pm1  %(1).3e" % {"0" : pm0, "1" : pm1}
 
                 uu0  = -_N.log(rn1 * iMk) # mean of proposal density
-                #lpPR = 0.5*istdu2*(-(((uTH-u1) - uu1)*((uTH-u1) - uu1)) + (((uTH-u0) - uu0)*((uTH-u0) - uu0)))
-                lpPR = 0.5*istdu2*((((uTH-u1) - uu1)*((uTH-u1) - uu1)) - (((uTH-u0) - uu0)*((uTH-u0) - uu0)))
+
+                lpPR = 0.5*istdu2*((((uTH-u1) - uu1)*((uTH-u1) - uu1)) - (((uTH-u0) - uu0)*((uTH-u0) - uu0))) + lpm0 - lpm1
         elif dist == _cd.__NBML__:
             uu1  = -_N.log(rn0 * iMk) # mean of proposal density
             u1 = uu1 + stdu * rdns[it]
@@ -318,36 +376,65 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
                 todist = _cd.__NBML__;    cross  = False
                 p1 = 1 / (1 + _N.exp(-u1))
                 p1x = 1 / (1 + _N.exp(-(u1+xn)))
-                lmd0 = int((1./p1 - 1)*Mk)
-                #print "lmd0   %d" % lmd0
-                rn1 = bestrn(todist, cts, lmd0, llsV, p1x)
+                lmd1 = (1./p1 - 1)*Mk
 
-                #rn1 = trPoi(lmd, rmin)   #  mean is p0/Mk
-                # bLargeP = (p0 > 0.3) and (p1 > 0.3)
-                # if bLargeP:#    fairly large p.  Exact proposal ratio
-                #     lmd= Mk*((1-0.5*(p0+p1))/(0.5*(p0+p1)))
-                # else:          #  small p.  prop. ratio far from lower lim of n
+                llmd1 = _N.log(lmd1)
+                trms = _N.exp(ints[0:rmin]*llmd1 - logfact[0:rmin] - lmd1)
+                lC1 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
+
+                while not bDone:
+                    rnds = _ss.poisson.rvs(lmd1, size=5)
+                    pois = _N.where(rnds >= rmin)[0]
+                    if len(pois) > 0:
+                        bDone = True
+                        rn1   = rnds[pois[0]]   # bn parameter
+
+                lpm1 = rn1 * llmd1 - logfact[rn1] - lmd1 - lC1  # pmf
+
                 #     lmd1= Mk*((1-p1)/p1);  lmd0= Mk*((1-p0)/p0);   lmd= lmd1
                 uu0  = -_N.log(rn1 * iMk) # mean of proposal density
+                lmd0 = (1./p0 - 1)*Mk
+                llmd0 = _N.log(lmd0)
+                trms = _N.exp(ints[0:rmin]*llmd0 - logfact[0:rmin] - lmd0)
+                lC0 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
+                lpm0 = rn0 * llmd0 - logfact[rn0] - lmd0 - lC0  # pmf
+
+                #print "C  pm0  %(0).3e   pm1  %(1).3e" % {"0" : pm0, "1" : pm1}
                 # log of probability
 
-                #lpPR = 0.5*istdu2*(-((u1 - uu1)*(u1 - uu1)) + ((u0 - uu0)*(u0 - uu0)))
-                lpPR = 0.5*istdu2*(((u1 - uu1)*(u1 - uu1)) - ((u0 - uu0)*(u0 - uu0)))
+                lpPR = 0.5*istdu2*(((u1 - uu1)*(u1 - uu1)) - ((u0 - uu0)*(u0 - uu0)))+ lpm0 - lpm1
             else:   ########  Switch to __BNML__  ####################
                 #print "switch 2 BNML"
                 todist = _cd.__BNML__;    cross  = True
                 u1 = 2*uTH - u1  #  u in NB distribution
                 p1 = 1 / (1 + _N.exp(-u1))
                 p1x = 1 / (1 + _N.exp(-(u1+xn)))
-                lmd0= int(Mk/p1)
-                rn1 = bestrn(todist, cts, lmd0, llsV, p1x)
+                lmd1= Mk/p1
 
-                #lmd = Mk/p1
-                #rn1 = trPoi(lmd, nmin)   #  mean is p0/Mk
-                #lmd1= Mk/p1;     lmd0= Mk*((1-p0)/p0);     lmd = lmd1
+                #print "%(gi)d   %(lmd1).4f" % {"gi" : GibbsIter, "lmd1" : lmd1}
+                #print "%(Mk)d   %(p1).4e" % {"Mk" : Mk, "p1" : p1}
+                llmd1 = _N.log(lmd1)
+                trms = _N.exp(ints[0:nmin]*llmd1 - logfact[0:nmin] - lmd1)
+                lC1 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
+
+                while not bDone:
+                    rnds = _ss.poisson.rvs(lmd1, size=5)
+                    pois = _N.where(rnds >= nmin)[0]  
+                    if len(pois) > 0:
+                        bDone = True
+                        rn1   = rnds[pois[0]]   #  nb parameter
+                lpm1 = rn1 * llmd1 - logfact[rn1] - lmd1 - lC1  # pmf
+
+                lmd0 = Mk/pTH
+                llmd0 = _N.log(lmd0)
+                trms = _N.exp(ints[0:rmin]*llmd0 - logfact[0:rmin] - lmd0)
+                lC0 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
+                lpm0 = rn0 * llmd0 - logfact[rn0] - lmd0 - lC0  # pmf
+
+                #print "D  pm0  %(0).3e   pm1  %(1).3e" % {"0" : pm0, "1" : pm1}
                 uu0  = -_N.log(rn1 * iMk - 1) # mean of proposal density
-                lpPR = 0.5*istdu2*(-(((uTH-u1) - uu1)*((uTH-u1) - uu1)) + (((uTH-u0) - uu0)*((uTH-u0) - uu0)))
-                #lpPR = 0.5*istdu2*((((uTH-u1) - uu1)*((uTH-u1) - uu1)) - (((uTH-u0) - uu0)*((uTH-u0) - uu0)))
+                lpPR = 0.5*istdu2*(-(((uTH-u1) - uu1)*((uTH-u1) - uu1)) + (((uTH-u0) - uu0)*((uTH-u0) - uu0)))+ lpm0 - lpm1
+
 
         #dbtt2 = _tm.time()
         lFlB[0] = Llklhds(todist, cts, rn1, p1x)

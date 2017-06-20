@@ -14,6 +14,7 @@ import matplotlib.pyplot as _plt
 import scipy.stats as _ss
 import cntUtil as _cU
 import time as _tm
+import pickle
 
 class mcmcARcntMW(mAR.mcmcAR):
     ###  prior on F0 truncated normal
@@ -32,6 +33,7 @@ class mcmcARcntMW(mAR.mcmcAR):
     LN        = None
 
     W      = 1
+    outSmplFN = "smpls.dump"
 
     ###################################   RUN   #########
     def loadDat(self, usewin=None):
@@ -50,11 +52,19 @@ class mcmcARcntMW(mAR.mcmcAR):
 
         if usewin is not None:
             oo.W = len(usewin)
-            for l in xrange(len(usewin)):
-                usewin[l] = usewin[l]+2
-            x_st_cnts[:, range(2, 2+oo.W)] = x_st_cnts[:, usewin]
+            oo.y = _N.empty((oo.t1-oo.t0, oo.W), dtype=_N.int)
+
+            print oo.W
+            for il in xrange(oo.W):
+                print type(usewin[il])
+                if type(usewin[il]) == _N.ndarray:
+                    oo.y[:, il] = _N.sum(x_st_cnts[:, usewin[il]+2], axis=1)
+                else:
+                    oo.y[:, il] = x_st_cnts[:, usewin[il]+2]
+
         else:
             oo.W = nWinsInData
+            oo.y   = _N.array(x_st_cnts[oo.t0:oo.t1, ctCol:ctCol+oo.W], dtype=_N.int)
 
         oo.xT  = x_st_cnts[oo.t0:oo.t1, 0]
         #######  Initialize z
@@ -62,7 +72,7 @@ class mcmcARcntMW(mAR.mcmcAR):
         stCol = 1   #  column containing counts
         ctCol = 2   #  column containing counts
 
-        oo.y   = _N.array(x_st_cnts[oo.t0:oo.t1, ctCol:ctCol+oo.W], dtype=_N.int)
+
         oo.st  = _N.array(x_st_cnts[oo.t0:oo.t1, stCol], dtype=_N.int)
         oo.x   = x_st_cnts[oo.t0:oo.t1, 0]
         oo.zs  = _N.zeros((oo.N+1, oo.J), dtype=_N.int)
@@ -105,10 +115,10 @@ class mcmcARcntMW(mAR.mcmcAR):
         oo.x00 = 0
         oo.V00 = 0.5#oo.B_V00*_ss.invgamma.rvs(oo.a_V00)
         oo.smp_F        = _N.zeros(oo.NMC + oo.burn)
-        oo.smp_zs       = _N.zeros((oo.NMC + oo.burn, oo.N+1, oo.J), dtype=_N.int)
-        oo.smp_rn       = _N.zeros((oo.NMC + oo.burn, oo.W, oo.J), dtype=_N.int)
+        oo.smp_zs       = _N.zeros((oo.NMC + oo.burn, oo.N+1, oo.J), dtype=_N.bool)
+        oo.smp_rn       = _N.zeros((oo.NMC + oo.burn, oo.W, oo.J), dtype=_N.int16)
         oo.smp_u        = _N.zeros((oo.NMC + oo.burn, oo.W, oo.J))
-        oo.smp_dty      = _N.zeros((oo.NMC + oo.burn, oo.W, oo.J), dtype=_N.int)
+        oo.smp_dty      = _N.zeros((oo.NMC + oo.burn, oo.W, oo.J), dtype=_N.int16)
         oo.smp_q2       = _N.zeros(oo.NMC + oo.burn)
         oo.smp_m        = _N.zeros((oo.NMC + oo.burn, oo.J))
 
@@ -354,12 +364,12 @@ class mcmcARcntMW(mAR.mcmcAR):
             #dbtt7 = _tm.time()
             # print "#timing start"
             # print "nt+= 1"
-            # print "t2t1+=%.4e" % (dbtt2-dbtt1)
-            # print "t3t2+=%.4e" % (dbtt3-dbtt2)
-            # print "t4t3+=%.4e" % (dbtt4-dbtt3)
-            # print "t5t4+=%.4e" % (dbtt5-dbtt4)
-            # print "t6t5+=%.4e" % (dbtt6-dbtt5)
-            # print "t7t6+=%.4e" % (dbtt7-dbtt6)
+            # print "t2t1+=%.4e" % (#dbtt2-#dbtt1)
+            # print "t3t2+=%.4e" % (#dbtt3-#dbtt2)
+            # print "t4t3+=%.4e" % (#dbtt4-#dbtt3)
+            # print "t5t4+=%.4e" % (#dbtt5-#dbtt4)
+            # print "t6t5+=%.4e" % (#dbtt6-#dbtt5)
+            # print "t7t6+=%.4e" % (#dbtt7-#dbtt6)
             # print "#timing end"
 
             ### offset
@@ -400,3 +410,27 @@ class mcmcARcntMW(mAR.mcmcAR):
 
         mtch = _N.where(zFt == zTr)[0]
         return zTr, zFt, (float(len(mtch))/(oo.N+1))
+
+    def dump_smps(self, dir=None):
+        oo    = self
+        pcklme = {}
+
+        pcklme["F"]    = oo.smp_F
+        pcklme["q2"]   = oo.smp_q2
+        pcklme["u"]    = oo.smp_u
+        pcklme["m"]    = oo.smp_m
+        pcklme["dty"]  = oo.smp_dty
+
+        pcklme["Bsmpx"]    = oo.Bsmpx
+        pcklme["zs"]   = oo.smp_zs
+
+        if dir is None:
+            dmp = open(oo.outSmplFN, "wb")
+        else:
+            dmp = open("%(d)s/%(sfn)s" % {"d" : dir, "sfn" : oo.outSmplFN}, "wb")
+        pickle.dump(pcklme, dmp, -1)
+        dmp.close()
+
+        # import pickle
+        # with open("smpls.dump", "rb") as f:
+        # lm = pickle.load(f)

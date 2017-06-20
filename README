@@ -33,4 +33,3 @@ File format is 3 * (total trials) columns x N time points per trial
 Output:
 $(RESDIR)/wp_tr1-tr2_#C_#R/smpls-N.dump
 
-Which is a pickle

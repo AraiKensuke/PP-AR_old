@@ -17,7 +17,7 @@ setname="LIF-"
  #  dV = -V/(RC) + I/C
 #  dV = -V/tau + I/C  = -V/tau + eps I
 
-TR  = 60;   N   = 1000;   dt  = 0.001     #  1ms
+TR  = 120;   N   = 1000;   dt  = 0.001     #  1ms
 trim=0;
 ISItmscl = 300
 
@@ -33,6 +33,9 @@ B          = None;     a        = None;      aNz      = None  #  spline
 us         = None
 
 oscCS      = None;    etme      = None;    #  oscCS coupling strength over trial
+nPSTHs     = 1   # number of psths
+psthTypsPc = None  # ratio of each psth tpe
+psthThisTrial = None   # which psth is active for a given trial
 
 nRhythms   = None;
 rs         = None;     ths      = None;      alfa     = None;
@@ -57,7 +60,7 @@ cand   = 1;    #  if we want to ensure relatively large amplitude waveforms, set
 buff   = 200
 
 def create(setname):
-    global lowQs, lowQpc, f0VAR, oscCS, etme, xmultLo, updn, buff
+    global lowQs, lowQpc, f0VAR, oscCS, etme, xmultLo, updn, buff, thsVAR, a, B, Is, psthThisTrial, nPSTHs, psthTypsPc
 
     copyfile("%s.py" % setname, "%(s)s/%(s)s.py" % {"s" : setname, "to" : setFN("%s.py" % setname, dir=setname, create=True)})
 
@@ -102,16 +105,30 @@ def create(setname):
     xprbsdN= _N.empty((N, 3*TR))
     isis  = []
     bGivenLowQs = True
+    bGivenPSTHbyTrial = True
     if lowQs is None:
         lowQs = []
         bGivenLowQs = False
+    if (psthTypsPc is None) or (nPSTHs == 1):
+        bGivenPSTHbyTrial = False        
+        psthThisTrial = _N.zeros(TR, dtype=_N.int)
+        nknts = a.shape[0]
+    else:
+        crat = _N.zeros(len(psthTypsPc)+1)
+        for ityp in xrange(len(psthTypsPc)):
+            crat[ityp+1] = crat[ityp] + psthTypsPc[ityp]
+        nknts = a.shape[1]
+        psthThisTrial = _N.empty(TR, dtype=_N.int)
+        for tr in xrange(TR):
+            rnd = _N.random.rand()
+            typ = _N.where((rnd > crat[0:-1]) & (rnd < crat[1:]))[0][0]
+            psthThisTrial[tr] = typ
 
     spksPT= _N.empty(TR)
-    nknts = a.shape[0]
 
-    currentsOth = _N.empty((N+buff, TR))
+    currentsPSTH = _N.empty((N+buff, TR))
     currentsOsc = _N.empty((N+buff, TR))
-    currentsUpDn = _N.empty((N+buff, TR))
+    currentsUpDn = _N.empty((N+buff, TR))   #  slow up-downs
 
     for tr in xrange(TR):
         V[0]  = 0.1*_N.random.randn()
@@ -158,10 +175,17 @@ def create(setname):
 
         dN[:] = 0
 
-        _psth  = _N.dot(B, a + aNz*_N.random.randn(nknts))
-        psth   = _N.empty(N+buff)
-        psth[0:buff] = _psth[0]
-        psth[buff:]  = _psth
+        _psth    = _N.empty((nPSTHs, N))
+        psth     = _N.empty((nPSTHs, N+buff))
+        for np in xrange(nPSTHs):
+            if nPSTHs == 1:
+                _psth[np]  = _N.dot(B, a + aNz*_N.random.randn(nknts))
+            else:
+                _N.dot(B, a[np] + aNz*_N.random.randn(nknts))
+                _psth[np]  = _N.dot(B, a[np] + aNz*_N.random.randn(nknts))
+            psth[np]   = _N.empty(N+buff)
+            psth[np, 0:buff] = _psth[np, 0]
+            psth[np, buff:]  = _psth[np]
         xBest  = _N.empty(N+buff)
         xBest[0:buff] = 0#_xBest[0:buff][::-1]
         xBest[buff:]  = _xBest
@@ -169,11 +193,11 @@ def create(setname):
         #etmeBUF   = _N.ones((TR, N+buff))
         #etmeBUF[:, buff:] = etme
         for n in xrange(N-1+buff):
-            currentsOth[n, tr] = Is[tr] + psth[n]
+            currentsPSTH[n, tr] = psth[psthThisTrial[tr], n]
             currentsOsc[n, tr] = xBest[n]
             currentsUpDn[n, tr] = updn[tr, n]
 
-            dV[n] = -V[n] / tau + eps[n] + currentsOth[n, tr] + oscCS[tr]*currentsOsc[n, tr]
+            dV[n] = -V[n] / tau + eps[n] + currentsPSTH[n, tr] + Is[tr] + oscCS[tr]*currentsOsc[n, tr]
 
             V[n+1] = V[n] + dV[n]*dt
 
@@ -190,12 +214,23 @@ def create(setname):
         xprbsdN[:, tr*3 + 2] = dN[buff:]
         isis.extend(_U.toISI([sTs])[0])
 
-    fmt = "%.2f  " * TR
-    _N.savetxt(resFN("currentsOth.dat", dir=setname, create=True), currentsOth[buff:], fmt=fmt)
-    fmt = "%.2f  " * TR
+    fmt = "%.3f  " * TR
+    _N.savetxt(resFN("currentsPSTH.dat", dir=setname, create=True), currentsPSTH[buff:], fmt=fmt)
+    fmt = "%.3f  "
+    _N.savetxt(resFN("currentsIs.dat", dir=setname, create=True), Is, fmt=fmt)
+
+    fmt = "%.3f  " * TR
     _N.savetxt(resFN("currentsUpDn.dat", dir=setname, create=True), currentsUpDn[buff:], fmt=fmt)
-    fmt = "%.2f  " * TR
+    fmt = "%.3f  " * TR
     _N.savetxt(resFN("currentsOsc.dat", dir=setname, create=True), currentsOsc[buff:], fmt=fmt)
+
+    if bGivenLowQs:
+        fmt = "%d"
+        _N.savetxt(resFN("lowQs.dat", dir=setname, create=True), lowQs, fmt=fmt)
+    if bGivenPSTHbyTrial:
+        fmt = "%d"
+        _N.savetxt(resFN("psthTyps.dat", dir=setname, create=True), psthThisTrial, fmt=fmt)
+
 
     fmt = "% .2e %.3f %d " * TR
     _N.savetxt(resFN("xprbsdN.dat", dir=setname, create=True), xprbsdN, fmt=fmt)

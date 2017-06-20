@@ -61,7 +61,8 @@ def armdl_FFBS_1itrMP(args):   #  approximation
     smXN = _N.random.multivariate_normal(fx[N,:,0], fV[N], size=1)
     #t1 = _tm.time()
     #smpls = _kfcom.BSvecChol(F, N, k, GQGT, fx, fV, smXN)
-    smpls = _kfcom.BSvecSVD_new(F, N, k, GQGT, fx, fV, smXN)
+    #smpls = _kfcom.BSvecSVD_new(F, N, k, GQGT, fx, fV, smXN)
+    smpls = _kfcom.BSvec(F, N, k, GQGT, fx, fV, smXN)
     #t2 = _tm.time()
     #print (t2-t1)
     return [smpls, fx, fV]
@@ -110,7 +111,7 @@ def FFdv(y, Rv, N, k, F, GQGT, fx, fV):   #  approximate KF    #  k==1,dynamic v
         pxmv[n, 0, 0] = dd + Fmv[0, 0]*fxmv[n-1, 0, 0]
 
         _N.dot(fV[n - 1], F.T, out=VFT)
-        _N.dot(F, VFT, out=pV[n])
+        _N.dot(F, VFT, out=pV[n])          #  prediction
         pVmv[n, 0, 0]    += q2
         mat  = 1 / (pVmv[n, 0, 0] + Rvmv[n])  #  scalar
 

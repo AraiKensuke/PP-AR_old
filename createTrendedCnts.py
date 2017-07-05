@@ -7,6 +7,7 @@ import numpy as _N
 import kflib as _kfl
 import matplotlib.pyplot as _plt
 import mcmcFigs as mF
+import os
 
 ####   
 #  _N.sin(t_orw)    #  t is an offseted random walk
@@ -33,7 +34,7 @@ ARcf     = None
 N        = None
 amp      = None
 
-def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=True, epspng="png"):
+def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=True, epspng="png", overwrite=True):
     global m, rn, p, W, J, u, N, amp, model
     if not dontcopy:
         copyfile("%s.py" % setname, "%(s)s/%(s)s.py" % {"s" : setname, "to" : setFN("%s.py" % setname, dir=setname, create=True)})
@@ -128,7 +129,6 @@ def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=Tr
             for w in xrange(W):
                 data[t, tr*COLS+2+w]  = cts[t, w]
 
-    print cts
     ctstr = ""
     for w in xrange(W):
         ctstr += "%d "
@@ -137,7 +137,8 @@ def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=Tr
 
     #return fmtstr, data, cts
 
-    _N.savetxt(resFN("%s.dat" % basefn, dir=setname, create=True, env_dirname=env_dirname), data, fmt=fmtstr)
+    if (not os.access(resFN("%s.dat" % basefn, dir=setname, env_dirname=env_dirname), os.F_OK)) or overwrite:
+        _N.savetxt(resFN("%s.dat" % basefn, dir=setname, create=True, env_dirname=env_dirname), data, fmt=fmtstr)
 
     for w in xrange(W):
         fig =_plt.figure(figsize=(13, 3.5*2))

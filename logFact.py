@@ -1,6 +1,6 @@
 import pickle
 
-N   = 200000
+N   = 500000
 lfi    = _N.empty(N)     # log n!  lfi[0] = log 0!.  lfi[1] = log 1!...
 logInts = _N.empty(N)     # log n
 

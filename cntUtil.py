@@ -4,13 +4,24 @@ import commdefs as _cd
 import matplotlib.pyplot as _plt
 import time as _tm
 import scipy.stats as _ss
+import os
 
 #  connection between 
-pTH  = 0.01
-uTH    = _N.log(pTH / (1 - pTH))
+pTH1  = 0.005
+#pTH2  = 0.001
+pTH2  = 0.15
+
+ipTH1 = 1./pTH1
+ipTH2 = 1./pTH2
+uTH1    = _N.log(pTH1 / (1 - pTH1))
+uTH2    = _N.log(pTH2 / (1 - pTH2))
 logfact= None
 
-ints = _N.arange(5000)
+ints = _N.arange(20000)
+
+def _init(lf):
+    global logfact 
+    logfact = lf
 
 def Llklhds(typ, ks, rn1, p1):
     global logfact
@@ -20,8 +31,7 @@ def Llklhds(typ, ks, rn1, p1):
     else:
         return _N.sum(logfact[ks+rn1-1]-logfact[ks]  + ks*_N.log(p1) + rn1*_N.log(1 - p1))-N*logfact[rn1-1]
 
-
-def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
+def startingValues(cts, w, lh, fillsmpx=None, cv0=None, trials=None):
     if trials is not None:  # fillsmpx[trials] couldn't be passed as a pointer
         cts = cts[trials]   # fillsmpx = fillsmpx[trials] creates new array
     else:                   # so we must use fillsmpx[trials] = ...  for assign
@@ -45,7 +55,10 @@ def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
 
     for ep in xrange(Npcs):
         mns[ep]  = _N.mean(cts[ep*epS:(ep+1)*epS]) # OK even if overshoot 
-        cvs[ep]       = _N.std(cts[ep*epS:(ep+1)*epS])**2 / mns[ep]
+        if mns[ep] > 0:
+            cvs[ep]       = _N.std(cts[ep*epS:(ep+1)*epS])**2 / mns[ep]
+        else:
+            cvs[ep]       = 0
     if cv0 is None:
         cv0   = _N.mean(cvs)   #  only set this if not passed in
 
@@ -84,7 +97,6 @@ def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
     j    = 0
 
     for mag in _N.linspace(0, 1, magStps):
-        print "mag %f" % mag
         p1x = 1 / (1 + _N.exp(-(u0 + mag*xoff)))
         lls[j] = Llklhds(mdl, cts, rn0, p1x)
         j += 1
@@ -101,13 +113,14 @@ def startingValues(cts, fillsmpx=None, cv0=None, trials=None):
     p1x = 1 / (1 + _N.exp(-(u0 + xoff)))
 
     llsV = _N.empty(16)
-    print "printing cts"
-    print cts
     bestRN = bestrn(mdl, cts, rn0, llsV, p1x)
-    fig = _plt.figure()
+    fig = _plt.figure(figsize=(5, 8))
+    ax  = fig.add_subplot(2, 1, 1)
     _plt.hist(cts, bins=_N.linspace(0, 50, 51))
+    ax  = fig.add_subplot(2, 1, 2)
+    _plt.plot(llsV)
     FF  = _N.std(cts)**2/_N.mean(cts)
-    _plt.suptitle("bestRN %(br)d   FF %(FF).3f" % {"br" : bestRN, "FF" : FF})
+    _plt.suptitle("w %(w)d  lh %(lh)d    bestRN %(br)d   FF %(FF).3f" % {"br" : bestRN, "FF" : FF, "w" : w, "lh" : lh})
     
     # print "FF %.3f" % FF
     #print bestRN
@@ -144,12 +157,12 @@ def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
                 zsW[w, :, 0] = 1
 
     if J > 1:  # consensus of both windows
-        # if W > 1:
-        #     loInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) >= 0.5)[0]
-        #     hiInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) <  0.5)[0]
-        # else:
-        loInds = _N.where(zsW[0, :, 0] >= 0.5)[0]
-        hiInds = _N.where(zsW[0, :, 0] <  0.5)[0]
+        if WNS > 1:
+            loInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) >= 0.55)[0]
+            hiInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) <  0.45)[0]
+        else:
+            loInds = _N.where(zsW[0, :, 0] >= 0.5)[0]
+            hiInds = _N.where(zsW[0, :, 0] <  0.5)[0]
 
         zs[loInds, 0] = 1
         zs[hiInds, 1] = 1
@@ -164,11 +177,11 @@ def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
     fs   = _N.zeros((WNS, Nss))
     for w in xrange(WNS-1, -1, -1):
         for j in xrange(J):
-            print "j is %d" % j
+            print "w is %(w)d    j is %(j)d" % {"w" : w, "j" : j}
             trls = _N.where(zs[:, j] == 1)[0]
 
             #  1 / (1-p) = c      1/c = 1-p   p = 1 - 1/c
-            u0, bestRN, mdl = startingValues(cts[:, w], fillsmpx=fs[w], trials=trls)
+            u0, bestRN, mdl = startingValues(cts[:, w], w, j, fillsmpx=fs[w], trials=trls)
             #print "mean cts %.3f" % _N.mean(cts[trls, w])
             p0    = 1 / (1 + _N.exp(-u0))
             cv0s[w, j] = (1 - p0) if (mdl == _cd.__BNML__) else 1 / (1 - p0)
@@ -191,8 +204,8 @@ def bestrn(dist, cnt, lmd0, llsV, p1x):
     dn   = 1 if dn == 0 else dn
 
     n0   = lmd0 - 8*dn
-    n1   = lmd0 + 8*dn
     n0   = 1 if n0 < 1 else n0
+    n1   = n0 + 16*dn
     if dist == _cd.__BNML__:
         n0min = _N.max(cnt) + 1
         if n0 < n0min:
@@ -229,8 +242,7 @@ def bestrn(dist, cnt, lmd0, llsV, p1x):
     return candRNs[maxI]
 
 
-
-def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=0.5):
+def cntmdlMCMCOnly(GibbsIter, iters, w, j, u0, rn0, dist, cts, rns, us, dty, xn, jxs, jmp, lls, accptdiff, llklhdrs, lpprs, stdu=0.03):
     global ints, logfact
     """
     We need starting values for rn, u0, model
@@ -247,7 +259,12 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
     # print dist
     # print cts
     #  proposal parameters
-    stdu2= stdu**2;
+
+    iTryAgain = 0
+    #  if accptd too small, increase stdu and try again
+    #  if accptd is 0, the sampled params returned for conditional posterior
+    #  are not representative of the conditional posterior
+    stdu2= stdu**2
     istdu2= 1./ stdu2
 
     Mk = _N.mean(cts) if len(cts) > 0 else 0  #  1comp if nWins=1, 2comp
@@ -263,15 +280,13 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
     rds  = _N.random.rand(iters)
     rdns = _N.random.randn(iters)
 
-    p0  = 1 / (1 + _N.exp(-u0))
+    ip0  = 1 + _N.exp(-u0)
     p0x = 1 / (1 + _N.exp(-(u0+xn)))
 
     lFlB[1] = Llklhds(dist, cts, rn0, p0x)
     lBg = lFlB[1]   #  
 
     cross  = False
-    lls   = []
-    accptd = 0
 
     #rn0 = bestrn(dist, cts, rn0, llsV, p0x)
 
@@ -284,19 +299,65 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
 
     #  the poisson distribution needs to be truncated
 
+    u_m     = uTH1
+    
     for it in xrange(iters):
-        bDone = False
+        #  FF 0.98-0.99 -> 1.015  with prob dependent on FF0
+        #  FF 1.01-1.02 -> 0.985  with prob dependent on FF0
+
+        jx = 0
+        #jx    = (1 - _N.exp(-2*u0)) / (1 + _N.exp(-2*u0)) + 1
+        if (u0 > uTH1) and (u0 < uTH2):  # -4.5 -6
+            #  -4.5 - -6
+            #jx = (u0 - uTH2) / (uTH1 - uTH2)
+            rrr = ((uTH2 - u0) / (uTH2 - uTH1))
+            jx = 0.5*rrr*rrr*rrr*rrr
+        elif u0 <= uTH1:
+            jx = 0.5
         #
         #dbtt1 = _tm.time()
-        if dist == _cd.__BNML__:
-            uu1  = -_N.log(rn0 * iMk - 1) # mean of proposal density
-            u1 = uu1 + stdu * rdns[it]    #  **PROPOSED** u1
+        jxs[it] = jx
+        if _N.random.rand() < jx:  #  JUMP
+            mv = 0
+            jmp[it] = 1
+            #  jump
+            #print "here  %(it)d   %(jx).3f" % {"it" : it, "jx" : jx}
+            if (u0 < uTH1) and (u0 > uTH2):
+                u1   = u0
+            else:
+                u1   = u0
+            ip1 = 1 + _N.exp(-u1)
+            p0  = 1 / (1 + _N.exp(-u0))
+            p1  = 1 / (1 + _N.exp(-u1))
 
-            if u1 > uTH:       ###########   Stay in Binomial ##########
+            #print "B4  rn0 %(0)d   rn1 %(1)d  (%(1f).8e   %(2f).8e)   p0 %(p0).4e  p1 %(p1).4e" % {"0" : rn0, "1" : rn1, "p0" : p0, "p1" : p1, "1f" : (rn0 * p0)/p1, "2f" : (p0/p1)}
+
+            # rr   = rn0*p0/p1
+            # irr  = int(rr)
+            # rmdr = rr-irr
+            rn1  = rn0
+            # if _N.random.rand() < rmdr:
+            #     rn1  += 1
+            print "AFT  rn0 %(0)d   rn1 %(1)d  (%(1f).8e   %(2f).8e)   p0 %(p0).4e  p1 %(p1).4e" % {"0" : rn0, "1" : rn1, "p0" : p0, "p1" : p1, "1f" : (rn0 * p0)/p1, "2f" : (p0/p1)}
+
+            #print "%(it)d   u0  %(1).3e  %(2).3e" % {"1" : u0, "2" : u1, "it" : it}
+            #print "%d  propose jump" % it
+            todist = _cd.__NBML__ if dist == _cd.__BNML__ else _cd.__BNML__
+            cross  = True
+            p1x = 1 / (1 + _N.exp(-(u1+xn)))
+            #lpPR   = _N.log((uTH1 - u0) / (uTH1 - u1))         #  deterministic crossing.  Jac = 1
+            lpPR   = 0
+        else:    #  ########   DIFFUSION    ############
+            mv = 1
+            jmp[it] = 0
+            bDone = False
+            print "%d  propose diffuse" % it
+            if dist == _cd.__BNML__:
+                u1 = u0 + stdu * rdns[it]    #  **PROPOSED** u1
                 todist = _cd.__BNML__;    cross  = False
-                p1 = 1 / (1 + _N.exp(-u1))
+                ip1 = 1 + _N.exp(-u1)
                 p1x = 1 / (1 + _N.exp(-(u1+xn)))
-                lmd1= Mk/p1
+                lmd1= Mk*ip1
 
                 llmd1 = _N.log(lmd1)
                 trms = _N.exp(ints[0:nmin]*llmd1 - logfact[0:nmin] - lmd1)
@@ -316,8 +377,7 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
 
                 if rn1*iMk-1 <= 0:
                     print "woa.  %(rn1)d   %(imk).3f"   % {"rn1" : rn1, "imk" : iMk}
-                uu0  = -_N.log(rn1 * iMk - 1) # mean of reverse proposal density
-                lmd0= Mk/p0
+                lmd0= Mk*ip0
                 llmd0 = _N.log(lmd0)
                 trms = _N.exp(ints[0:nmin]*llmd0 - logfact[0:nmin] - lmd0)
                 lC0 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
@@ -328,55 +388,24 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
                 # print C0
                 # print lmd0
                 # print "A  pm0  %(0).3e   pm1  %(1).3e" % {"0" : pm0, "1" : pm1} 
-                
+
 
                 # print u1
                 # print uu1
                 # print u0
                 # print uu0
-                lpPR = 0.5*istdu2*(((u1 - uu1)*(u1 - uu1)) - ((u0 - uu0)*(u0 - uu0))) + lpm0 - lpm1   #, lnc reciprocal of norm
+                #lpPR = lpm1 - lpm0   #, lnc reciprocal of norm
+                lpPR = lpm0 - lpm1   #, lnc reciprocal of norm
                 #print "---------%(1).4e   %(2).4e" % {"1" : _N.log(pm1/pm0), "2" : lpPR}
-            else:   ########  Switch to __NBML__  ####################
-                #print "switch 2 NBML"
-                todist = _cd.__NBML__;   cross  = True
-                u1 = 2*uTH - u1  #  u1 now a parameter of NB distribution   
-                p1 = 1 / (1 + _N.exp(-u1))
-                p1x = 1 / (1 + _N.exp(-(u1+xn)))
-                lmd1 = (1./p1 - 1)*Mk
+            elif dist == _cd.__NBML__:
+                uu1  = -_N.log(rn0 * iMk) # mean of proposal density
+                u1 = uu1 + stdu * rdns[it]
+                #print "NBML   uu1  %(uu1).3e    u1  %(u1).3e" % {"uu1" : uu1, "u1" : u1}
 
-                llmd1 = _N.log(lmd1)
-                trms = _N.exp(ints[0:rmin]*llmd1 - logfact[0:rmin] - lmd1)
-                lC1 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
-
-                while not bDone:
-                    rnds = _ss.poisson.rvs(lmd1, size=5)
-                    pois = _N.where(rnds >= rmin)[0]  
-                    if len(pois) > 0:
-                        bDone = True
-                        rn1   = rnds[pois[0]]   #  nb parameter
-                lpm1 = rn1 * llmd1 - logfact[rn1] - lmd1 - lC1  # pmf
-
-                lmd0= (1./pTH - 1) * Mk
-                llmd0 = _N.log(lmd0)   #  param is BN parameter
-                trms = _N.exp(ints[0:nmin]*llmd0 - logfact[0:nmin] - lmd0)
-                lC0 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
-                lpm0 = rn0 * llmd0 - logfact[rn0] - lmd0 - lC0  # pmf
-
-                #print "B  pm0  %(0).3e   pm1  %(1).3e" % {"0" : pm0, "1" : pm1}
-
-                uu0  = -_N.log(rn1 * iMk) # mean of proposal density
-
-                lpPR = 0.5*istdu2*((((uTH-u1) - uu1)*((uTH-u1) - uu1)) - (((uTH-u0) - uu0)*((uTH-u0) - uu0))) + lpm0 - lpm1
-        elif dist == _cd.__NBML__:
-            uu1  = -_N.log(rn0 * iMk) # mean of proposal density
-            u1 = uu1 + stdu * rdns[it]
-            #print "NBML   uu1  %(uu1).3e    u1  %(u1).3e" % {"uu1" : uu1, "u1" : u1}
-
-            if u1 > uTH:       ######   Stay in Negative binomial ######
                 todist = _cd.__NBML__;    cross  = False
-                p1 = 1 / (1 + _N.exp(-u1))
+                ip1 = 1 + _N.exp(-u1)
                 p1x = 1 / (1 + _N.exp(-(u1+xn)))
-                lmd1 = (1./p1 - 1)*Mk
+                lmd1 = (ip1 - 1)*Mk
 
                 llmd1 = _N.log(lmd1)
                 trms = _N.exp(ints[0:rmin]*llmd1 - logfact[0:rmin] - lmd1)
@@ -388,12 +417,16 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
                     if len(pois) > 0:
                         bDone = True
                         rn1   = rnds[pois[0]]   # bn parameter
+                # while not bDone:
+                #     rnds = _ss.poisson.rvs(lmd1, size=1)
+                #     if rnds >= rmin:
+                #         bDone = True
+                #         rn1   = rnds   # bn parameter
 
                 lpm1 = rn1 * llmd1 - logfact[rn1] - lmd1 - lC1  # pmf
 
                 #     lmd1= Mk*((1-p1)/p1);  lmd0= Mk*((1-p0)/p0);   lmd= lmd1
-                uu0  = -_N.log(rn1 * iMk) # mean of proposal density
-                lmd0 = (1./p0 - 1)*Mk
+                lmd0 = (ip0 - 1)*Mk
                 llmd0 = _N.log(lmd0)
                 trms = _N.exp(ints[0:rmin]*llmd0 - logfact[0:rmin] - lmd0)
                 lC0 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
@@ -402,41 +435,14 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
                 #print "C  pm0  %(0).3e   pm1  %(1).3e" % {"0" : pm0, "1" : pm1}
                 # log of probability
 
-                lpPR = 0.5*istdu2*(((u1 - uu1)*(u1 - uu1)) - ((u0 - uu0)*(u0 - uu0)))+ lpm0 - lpm1
-            else:   ########  Switch to __BNML__  ####################
-                #print "switch 2 BNML"
-                todist = _cd.__BNML__;    cross  = True
-                u1 = 2*uTH - u1  #  u in NB distribution
-                p1 = 1 / (1 + _N.exp(-u1))
-                p1x = 1 / (1 + _N.exp(-(u1+xn)))
-                lmd1= Mk/p1
-
-                #print "%(gi)d   %(lmd1).4f" % {"gi" : GibbsIter, "lmd1" : lmd1}
-                #print "%(Mk)d   %(p1).4e" % {"Mk" : Mk, "p1" : p1}
-                llmd1 = _N.log(lmd1)
-                trms = _N.exp(ints[0:nmin]*llmd1 - logfact[0:nmin] - lmd1)
-                lC1 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
-
-                while not bDone:
-                    rnds = _ss.poisson.rvs(lmd1, size=5)
-                    pois = _N.where(rnds >= nmin)[0]  
-                    if len(pois) > 0:
-                        bDone = True
-                        rn1   = rnds[pois[0]]   #  nb parameter
-                lpm1 = rn1 * llmd1 - logfact[rn1] - lmd1 - lC1  # pmf
-
-                lmd0 = Mk/pTH
-                llmd0 = _N.log(lmd0)
-                trms = _N.exp(ints[0:rmin]*llmd0 - logfact[0:rmin] - lmd0)
-                lC0 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
-                lpm0 = rn0 * llmd0 - logfact[rn0] - lmd0 - lC0  # pmf
-
-                #print "D  pm0  %(0).3e   pm1  %(1).3e" % {"0" : pm0, "1" : pm1}
-                uu0  = -_N.log(rn1 * iMk - 1) # mean of proposal density
-                lpPR = 0.5*istdu2*(-(((uTH-u1) - uu1)*((uTH-u1) - uu1)) + (((uTH-u0) - uu0)*((uTH-u0) - uu0)))+ lpm0 - lpm1
-
+                #lpPR = lpm1 - lpm0
+                lpPR = lpm0 - lpm1
+            
 
         #dbtt2 = _tm.time()
+        #aaaa = Llklhds(dist, cts, rn0, p1x)
+        #print "aaaaaaa   %(aaaa).4e   %(1l).4e" % {"aaaa" : aaaa, "1l" : lFlB[1]}
+        
         lFlB[0] = Llklhds(todist, cts, rn1, p1x)
         #print "proposed state  ll  %(1).3e   old state  ll  %(2).3e     new-old  %(3).3e" % {"1" : lFlB[0], "2" : lFlB[1], "3" : (lFlB[0] - lFlB[1])}
         #dbtt3 = _tm.time()
@@ -444,10 +450,17 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
 
         ########  log of proposal probabilities
 
-        lnPR = 0    #  we have the log part set to 1.  No change
-        lPR = lnPR + lpPR
         lposRat = lFlB[0] - lFlB[1]
-        lrat = lPR + lposRat
+        
+        llklhdrs[it] = lposRat
+        lpprs[it]    = lpPR
+
+        lrat = lposRat# + lpPR
+
+        print "mv=%(mv)d    LR %(lpF).3e %(lpB).3e    %(lR).3e    lpPR: %(lpPR).3e   lrat: %(lr).3e" % {"lpF" : lFlB[0], "lpB" : lFlB[1], "lR" : lposRat, "lr" : lrat, "mv" : mv, "lpPR" : lpPR}
+        if _N.isnan(lpPR) or _N.isinf(lpPR):
+            print "nan or inf inside log %.4e" % ((uTH1 - u1) / (uTH1 - u0))
+
         # if lPR > 100:
         #     prRat = 2.7e+43
         # else:
@@ -463,16 +476,25 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
         #dbtt4 = _tm.time()
         aln   = 1 if (lrat > 0) else _N.exp(lrat)
         #aln  = rat if (rat < 1)  else 1   #  if aln == 1, always accept
-        if rds[it] < aln:   #  accept
-            accptd += 1
+        # if w == 1 and j == 0:
+        #     print "%(aln).3e    %(1)d  %(2)d  lmd1 %(l).3e" % {"aln" : aln, "1" : rn0, "2" : rn1, "l" : lmd1}
+        #     print rnds
+        #     print rnds[pois[0]]
+        accpt = rds[it] < aln
+        if accpt:   #  accept
             u0 = u1
             rn0 = rn1
-            p0 = p1
+            ip0 = ip1
             lFlB[1] = lFlB[0]
             #lls.append(lFlB[1])
             #print "accepted  %d" % it
             dist = todist
-        lls.append(lFlB[1])
+            if mv == 1:  #  mv == 0 if jump
+                accptdiff[it] = 1
+            else:
+                accptdiff[it] = 0
+
+        print "---after accept test %(ac)d   rn0 %(0)d   rn1 %(1)d" % {"0" : rn0, "1" : rn1, "ac" : accpt} 
 
         dty[it] = dist
         us[it] = u0
@@ -482,6 +504,8 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
         #dbtt32 += #dbtt3-#dbtt2
         #dbtt43 += #dbtt4-#dbtt3
         #dbtt54 += #dbtt5-#dbtt4
+        lls[it] = lFlB[1]
+
 
     # print "#timing start"
     # print "t2t1+=%.4e" % #dbtt21
@@ -490,7 +514,9 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
     # print "t5t4+=%.4e" % #dbtt54
     # print "#timing end"
 
-    #print "accepted %d" % accptd
+        # if iTryAgain > 1:
+        #     print "iTryAgain %(ta)d for w %(w)d  j %(j)d" % {"w" : w, "j" : j, "ta" : iTryAgain}
+
     # fig = _plt.figure()
     # _plt.plot(llsV)
     # _plt.suptitle(accptd)
@@ -500,6 +526,7 @@ def cntmdlMCMCOnly(GibbsIter, iters, u0, rn0, dist, cts, rns, us, dty, xn, stdu=
 
     #print "ll Bg %(b).3e   ll En %(e).3e" % {"b" : lBg, "e" : lEn}
     return u0, rn0, dist
+
 
 
 

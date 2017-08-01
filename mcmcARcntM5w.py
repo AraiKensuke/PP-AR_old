@@ -13,7 +13,7 @@ import re as _re
 import matplotlib.pyplot as _plt
 import scipy.stats as _ss
 import cntUtil as _cU
-import cntUtil_pyx as _cUpyx
+import BNorNB as _bob
 import time as _tm
 import pickle
 
@@ -82,7 +82,7 @@ class mcmcARcntMW(mAR.mcmcAR):
     #  when we don't have xn
     def initGibbs(self, logfact):
         oo     = self    #  call self oo.  takes up less room on line
-        _cUpyx._init(logfact)
+        _bob._init(logfact)
         #  INITIAL samples
 
         oo.smpx = _N.zeros(oo.N+1)
@@ -284,7 +284,8 @@ class mcmcARcntMW(mAR.mcmcAR):
             for w in xrange(oo.W):
                 for j in xrange(oo.J):
                     #oo.us[w, j], oo.rn[w, j], oo.model[w, j] = _cUpyx.cntmdlMCMCOnly(it, cntMCMCiters, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
-                    oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.accpts[it, w, j] = _cU.BNorNB(cntMCMCiters, w, j, 0, maxcts[w]*2, _cd.__BNML__, oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
+                    #oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.accpts[it, w, j] = _bob.BNorNB(cntMCMCiters, w, j, 0, maxcts[w]*2, _cd.__BNML__, oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]], 0.05)
+                    oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.accpts[it, w, j] = _bob.BNorNB(cntMCMCiters, w, j, 0, maxcts[w]*2, _cd.__BNML__, oo.y[lht[j], w], oo.smpx[lht[j]], 0.05)
 
             _N.add(oo.alp, _N.sum(oo.zs, axis=0), out=dirArgs)
             oo.m[:] = _N.random.dirichlet(dirArgs)

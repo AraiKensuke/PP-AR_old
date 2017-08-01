@@ -7,14 +7,18 @@ import scipy.stats as _ss
 import os
 
 #  connection between 
-pTH1  = 0.005
-#pTH2  = 0.001
-pTH2  = 0.15
+# pTH1  = 0.005
+# #pTH2  = 0.001
+# pTH2  = 0.15
 
-ipTH1 = 1./pTH1
-ipTH2 = 1./pTH2
-uTH1    = _N.log(pTH1 / (1 - pTH1))
-uTH2    = _N.log(pTH2 / (1 - pTH2))
+# ipTH1 = 1./pTH1
+# ipTH2 = 1./pTH2
+
+uTH1= -6.5
+uTH2= -5
+
+#uTH1    = _N.log(pTH1 / (1 - pTH1))
+#uTH2    = _N.log(pTH2 / (1 - pTH2))
 logfact= None
 
 ints = _N.arange(20000)
@@ -299,21 +303,15 @@ def cntmdlMCMCOnly(GibbsIter, iters, w, j, u0, rn0, dist, cts, rns, us, dty, xn,
 
     #  the poisson distribution needs to be truncated
 
-    u_m     = uTH1
+    u_m     = (uTH1+uTH2)*0.5
+    mag     = 4./(uTH2 - uTH1)
     
     for it in xrange(iters):
         #  FF 0.98-0.99 -> 1.015  with prob dependent on FF0
         #  FF 1.01-1.02 -> 0.985  with prob dependent on FF0
 
-        jx = 0
-        #jx    = (1 - _N.exp(-2*u0)) / (1 + _N.exp(-2*u0)) + 1
-        if (u0 > uTH1) and (u0 < uTH2):  # -4.5 -6
-            #  -4.5 - -6
-            #jx = (u0 - uTH2) / (uTH1 - uTH2)
-            rrr = ((uTH2 - u0) / (uTH2 - uTH1))
-            jx = 0.5*rrr*rrr*rrr*rrr
-        elif u0 <= uTH1:
-            jx = 0.5
+        ut    = (u0 - u_m)*mag
+        jx    = 1 / (1 + _N.exp(2*ut))
         #
         #dbtt1 = _tm.time()
         jxs[it] = jx
@@ -322,23 +320,23 @@ def cntmdlMCMCOnly(GibbsIter, iters, w, j, u0, rn0, dist, cts, rns, us, dty, xn,
             jmp[it] = 1
             #  jump
             #print "here  %(it)d   %(jx).3f" % {"it" : it, "jx" : jx}
-            if (u0 < uTH1) and (u0 > uTH2):
-                u1   = u0
-            else:
-                u1   = u0
+            u1 = (uTH1 + uTH2) - u0
             ip1 = 1 + _N.exp(-u1)
             p0  = 1 / (1 + _N.exp(-u0))
             p1  = 1 / (1 + _N.exp(-u1))
 
+            rr   = rn0*p0/p1
+            irr  = int(rr)
+            rmdr = rr-irr
+            rn1   = int(rr)
+            if _N.random.rand() < rmdr:
+                rn1 += 1
+
             #print "B4  rn0 %(0)d   rn1 %(1)d  (%(1f).8e   %(2f).8e)   p0 %(p0).4e  p1 %(p1).4e" % {"0" : rn0, "1" : rn1, "p0" : p0, "p1" : p1, "1f" : (rn0 * p0)/p1, "2f" : (p0/p1)}
 
-            # rr   = rn0*p0/p1
-            # irr  = int(rr)
-            # rmdr = rr-irr
-            rn1  = rn0
             # if _N.random.rand() < rmdr:
             #     rn1  += 1
-            print "AFT  rn0 %(0)d   rn1 %(1)d  (%(1f).8e   %(2f).8e)   p0 %(p0).4e  p1 %(p1).4e" % {"0" : rn0, "1" : rn1, "p0" : p0, "p1" : p1, "1f" : (rn0 * p0)/p1, "2f" : (p0/p1)}
+            #print "AFT  rn0 %(0)d   rn1 %(1)d  (%(1f).8e   %(2f).8e)   p0 %(p0).4e  p1 %(p1).4e" % {"0" : rn0, "1" : rn1, "p0" : p0, "p1" : p1, "1f" : (rn0 * p0)/p1, "2f" : (p0/p1)}
 
             #print "%(it)d   u0  %(1).3e  %(2).3e" % {"1" : u0, "2" : u1, "it" : it}
             #print "%d  propose jump" % it
@@ -346,7 +344,11 @@ def cntmdlMCMCOnly(GibbsIter, iters, w, j, u0, rn0, dist, cts, rns, us, dty, xn,
             cross  = True
             p1x = 1 / (1 + _N.exp(-(u1+xn)))
             #lpPR   = _N.log((uTH1 - u0) / (uTH1 - u1))         #  deterministic crossing.  Jac = 1
-            lpPR   = 0
+            utr = (u1 - u_m)*mag
+            #utr = (uTH1 + uTH2)-u1
+            jxr = 1 / (1 + _N.exp(2*utr))
+            #lpPR   = _N.log(jxr/jx)
+            lpPR   = 0#_N.log((jxr/jx) * (p0/p1))
         else:    #  ########   DIFFUSION    ############
             mv = 1
             jmp[it] = 0
@@ -394,8 +396,8 @@ def cntmdlMCMCOnly(GibbsIter, iters, w, j, u0, rn0, dist, cts, rns, us, dty, xn,
                 # print uu1
                 # print u0
                 # print uu0
-                #lpPR = lpm1 - lpm0   #, lnc reciprocal of norm
-                lpPR = lpm0 - lpm1   #, lnc reciprocal of norm
+                lpPR = lpm1 - lpm0   #, lnc reciprocal of norm
+                #lpPR = lpm0 - lpm1   #, lnc reciprocal of norm
                 #print "---------%(1).4e   %(2).4e" % {"1" : _N.log(pm1/pm0), "2" : lpPR}
             elif dist == _cd.__NBML__:
                 uu1  = -_N.log(rn0 * iMk) # mean of proposal density
@@ -435,14 +437,10 @@ def cntmdlMCMCOnly(GibbsIter, iters, w, j, u0, rn0, dist, cts, rns, us, dty, xn,
                 #print "C  pm0  %(0).3e   pm1  %(1).3e" % {"0" : pm0, "1" : pm1}
                 # log of probability
 
-                #lpPR = lpm1 - lpm0
-                lpPR = lpm0 - lpm1
+                lpPR = lpm1 - lpm0
+                #lpPR = lpm0 - lpm1
             
 
-        #dbtt2 = _tm.time()
-        #aaaa = Llklhds(dist, cts, rn0, p1x)
-        #print "aaaaaaa   %(aaaa).4e   %(1l).4e" % {"aaaa" : aaaa, "1l" : lFlB[1]}
-        
         lFlB[0] = Llklhds(todist, cts, rn1, p1x)
         #print "proposed state  ll  %(1).3e   old state  ll  %(2).3e     new-old  %(3).3e" % {"1" : lFlB[0], "2" : lFlB[1], "3" : (lFlB[0] - lFlB[1])}
         #dbtt3 = _tm.time()
@@ -455,7 +453,7 @@ def cntmdlMCMCOnly(GibbsIter, iters, w, j, u0, rn0, dist, cts, rns, us, dty, xn,
         llklhdrs[it] = lposRat
         lpprs[it]    = lpPR
 
-        lrat = lposRat# + lpPR
+        lrat = lposRat + lpPR
 
         print "mv=%(mv)d    LR %(lpF).3e %(lpB).3e    %(lR).3e    lpPR: %(lpPR).3e   lrat: %(lr).3e" % {"lpF" : lFlB[0], "lpB" : lFlB[1], "lR" : lposRat, "lr" : lrat, "mv" : mv, "lpPR" : lpPR}
         if _N.isnan(lpPR) or _N.isinf(lpPR):
@@ -526,8 +524,3 @@ def cntmdlMCMCOnly(GibbsIter, iters, w, j, u0, rn0, dist, cts, rns, us, dty, xn,
 
     #print "ll Bg %(b).3e   ll En %(e).3e" % {"b" : lBg, "e" : lEn}
     return u0, rn0, dist
-
-
-
-
-

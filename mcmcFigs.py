@@ -648,28 +648,3 @@ def arbitraryAxes(ax, axesVis=[True, True, True, True], xtpos="bottom", ytpos="l
     ax.spines["right"].axis.axes.tick_params(direction="outward", width=2)
     ax.spines["top"].axis.axes.tick_params(direction="outward", width=2)
 
-
-def setLabelTicks(plt, xticks=None, xticksDsp=None, yticks=None, yticksDsp=None, xlabel=None, ylabel=None, xtickFntSz=None, ytickFntSz=None, xlabFntSz=None, ylabFntSz=None):
-    xtickFntSz = 20 if (xtickFntSz is None) else xtickFntSz
-    ytickFntSz = 20 if (ytickFntSz is None) else ytickFntSz
-    xlabFntSz  = 20 if (xlabFntSz is None)  else xlabFntSz
-    ylabFntSz  = 20 if (ylabFntSz is None)  else ylabFntSz
-
-    if (xticks is not None) and (xticksDsp is not None):
-        plt.xticks(xticks, xticksDsp, fontsize=xtickFntSz)
-    elif (xticks is not None):
-        plt.xticks(xticks, fontsize=xtickFntSz)
-    elif (xticks is None):
-        plt.xticks(fontsize=xtickFntSz)
-
-    if (yticks is not None) and (yticksDsp is not None):
-        plt.yticks(yticks, yticksDsp, fontsize=ytickFntSz)
-    elif (yticks is not None):
-        plt.yticks(yticks, fontsize=ytickFntSz)
-    elif (yticks is None):
-        plt.yticks(fontsize=ytickFntSz)
-
-    if xlabel is not None:
-        plt.xlabel(xlabel, fontsize=xlabFntSz)
-    if ylabel is not None:
-        plt.ylabel(ylabel, fontsize=ylabFntSz)

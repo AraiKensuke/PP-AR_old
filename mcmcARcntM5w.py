@@ -160,6 +160,7 @@ class mcmcARcntMW(mAR.mcmcAR):
         oo.mrns = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W, oo.J), dtype=_N.int)
         oo.mus  = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W))
         oo.mdty = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W), dtype=_N.int)
+        oo.accpts  = _N.empty((oo.burn+oo.NMC, oo.W, oo.J), dtype=_N.int)
 
         p   = _N.empty((oo.N+1, oo.W, oo.J))
         lp1p= _N.empty((oo.N+1, oo.W, oo.J))
@@ -168,6 +169,8 @@ class mcmcARcntMW(mAR.mcmcAR):
         rnsy= _N.empty((oo.N+1, oo.W), dtype=_N.int)
         rnsyC= _N.empty(oo.N+1, dtype=_N.int)  #  for giving to devryoe
         usJ = _N.empty((oo.N+1, oo.W))
+        
+        maxcts = _N.max(oo.y, axis=0) + 1
 
         if oo.smpxOff:
             oo.smpx[:] = 0
@@ -280,7 +283,8 @@ class mcmcARcntMW(mAR.mcmcAR):
 
             for w in xrange(oo.W):
                 for j in xrange(oo.J):
-                    oo.us[w, j], oo.rn[w, j], oo.model[w, j] = _cUpyx.cntmdlMCMCOnly(it, cntMCMCiters, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
+                    #oo.us[w, j], oo.rn[w, j], oo.model[w, j] = _cUpyx.cntmdlMCMCOnly(it, cntMCMCiters, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
+                    oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.accpts[it, w, j] = _cU.BNorNB(cntMCMCiters, w, j, 0, maxcts[w]*2, _cd.__BNML__, oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
 
             _N.add(oo.alp, _N.sum(oo.zs, axis=0), out=dirArgs)
             oo.m[:] = _N.random.dirichlet(dirArgs)
@@ -381,6 +385,7 @@ class mcmcARcntMW(mAR.mcmcAR):
         many datafiles in each directory
         """
         oo     = self    #  call self oo.  takes up less room on line
+        _cU._init(logfact)
         oo.setname = None if batch else os.getcwd().split("/")[-1]
 
         oo.env_dirname=env_dirname

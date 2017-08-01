@@ -7,25 +7,30 @@ import scipy.stats as _ss
 import os
 
 #  connection between 
-# pTH1  = 0.005
-# #pTH2  = 0.001
-# pTH2  = 0.15
 
-# ipTH1 = 1./pTH1
-# ipTH2 = 1./pTH2
-
-uTH1= -6.5
-uTH2= -5
-
-#uTH1    = _N.log(pTH1 / (1 - pTH1))
-#uTH2    = _N.log(pTH2 / (1 - pTH2))
 logfact= None
 
-ints = _N.arange(20000)
+ks = _N.arange(2000000)
+
+uTH1= -6.5
+uTH2= -1
+
+uTHa= -6.5
+uTHb= -1
+
+ln2pi= 1.8378770664093453
+ks = _N.arange(2000000)
+maxrn = -1
+
+mn_u = 0
+#iu_sd2 = (1/1.2)*(1/1.2)
+iu_sd2 = (1/1.4)*(1/1.4)
+
 
 def _init(lf):
-    global logfact 
+    global logfact, maxrn
     logfact = lf
+    maxrn   = len(logfact) - 1000
 
 def Llklhds(typ, ks, rn1, p1):
     global logfact
@@ -246,281 +251,209 @@ def bestrn(dist, cnt, lmd0, llsV, p1x):
     return candRNs[maxI]
 
 
-def cntmdlMCMCOnly(GibbsIter, iters, w, j, u0, rn0, dist, cts, rns, us, dty, xn, jxs, jmp, lls, accptdiff, llklhdrs, lpprs, stdu=0.03):
-    global ints, logfact
-    """
-    We need starting values for rn, u0, model
-    """
-    # u0, rn0, dist = startingValues(cts, xoff=xn)
-    # print "starting values"
-    # print "$$$$$$$$$$$$$$$$$$$$$$$$"
-    # print "rn=%d" % rn0
-    # print "us=%.3f" % u0
-    # print "md=%d" % dist
-    # print "$$$$$$$$$$$$$$$$$$$$$$$$"
-    # print "in cntmdlMCMCOnly"
-    # print rn0
-    # print dist
-    # print cts
-    #  proposal parameters
 
-    iTryAgain = 0
+#def BNorNB(GibbsIter, iters, w, j, u0, rn0, dist, cts, rns, us, dty, xn, jxs, mvtyps, lls, accpts, llklhd0, llklhd1, lpru0s, lpru1s, lpriorpmf1s, lpriorpmf0s, ljacs, lrats, lpprs0, lpprs1, stdu=0.03, propratm=0):
+def BNorNB(iters, w, j, u0, rn0, dist, cts, rns, us, dty, xn, stdu=0.03):
+    global logfact, ks, maxrn
     #  if accptd too small, increase stdu and try again
     #  if accptd is 0, the sampled params returned for conditional posterior
     #  are not representative of the conditional posterior
     stdu2= stdu**2
     istdu2= 1./ stdu2
+    #stdp2 = 0.25*0.25
+    #stdp = 0.002
+    stdp = 0.05
+    istdp= 1./stdp
+    istdp2= istdp*istdp
 
     Mk = _N.mean(cts) if len(cts) > 0 else 0  #  1comp if nWins=1, 2comp
     if Mk == 0:
         return u0, rn0, dist   # no data assigned to this 
-    iMk = 1./Mk   #  if Mk == 0, just make it a small number?
-    nmin= _N.max(cts)+1 if len(cts) > 0 else 0   #  if n too small, can't generate data
-    rmin= 1
+    rnmin = _N.array([-1, _N.max(cts)+1, 1], dtype=_N.int)
 
-    lFlB = _N.empty(2)
-    rn1rn0 = _N.empty(2)
-
-    rds  = _N.random.rand(iters)
+    rdis= _N.random.rand(iters)  #
     rdns = _N.random.randn(iters)
+    ran_accpt  = _N.random.rand(iters)
 
-    ip0  = 1 + _N.exp(-u0)
-    p0x = 1 / (1 + _N.exp(-(u0+xn)))
+    p0  = 1./(1 + _N.exp(-u0))
+    p0x  = 1./(1 + _N.exp(-(u0+xn)))
 
-    lFlB[1] = Llklhds(dist, cts, rn0, p0x)
-    lBg = lFlB[1]   #  
-
-    cross  = False
-
-    #rn0 = bestrn(dist, cts, rn0, llsV, p0x)
-
-    #print "uTH is %.3e" % uTH
-
-    #dbtt21 = 0
-    #dbtt32 = 0
-    #dbtt43 = 0
-    #dbtt54 = 0
-
+    ll0 = Llklhds(dist, cts, rn0, p0x)
     #  the poisson distribution needs to be truncated
+    # prop_us = _N.empty(iters)
+    # prop_rns = _N.empty(iters, dtype=_N.int)
+    # prop_dty = _N.empty(iters, dtype=_N.int)
+
+    zr2rnmins  = _N.array([None, _N.arange(rnmin[1]), _N.arange(rnmin[2])]) # rnmin is a valid value for n
 
     u_m     = (uTH1+uTH2)*0.5
     mag     = 4./(uTH2 - uTH1)
-    
+
+    #  TO DO:  Large cnts usually means large rn.  
+    #  for transitions with small ps, the rn we need to transition on the
+    #  other side might be very large where the prior prob. is very small
+    r_prior = 1
+    p_prior = 0.9996   
+
+    accptd  = 0
+
+    lpriorpmf = logfact[ks + r_prior - 1] - logfact[r_prior-1] - logfact[ks] + r_prior*_N.log(1-p_prior) + ks*_N.log(p_prior)   #  prior
+
     for it in xrange(iters):
-        #  FF 0.98-0.99 -> 1.015  with prob dependent on FF0
-        #  FF 1.01-1.02 -> 0.985  with prob dependent on FF0
+        us[it] = u0
+        rns[it] = rn0    #  rn0 is the newly sampled value if accepted
+        dty[it] = dist
 
         ut    = (u0 - u_m)*mag
-        jx    = 1 / (1 + _N.exp(2*ut))
+        jx    = 0.9 / (1 + _N.exp(2*ut))
         #
         #dbtt1 = _tm.time()
-        jxs[it] = jx
+
+        if it % 1000 == 0:
+            print it
+
         if _N.random.rand() < jx:  #  JUMP
+            todist = _cd.__NBML__ if dist == _cd.__BNML__ else _cd.__BNML__
             mv = 0
-            jmp[it] = 1
             #  jump
             #print "here  %(it)d   %(jx).3f" % {"it" : it, "jx" : jx}
-            u1 = (uTH1 + uTH2) - u0
+            u1 = (uTHa + uTHb) - u0
+            # prop_us[it] = u1
+            # prop_dty[it]= todist
             ip1 = 1 + _N.exp(-u1)
             p0  = 1 / (1 + _N.exp(-u0))
             p1  = 1 / (1 + _N.exp(-u1))
+            p1x = 1 / (1 + _N.exp(-(u1+xn)))
 
-            rr   = rn0*p0/p1
+            #rr   = rn0*p0/p1 
+            rr   = ((rn0*p0) / (p1*(1-p0))) if dist == _cd.__NBML__ else ((rn0*p0*(1-p1))/p1)
             irr  = int(rr)
             rmdr = rr-irr
             rn1   = int(rr)
+
             if _N.random.rand() < rmdr:
                 rn1 += 1
+            #prop_rns[it] = rn1
 
-            #print "B4  rn0 %(0)d   rn1 %(1)d  (%(1f).8e   %(2f).8e)   p0 %(p0).4e  p1 %(p1).4e" % {"0" : rn0, "1" : rn1, "p0" : p0, "p1" : p1, "1f" : (rn0 * p0)/p1, "2f" : (p0/p1)}
-
-            # if _N.random.rand() < rmdr:
-            #     rn1  += 1
-            #print "AFT  rn0 %(0)d   rn1 %(1)d  (%(1f).8e   %(2f).8e)   p0 %(p0).4e  p1 %(p1).4e" % {"0" : rn0, "1" : rn1, "p0" : p0, "p1" : p1, "1f" : (rn0 * p0)/p1, "2f" : (p0/p1)}
-
-            #print "%(it)d   u0  %(1).3e  %(2).3e" % {"1" : u0, "2" : u1, "it" : it}
-            #print "%d  propose jump" % it
-            todist = _cd.__NBML__ if dist == _cd.__BNML__ else _cd.__BNML__
-            cross  = True
             p1x = 1 / (1 + _N.exp(-(u1+xn)))
             #lpPR   = _N.log((uTH1 - u0) / (uTH1 - u1))         #  deterministic crossing.  Jac = 1
             utr = (u1 - u_m)*mag
             #utr = (uTH1 + uTH2)-u1
-            jxr = 1 / (1 + _N.exp(2*utr))
+            jxr = 0.9 / (1 + _N.exp(2*utr))
             #lpPR   = _N.log(jxr/jx)
-            lpPR   = 0#_N.log((jxr/jx) * (p0/p1))
+            if todist == _cd.__NBML__: #  r'p'/(1-p')=np, r' = np x (1-p')/p'
+                ljac = _N.log((p0*(1-p1)) / p1)
+            else:   #  n'p'=rp/(1-p),  n' = rp/[p'(1-p)]
+                ljac = _N.log(p0 / (p1*(1-p0)))                
+
+            # if dist == _cd.__BNML__:
+            #     ljac = _N.log((jxr/jx) * (p0 / (p1*(1-p1))))
+            # else:
+            #     ljac = _N.log((jxr/jx) * ((p0*(1-p1)) / p1))
+            lprop0 = lprop1 = 0  #
+
+            lpru0   = -0.5*(u0 - mn_u)*(u0 - mn_u)*iu_sd2
+            lpru1   = -0.5*(u1 - mn_u)*(u1 - mn_u)*iu_sd2
+
+            #ljac   = _N.log((jxr/jx) * (p0/p1))
         else:    #  ########   DIFFUSION    ############
-            mv = 1
-            jmp[it] = 0
-            bDone = False
-            print "%d  propose diffuse" % it
-            if dist == _cd.__BNML__:
-                u1 = u0 + stdu * rdns[it]    #  **PROPOSED** u1
-                todist = _cd.__BNML__;    cross  = False
-                ip1 = 1 + _N.exp(-u1)
-                p1x = 1 / (1 + _N.exp(-(u1+xn)))
-                lmd1= Mk*ip1
+            todist = dist
+            #prop_dty[it]= todist
 
-                llmd1 = _N.log(lmd1)
-                trms = _N.exp(ints[0:nmin]*llmd1 - logfact[0:nmin] - lmd1)
-                lC1 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
+            zr2rnmin = zr2rnmins[dist]
 
-                while not bDone:
-                    rnds = _ss.poisson.rvs(lmd1, size=5)
-                    pois = _N.where(rnds >= nmin)[0]
-                    if len(pois) > 0:
-                        bDone = True
-                        rn1   = rnds[pois[0]]   # bn parameter
+            ##  propose an rn1 
+            m2          = 1./rn0 + 0.9      # rn0 is the mean for proposal for rn1
+            p_prp_rn1        = 1 - 1./(rn0*m2)  # param p for proposal for rn1
+            r_prp_rn1        = rn0 / (rn0*m2-1) # param r for proposal for rn1
+            ir_prp_rn1 = int(r_prp_rn1)
 
-                #print rn1
-                lpm1 = rn1 * llmd1 - logfact[rn1] - lmd1 - lC1  # pmf
+            bGood = False   #  rejection sampling of rn1
+            while not bGood:
+                rn1 = _N.random.negative_binomial(ir_prp_rn1, 1-p_prp_rn1)
+                if (rn1 >= rnmin[dist]) and (rn1 < maxrn):
+                    bGood = True  # rn1 < maxrn  - just throw away huge rn
+            #prop_rns[it] = rn1
 
-                #  mean 
+            #########  log proposal density for rn1
+            ir_prp_rn1 = int(r_prp_rn1)
+            ltrms = logfact[zr2rnmin+ir_prp_rn1-1]  - logfact[ir_prp_rn1-1] - logfact[zr2rnmin] + ir_prp_rn1*_N.log(1-p_prp_rn1) + zr2rnmin*_N.log(p_prp_rn1)
+            lCnb1        = _N.log(1 - _N.sum(_N.exp(ltrms)))  #  nrmlzation 4 truncated pmf
 
-                if rn1*iMk-1 <= 0:
-                    print "woa.  %(rn1)d   %(imk).3f"   % {"rn1" : rn1, "imk" : iMk}
-                lmd0= Mk*ip0
-                llmd0 = _N.log(lmd0)
-                trms = _N.exp(ints[0:nmin]*llmd0 - logfact[0:nmin] - lmd0)
-                lC0 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
-                lpm0 = rn0 * llmd0 - logfact[rn0] - lmd0 - lC0  # pmf
+            lpmf1       = logfact[rn1+ir_prp_rn1-1]  - logfact[ir_prp_rn1-1] - logfact[rn1] + r_prp_rn1*_N.log(1-p_prp_rn1) + rn1*_N.log(p_prp_rn1) - lCnb1
 
-                # print C1
-                # print lmd1
-                # print C0
-                # print lmd0
-                # print "A  pm0  %(0).3e   pm1  %(1).3e" % {"0" : pm0, "1" : pm1} 
+            #########  log proposal density for rn0
+            ##  rn1
+            m2          = 1./rn1 + 0.9      # rn0 is the mean for proposal for rn1
+            p_prp_rn0        = 1 - 1./(rn1*m2)  # param p for proposal for rn1
+            r_prp_rn0        = rn1 / (rn1*m2-1.) # param r for proposal for rn1
+            ir_prp_rn0 = int(r_prp_rn0)
+
+            ltrms = logfact[zr2rnmin+ir_prp_rn0-1]  - logfact[ir_prp_rn0-1] - logfact[zr2rnmin] + ir_prp_rn0*_N.log(1-p_prp_rn0) + zr2rnmin*_N.log(p_prp_rn0)
+            smelt = _N.sum(_N.exp(ltrms))
+            # print "------"
+            # print "%.5f" % smelt
+            # print dist
+            # print todist
+            # print ir_prp_rn0
+            # print p_prp_rn0
+            # print zr2rnmin
+            lCnb0        = _N.log(1 - _N.sum(_N.exp(ltrms)))  #  nrmlzation 4 truncated 
+
+            lpmf0       = logfact[rn0+ir_prp_rn0-1]  - logfact[ir_prp_rn0-1] - logfact[rn0] + r_prp_rn0*_N.log(1-p_prp_rn0) + rn0*_N.log(p_prp_rn0) - lCnb0
+
+            ###################################################
+            #  propose p1
+            #  sample using p from [0, 0.75]  mean 0.25, sqrt(variance) = 0.25
+            #  p1 x rn1 = p0 x rn0      --> p1 = p0 x rn0/rn1   BINOMIAL
+            #  
+
+            try:
+                mn_u1 = -_N.log(rn1 * (1+_N.exp(-u0))/rn0 - 1) if dist == _cd.__BNML__ else (u0 - _N.log(float(rn1)/rn0))
+            except Warning:
+                #  if rn0 >> rn1, (rn0/rn1) >> 1.   p0 x (rn0/rn1) could be > 1
+                print "restart  %(it)d   todist   %(to)d   dist %(fr)d   rn0 %(rn0)d >> rn1 %(rn1)d" % {"to" : todist, "fr" : dist, "it" : it, "rn0" : rn0, "rn1" : rn1}
+                mn_u1  = 0
 
 
-                # print u1
-                # print uu1
-                # print u0
-                # print uu0
-                lpPR = lpm1 - lpm0   #, lnc reciprocal of norm
-                #lpPR = lpm0 - lpm1   #, lnc reciprocal of norm
-                #print "---------%(1).4e   %(2).4e" % {"1" : _N.log(pm1/pm0), "2" : lpPR}
-            elif dist == _cd.__NBML__:
-                uu1  = -_N.log(rn0 * iMk) # mean of proposal density
-                u1 = uu1 + stdu * rdns[it]
-                #print "NBML   uu1  %(uu1).3e    u1  %(u1).3e" % {"uu1" : uu1, "u1" : u1}
+            u1          = mn_u1 + stdu*rdns[it]
+            p1x = 1 / (1 + _N.exp(-(u1+xn)))
+            p1  = 1/(1 + _N.exp(-u1))
 
-                todist = _cd.__NBML__;    cross  = False
-                ip1 = 1 + _N.exp(-u1)
-                p1x = 1 / (1 + _N.exp(-(u1+xn)))
-                lmd1 = (ip1 - 1)*Mk
+            utr = (u1 - u_m)*mag
+            jxr = 0.9 / (1 + _N.exp(2*utr))
 
-                llmd1 = _N.log(lmd1)
-                trms = _N.exp(ints[0:rmin]*llmd1 - logfact[0:rmin] - lmd1)
-                lC1 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
+            #prop_us[it] = u1
+            mn_u0 = -_N.log(rn0 * (1+_N.exp(-u1))/rn1 - 1) if dist == _cd.__BNML__ else (u1 - _N.log(float(rn0)/rn1))
 
-                while not bDone:
-                    rnds = _ss.poisson.rvs(lmd1, size=5)
-                    pois = _N.where(rnds >= rmin)[0]
-                    if len(pois) > 0:
-                        bDone = True
-                        rn1   = rnds[pois[0]]   # bn parameter
-                # while not bDone:
-                #     rnds = _ss.poisson.rvs(lmd1, size=1)
-                #     if rnds >= rmin:
-                #         bDone = True
-                #         rn1   = rnds   # bn parameter
+            lprop1 = -0.5*(u1 - mn_u1)*(u1-mn_u1)*istdu2 + lpmf1 + _N.log(1-jx) #  forward
+            lprop0 = -0.5*(u0 - mn_u0)*(u0-mn_u0)*istdu2 + lpmf0 + _N.log(1-jxr) #  backwards
 
-                lpm1 = rn1 * llmd1 - logfact[rn1] - lmd1 - lC1  # pmf
+            if _cd.__BNML__:
+                ratn    = float(rn1)/rn0
+                bot     = (ratn*(1+_N.exp(-u0))-1)
+                if bot == 0:
+                    ljac = -30
+                else:
+                    logme   = _N.abs((ratn*_N.exp(-u0)) / bot)
+                    ljac    = _N.log(logme)
+            else:
+                ljac    = 0
 
-                #     lmd1= Mk*((1-p1)/p1);  lmd0= Mk*((1-p0)/p0);   lmd= lmd1
-                lmd0 = (ip0 - 1)*Mk
-                llmd0 = _N.log(lmd0)
-                trms = _N.exp(ints[0:rmin]*llmd0 - logfact[0:rmin] - lmd0)
-                lC0 = _N.log(1 - _N.sum(trms))    #  multiple by which to multiply pmf(k) to get pmf fo trunc
-                lpm0 = rn0 * llmd0 - logfact[rn0] - lmd0 - lC0  # pmf
+            lpru0   = -0.5*(u0 - mn_u)*(u0 - mn_u)*iu_sd2
+            lpru1   = -0.5*(u1 - mn_u)*(u1 - mn_u)*iu_sd2
+        ll1 = Llklhds(todist, cts, rn1, p1x)  #  forward
 
-                #print "C  pm0  %(0).3e   pm1  %(1).3e" % {"0" : pm0, "1" : pm1}
-                # log of probability
+        lrat = ll1 - ll0 + lpru1 - lpru0 + lprop0 - lprop1 + ljac
 
-                lpPR = lpm1 - lpm0
-                #lpPR = lpm0 - lpm1
-            
-
-        lFlB[0] = Llklhds(todist, cts, rn1, p1x)
-        #print "proposed state  ll  %(1).3e   old state  ll  %(2).3e     new-old  %(3).3e" % {"1" : lFlB[0], "2" : lFlB[1], "3" : (lFlB[0] - lFlB[1])}
-        #dbtt3 = _tm.time()
-        rn1rn0[0] = rn1;                   rn1rn0[1] = rn0
-
-        ########  log of proposal probabilities
-
-        lposRat = lFlB[0] - lFlB[1]
-        
-        llklhdrs[it] = lposRat
-        lpprs[it]    = lpPR
-
-        lrat = lposRat + lpPR
-
-        print "mv=%(mv)d    LR %(lpF).3e %(lpB).3e    %(lR).3e    lpPR: %(lpPR).3e   lrat: %(lr).3e" % {"lpF" : lFlB[0], "lpB" : lFlB[1], "lR" : lposRat, "lr" : lrat, "mv" : mv, "lpPR" : lpPR}
-        if _N.isnan(lpPR) or _N.isinf(lpPR):
-            print "nan or inf inside log %.4e" % ((uTH1 - u1) / (uTH1 - u0))
-
-        # if lPR > 100:
-        #     prRat = 2.7e+43
-        # else:
-        #     prRat = _N.exp(lPR)
-
-        #  lFlB[0] - lFlB[1] >> 0  -->  new state has higher likelihood
-        #posRat = 1.01e+200 if (lFlB[0] - lFlB[1] > 500) else _N.exp(lFlB[0]-lFlB[1])
-
-        #print "posRat %(1).3e     prRat %(2).3e" % {"1" : posRat, "2" : prRat}
-        #print "lrat is %f" % lrat
-        #rat  = _N.exp(lrat)
-
-        #dbtt4 = _tm.time()
         aln   = 1 if (lrat > 0) else _N.exp(lrat)
-        #aln  = rat if (rat < 1)  else 1   #  if aln == 1, always accept
-        # if w == 1 and j == 0:
-        #     print "%(aln).3e    %(1)d  %(2)d  lmd1 %(l).3e" % {"aln" : aln, "1" : rn0, "2" : rn1, "l" : lmd1}
-        #     print rnds
-        #     print rnds[pois[0]]
-        accpt = rds[it] < aln
-        if accpt:   #  accept
+        accpts = ran_accpt[it] < aln
+        if accpts:   #  accept
             u0 = u1
             rn0 = rn1
-            ip0 = ip1
-            lFlB[1] = lFlB[0]
-            #lls.append(lFlB[1])
-            #print "accepted  %d" % it
-            dist = todist
-            if mv == 1:  #  mv == 0 if jump
-                accptdiff[it] = 1
-            else:
-                accptdiff[it] = 0
+            ll0 = ll1
+            p0  = p1
+            dist=todist
+            accptd += 1
 
-        print "---after accept test %(ac)d   rn0 %(0)d   rn1 %(1)d" % {"0" : rn0, "1" : rn1, "ac" : accpt} 
-
-        dty[it] = dist
-        us[it] = u0
-        rns[it] = rn0    #  rn0 is the newly sampled value if accepted
-        #dbtt5 = _tm.time()
-        #dbtt21 += #dbtt2-#dbtt1
-        #dbtt32 += #dbtt3-#dbtt2
-        #dbtt43 += #dbtt4-#dbtt3
-        #dbtt54 += #dbtt5-#dbtt4
-        lls[it] = lFlB[1]
-
-
-    # print "#timing start"
-    # print "t2t1+=%.4e" % #dbtt21
-    # print "t3t2+=%.4e" % #dbtt32
-    # print "t4t3+=%.4e" % #dbtt43
-    # print "t5t4+=%.4e" % #dbtt54
-    # print "#timing end"
-
-        # if iTryAgain > 1:
-        #     print "iTryAgain %(ta)d for w %(w)d  j %(j)d" % {"w" : w, "j" : j, "ta" : iTryAgain}
-
-    # fig = _plt.figure()
-    # _plt.plot(llsV)
-    # _plt.suptitle(accptd)
-    # _plt.savefig("llsV%d" % GibbsIter)
-    # _plt.close()
-    lEn = lFlB[0]
-
-    #print "ll Bg %(b).3e   ll En %(e).3e" % {"b" : lBg, "e" : lEn}
-    return u0, rn0, dist
+    return u0, rn0, dist, accptd

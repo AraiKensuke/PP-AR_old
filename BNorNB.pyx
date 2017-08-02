@@ -9,9 +9,12 @@ import os
 from libc.math cimport exp, sqrt, log, abs
 
 logfact= None
+cdef double[::1] v_logfact
+cdef double* p_logfact
 
 cdef double uTH1= -6.5
 cdef double uTH2= -1
+cdef double uTH1_pl_uTH2 = uTH1 + uTH2
 
 cdef double uTHa= -6.5
 cdef double uTHb= -1
@@ -25,20 +28,22 @@ cdef double iu_sd2 = (1/1.4)*(1/1.4)
 
 
 def _init(lf):
-    global logfact, maxrn
+    global logfact, maxrn, p_logfact, v_logfact
     logfact = lf
+    v_logfact = logfact
+    p_logfact = &v_logfact[0]
     maxrn   = len(logfact) - 1000
 
 def Llklhds(long typ, long N, ks, long rn1, p1):
-    global logfact
+    global logfact, p_logfact
 
     if typ == _cd.__BNML__:
-        return N*logfact[rn1]-_N.sum(logfact[ks]+logfact[rn1-ks]-ks*_N.log(p1) - (rn1-ks)*_N.log(1 - p1))
+        return N*p_logfact[rn1]-_N.sum(logfact[ks]+logfact[rn1-ks]-ks*_N.log(p1) - (rn1-ks)*_N.log(1 - p1))
     else:
-        return _N.sum(logfact[ks+rn1-1]-logfact[ks]  + ks*_N.log(p1) + rn1*_N.log(1 - p1))-N*logfact[rn1-1]
+        return _N.sum(logfact[ks+rn1-1]-logfact[ks]  + ks*_N.log(p1) + rn1*_N.log(1 - p1))-N*p_logfact[rn1-1]
 
 def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, double stdu):
-    global logfact, ks, maxrn, uTH1, uTH2, iu_sd2
+    global logfact, ks, maxrn, uTH1, uTH2, iu_sd2, uTH1_pl_uTH2
     #  if accptd too small, increase stdu and try again
     #  if accptd is 0, the sampled params returned for conditional posterior
     #  are not representative of the conditional posterior
@@ -102,7 +107,7 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             todist = _cd.__NBML__ if dist == _cd.__BNML__ else _cd.__BNML__
             #  jump
             #print "here  %(it)d   %(jx).3f" % {"it" : it, "jx" : jx}
-            u1 = (uTH1 + uTH2) - u0
+            u1 = (uTH1_pl_uTH2) - u0
             ip1 = 1 + exp(-u1)
             p0  = 1 / (1 + exp(-u0))
             p1  = 1 / (1 + exp(-u1))
@@ -118,7 +123,7 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
 
             #lpPR   = _N.log((uTH1 - u0) / (uTH1 - u1))         #  deterministic crossing.  Jac = 1
             utr = (u1 - u_m)*mag
-            #utr = (uTH1 + uTH2)-u1
+            #utr = (uTH1_pl_uTH2)-u1
             jxr = 0.9 / (1 + _N.exp(2*utr))
             #lpPR   = _N.log(jxr/jx)
             if todist == _cd.__NBML__: #  r'p'/(1-p')=np, r' = np x (1-p')/p'

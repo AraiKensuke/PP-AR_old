@@ -55,6 +55,8 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
     if Mk == 0:
         return u0, rn0, dist   # no data assigned to this 
     rnmin = _N.array([-1, _N.max(cts)+1, 1], dtype=_N.int)
+    cdef long[::1] v_rnmin = rnmin
+    cdef long* p_rnmin     = &v_rnmin[0]
 
     rdns = _N.random.randn(iters)      #  prop u1
     rjxs = _N.random.rand(iters)      #  which move type
@@ -65,6 +67,10 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
     cdef double[::1] v_rdns = rdns
     cdef double[::1] v_ran_accpt = ran_accpt
     cdef double[::1] v_rrmdr = rrmdr
+    cdef double* p_rjxs     = &v_rjxs[0]
+    cdef double* p_rdns     = &v_rdns[0]
+    cdef double* p_rrmdr     = &v_rrmdr[0]
+    cdef double* p_ran_accpt     = &v_ran_accpt[0]
 
     cdef double p0  = 1./(1 + exp(-u0))
     p0x  = 1./(1 + _N.exp(-(u0+xn)))    #  array
@@ -74,7 +80,7 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
 
     zr2rnmins  = _N.array([None, _N.arange(rnmin[1]), _N.arange(rnmin[2])]) # rnmin is a valid value for n
 
-    cdef double u_m     = (uTH1+uTH2)*0.5
+    cdef double u_m     = (uTH1_pl_uTH2)*0.5
     cdef double mag     = 4./(uTH2 - uTH1)
 
     #  TO DO:  Large cnts usually means large rn.  
@@ -100,10 +106,7 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
         #
         #dbtt1 = _tm.time()
 
-        if it % 1000 == 0:
-            print it
-
-        if v_rjxs[it] < jx:  #  JUMP
+        if p_rjxs[it] < jx:  #  JUMP
             todist = _cd.__NBML__ if dist == _cd.__BNML__ else _cd.__BNML__
             #  jump
             #print "here  %(it)d   %(jx).3f" % {"it" : it, "jx" : jx}
@@ -118,7 +121,7 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             rmdr = rr-irr
             rn1   = int(rr)
 
-            if v_rrmdr[it] < rmdr:
+            if p_rrmdr[it] < rmdr:
                 rn1 += 1
 
             #lpPR   = _N.log((uTH1 - u0) / (uTH1 - u1))         #  deterministic crossing.  Jac = 1
@@ -131,10 +134,6 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             else:   #  n'p'=rp/(1-p),  n' = rp/[p'(1-p)]
                 ljac = log(p0 / (p1*(1-p0)))                
 
-            # if dist == _cd.__BNML__:
-            #     ljac = _N.log((jxr/jx) * (p0 / (p1*(1-p1))))
-            # else:
-            #     ljac = _N.log((jxr/jx) * ((p0*(1-p1)) / p1))
             lprop0 = lprop1 = 0  #
 
             lpru0   = -0.5*(u0 - mn_u)*(u0 - mn_u)*iu_sd2
@@ -156,16 +155,16 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             bGood = False   #  rejection sampling of rn1
             while not bGood:
                 rn1 = _N.random.negative_binomial(ir_prp_rn1, 1-p_prp_rn1)
-                if (rn1 >= rnmin[dist]) and (rn1 < maxrn):
+                if (rn1 >= p_rnmin[dist]) and (rn1 < maxrn):
                     bGood = True  # rn1 < maxrn  - just throw away huge rn
             #prop_rns[it] = rn1
 
             #########  log proposal density for rn1
             ir_prp_rn1 = int(r_prp_rn1)
-            ltrms = logfact[zr2rnmin+ir_prp_rn1-1]  - logfact[ir_prp_rn1-1] - logfact[zr2rnmin] + ir_prp_rn1*log(1-p_prp_rn1) + zr2rnmin*log(p_prp_rn1)
+            ltrms = logfact[zr2rnmin+ir_prp_rn1-1]  - p_logfact[ir_prp_rn1-1] - logfact[zr2rnmin] + ir_prp_rn1*log(1-p_prp_rn1) + zr2rnmin*log(p_prp_rn1)
             lCnb1        = log(1 - _N.sum(_N.exp(ltrms)))  #  nrmlzation 4 truncated pmf
 
-            lpmf1       = logfact[rn1+ir_prp_rn1-1]  - logfact[ir_prp_rn1-1] - logfact[rn1] + r_prp_rn1*log(1-p_prp_rn1) + rn1*log(p_prp_rn1) - lCnb1
+            lpmf1       = p_logfact[rn1+ir_prp_rn1-1]  - p_logfact[ir_prp_rn1-1] - p_logfact[rn1] + r_prp_rn1*log(1-p_prp_rn1) + rn1*log(p_prp_rn1) - lCnb1
 
             #########  log proposal density for rn0
             ##  rn1
@@ -174,11 +173,11 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             r_prp_rn0        = rn1 / (rn1*m2-1.) # param r for proposal for rn1
             ir_prp_rn0 = int(r_prp_rn0)
 
-            ltrms = logfact[zr2rnmin+ir_prp_rn0-1]  - logfact[ir_prp_rn0-1] - logfact[zr2rnmin] + ir_prp_rn0*log(1-p_prp_rn0) + zr2rnmin*log(p_prp_rn0)
+            ltrms = logfact[zr2rnmin+ir_prp_rn0-1]  - p_logfact[ir_prp_rn0-1] - logfact[zr2rnmin] + ir_prp_rn0*log(1-p_prp_rn0) + zr2rnmin*log(p_prp_rn0)
             smelt = _N.sum(_N.exp(ltrms))
             lCnb0        = log(1 - _N.sum(_N.exp(ltrms)))  #  nrmlzation 4 truncated 
 
-            lpmf0       = logfact[rn0+ir_prp_rn0-1]  - logfact[ir_prp_rn0-1] - logfact[rn0] + r_prp_rn0*log(1-p_prp_rn0) + rn0*log(p_prp_rn0) - lCnb0
+            lpmf0       = p_logfact[rn0+ir_prp_rn0-1]  - p_logfact[ir_prp_rn0-1] - p_logfact[rn0] + r_prp_rn0*log(1-p_prp_rn0) + rn0*log(p_prp_rn0) - lCnb0
 
             ###################################################
             #  propose p1
@@ -187,14 +186,14 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             #  
 
             try:
-                mn_u1 = -_N.log(rn1 * (1+_N.exp(-u0))/rn0 - 1) if dist == _cd.__BNML__ else (u0 - _N.log(float(rn1)/rn0))
+                mn_u1 = -_N.log(rn1 * (1+exp(-u0))/rn0 - 1) if dist == _cd.__BNML__ else (u0 - _N.log(float(rn1)/rn0))
             except Warning:
                 #  if rn0 >> rn1, (rn0/rn1) >> 1.   p0 x (rn0/rn1) could be > 1.
                 print "restart  %(it)d   todist   %(to)d   dist %(fr)d   rn0 %(rn0)d >> rn1 %(rn1)d" % {"to" : todist, "fr" : dist, "it" : it, "rn0" : rn0, "rn1" : rn1}
                 mn_u1  = 0
 
 
-            u1          = mn_u1 + stdu*rdns[it]
+            u1          = mn_u1 + stdu*p_rdns[it]
             p1x = 1 / (1 + _N.exp(-(u1+xn)))
             p1  = 1/(1 + exp(-u1))
 
@@ -224,8 +223,8 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
 
         lrat = ll1 - ll0 + lpru1 - lpru0 + lprop0 - lprop1 + ljac
 
-        aln   = 1 if (lrat > 0) else _N.exp(lrat)
-        accpts = ran_accpt[it] < aln
+        aln   = 1 if (lrat > 0) else exp(lrat)
+        accpts = p_ran_accpt[it] < aln
         if accpts:   #  accept
             u0 = u1
             rn0 = rn1
@@ -233,5 +232,4 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             p0  = p1
             dist=todist
             accptd += 1
-
     return u0, rn0, dist, accptd

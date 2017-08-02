@@ -55,7 +55,6 @@ class mcmcARcntMW(mAR.mcmcAR):
             oo.W = len(usewin)
             oo.y = _N.empty((oo.t1-oo.t0, oo.W), dtype=_N.int)
 
-            print oo.W
             for il in xrange(oo.W):
                 print type(usewin[il])
                 if type(usewin[il]) == _N.ndarray:

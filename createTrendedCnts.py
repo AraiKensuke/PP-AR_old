@@ -7,6 +7,7 @@ import numpy as _N
 import kflib as _kfl
 import matplotlib.pyplot as _plt
 import mcmcFigs as mF
+import os
 
 ####   
 #  _N.sin(t_orw)    #  t is an offseted random walk
@@ -33,8 +34,11 @@ ARcf     = None
 N        = None
 amp      = None
 
-def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=True, epspng="png"):
+def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=True, epspng="png", overwrite=True):
     global m, rn, p, W, J, u, N, amp, model
+
+    if os.access(resFN("%s.dat" % basefn, dir=setname, env_dirname=env_dirname), os.F_OK) and (not overwrite):   #
+        return _N.loadtxt(resFN("%s.dat" % basefn, dir=setname, env_dirname=env_dirname))
     if not dontcopy:
         copyfile("%s.py" % setname, "%(s)s/%(s)s.py" % {"s" : setname, "to" : setFN("%s.py" % setname, dir=setname, create=True)})
 
@@ -128,7 +132,6 @@ def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=Tr
             for w in xrange(W):
                 data[t, tr*COLS+2+w]  = cts[t, w]
 
-    print cts
     ctstr = ""
     for w in xrange(W):
         ctstr += "%d "
@@ -137,14 +140,15 @@ def create(setname, env_dirname=None, basefn="cnt_data", trend=None, dontcopy=Tr
 
     #return fmtstr, data, cts
 
-    _N.savetxt(resFN("%s.dat" % basefn, dir=setname, create=True, env_dirname=env_dirname), data, fmt=fmtstr)
+    if (not os.access(resFN("%s.dat" % basefn, dir=setname, env_dirname=env_dirname), os.F_OK) or overwrite):
+        _N.savetxt(resFN("%s.dat" % basefn, dir=setname, create=True, env_dirname=env_dirname), data, fmt=fmtstr)
 
     for w in xrange(W):
         fig =_plt.figure(figsize=(13, 3.5*2))
         ax = _plt.subplot2grid((2, 8), (0, 0), colspan=4)
         _plt.plot(cts[:, w], color="black")
         mF.arbitraryAxes(ax, axesVis=[True, True, False, False], xtpos="bottom", ytpos="left")
-        mF.setTicksAndLims(xlabel="trials", ylabel="spk counts", tickFS=18, labelFS=20)
+        mF.setTicksAndLims(xlabel="trials", ylabel="spk counts", tickFS=18, labelFS=20, ylim=[0, _N.max(cts[:, w])*1.05])
 
         ax = _plt.subplot2grid((2, 8), (1, 0), colspan=4)
         _plt.plot(x, color="black")

@@ -13,6 +13,7 @@ import re as _re
 import matplotlib.pyplot as _plt
 import scipy.stats as _ss
 import cntUtil as _cU
+import BNorNB as _bob
 import time as _tm
 import pickle
 
@@ -35,8 +36,6 @@ class mcmcARcntMW(mAR.mcmcAR):
     W      = 1
     outSmplFN = "smpls.dump"
 
-    mcmc_prop_std = 0.03
-
     ###################################   RUN   #########
     def loadDat(self, usewin=None):
         oo     = self    #  call self oo.  takes up less room on line
@@ -56,13 +55,12 @@ class mcmcARcntMW(mAR.mcmcAR):
             oo.W = len(usewin)
             oo.y = _N.empty((oo.t1-oo.t0, oo.W), dtype=_N.int)
 
-            print oo.W
             for il in xrange(oo.W):
                 print type(usewin[il])
                 if type(usewin[il]) == _N.ndarray:
-                    oo.y[:, il] = _N.sum(x_st_cnts[:, usewin[il]+2], axis=1)
+                    oo.y[:, il] = _N.sum(x_st_cnts[oo.t0:oo.t1, usewin[il]+2], axis=1)
                 else:
-                    oo.y[:, il] = x_st_cnts[:, usewin[il]+2]
+                    oo.y[:, il] = x_st_cnts[oo.t0:oo.t1, usewin[il]+2]
 
         else:
             oo.W = nWinsInData
@@ -83,7 +81,7 @@ class mcmcARcntMW(mAR.mcmcAR):
     #  when we don't have xn
     def initGibbs(self, logfact):
         oo     = self    #  call self oo.  takes up less room on line
-        _cU.logfact = logfact
+        _bob._init(logfact)
         #  INITIAL samples
 
         oo.smpx = _N.zeros(oo.N+1)
@@ -161,6 +159,7 @@ class mcmcARcntMW(mAR.mcmcAR):
         oo.mrns = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W, oo.J), dtype=_N.int)
         oo.mus  = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W))
         oo.mdty = _N.empty((oo.burn+oo.NMC, cntMCMCiters, oo.W), dtype=_N.int)
+        oo.accpts  = _N.empty((oo.burn+oo.NMC, oo.W, oo.J), dtype=_N.int)
 
         p   = _N.empty((oo.N+1, oo.W, oo.J))
         lp1p= _N.empty((oo.N+1, oo.W, oo.J))
@@ -169,6 +168,8 @@ class mcmcARcntMW(mAR.mcmcAR):
         rnsy= _N.empty((oo.N+1, oo.W), dtype=_N.int)
         rnsyC= _N.empty(oo.N+1, dtype=_N.int)  #  for giving to devryoe
         usJ = _N.empty((oo.N+1, oo.W))
+        
+        maxcts = _N.max(oo.y, axis=0) + 1
 
         if oo.smpxOff:
             oo.smpx[:] = 0
@@ -225,10 +226,11 @@ class mcmcARcntMW(mAR.mcmcAR):
                         else:
                             oo.LN[:, w, j] = logfact[oo.y[:,w]+oo.rn[w,j]-1] - logfact[oo.y[:,w]] - logfact[oo.rn[w,j]-1]
                             lp1p[:, w, j] = oo.y[:, w]*_N.log(p[:, w, j]) + oo.rn[w, j] * _N.log(1 - p[:, w, j])
-
-                #  If cnt for trial n can't be generated with jth model for wth window, we will not let it occupy the jth state
+                
                 canBgenrtd  = _N.where(bads < 0)[0]  #  ct can b generated
                 cantBgenrtd = _N.where(bads >= 0)[0]  #  ct can't b generated
+                #print len(cantBgenrtd)
+                #print len(cangenrtd)
                             
                 for j in xrange(oo.J):  #  for ratio of this state
                     for jo in xrange(oo.J):
@@ -252,7 +254,7 @@ class mcmcARcntMW(mAR.mcmcAR):
                     oo.zs[canBgenrtd[x], y] = 1;     oo.zs[canBgenrtd[x], 1-y] = 0
                     if len(cantBgenrtd) > 0:
                         oo.zs[cantBgenrtd, bads[cantBgenrtd]] = 0;     
-                        oo.zs[cantBgenrtd, 1-bads[cantBgenrtd]] = 1
+                        oo.zs[cantBgenrtd, 1-bads[cantBgenrtd]] = 1                      
                 else:
                     oo.zs[:, 0] = 1;     
 
@@ -280,7 +282,9 @@ class mcmcARcntMW(mAR.mcmcAR):
 
             for w in xrange(oo.W):
                 for j in xrange(oo.J):
-                    oo.us[w, j], oo.rn[w, j], oo.model[w, j] = _cU.cntmdlMCMCOnly(it, cntMCMCiters, w, j, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]], stdu=oo.mcmc_prop_std)
+                    #oo.us[w, j], oo.rn[w, j], oo.model[w, j] = _cUpyx.cntmdlMCMCOnly(it, cntMCMCiters, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
+                    #oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.accpts[it, w, j] = _bob.BNorNB(cntMCMCiters, w, j, 0, maxcts[w]*2, _cd.__BNML__, oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]], 0.05)
+                    oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.accpts[it, w, j] = _bob.BNorNB(cntMCMCiters, w, j, 0, maxcts[w]*2, _cd.__BNML__, oo.y[lht[j], w], oo.smpx[lht[j]], 0.05)
 
             _N.add(oo.alp, _N.sum(oo.zs, axis=0), out=dirArgs)
             oo.m[:] = _N.random.dirichlet(dirArgs)
@@ -381,6 +385,7 @@ class mcmcARcntMW(mAR.mcmcAR):
         many datafiles in each directory
         """
         oo     = self    #  call self oo.  takes up less room on line
+        _cU._init(logfact)
         oo.setname = None if batch else os.getcwd().split("/")[-1]
 
         oo.env_dirname=env_dirname
@@ -421,7 +426,6 @@ class mcmcARcntMW(mAR.mcmcAR):
         pcklme["u"]    = oo.smp_u
         pcklme["m"]    = oo.smp_m
         pcklme["dty"]  = oo.smp_dty
-        pcklme["rns"]  = oo.smp_rn
 
         pcklme["Bsmpx"]    = oo.Bsmpx
         pcklme["zs"]   = oo.smp_zs

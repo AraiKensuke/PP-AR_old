@@ -53,7 +53,7 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
 
     cdef double Mk = _N.mean(cts) if len(cts) > 0 else 0  #  1comp if nWins=1, 2comp
     if Mk == 0:
-        return u0, rn0, dist   # no data assigned to this 
+        return u0, rn0, dist, 0   # no data assigned to this 
     rnmin = _N.array([-1, _N.max(cts)+1, 1], dtype=_N.int)
     cdef long[::1] v_rnmin = rnmin
     cdef long* p_rnmin     = &v_rnmin[0]
@@ -123,12 +123,14 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
 
             if p_rrmdr[it] < rmdr:
                 rn1 += 1
+            if rn1 == 0:
+                print "IN JUMP woa, rn1=0.  it %(it)d  current dist %(dist)d.   %(rr).3f" % {"it" : it, "dist" : dist, "rr" : rr}
+                if dist == _cd.__BNML__:
+                    rn1 = 1
 
             #lpPR   = _N.log((uTH1 - u0) / (uTH1 - u1))         #  deterministic crossing.  Jac = 1
             utr = (u1 - u_m)*mag
-            #utr = (uTH1_pl_uTH2)-u1
-            jxr = 0.9 / (1 + _N.exp(2*utr))
-            #lpPR   = _N.log(jxr/jx)
+            jxr = 0.9 / (1 + exp(2*utr))
             if todist == _cd.__NBML__: #  r'p'/(1-p')=np, r' = np x (1-p')/p'
                 ljac = log((p0*(1-p1)) / p1)
             else:   #  n'p'=rp/(1-p),  n' = rp/[p'(1-p)]
@@ -138,11 +140,8 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
 
             lpru0   = -0.5*(u0 - mn_u)*(u0 - mn_u)*iu_sd2
             lpru1   = -0.5*(u1 - mn_u)*(u1 - mn_u)*iu_sd2
-
-            #ljac   = _N.log((jxr/jx) * (p0/p1))
         else:    #  ########   DIFFUSION    ############
             todist = dist
-            #prop_dty[it]= todist
 
             zr2rnmin = zr2rnmins[dist]
 
@@ -157,7 +156,6 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
                 rn1 = _N.random.negative_binomial(ir_prp_rn1, 1-p_prp_rn1)
                 if (rn1 >= p_rnmin[dist]) and (rn1 < maxrn):
                     bGood = True  # rn1 < maxrn  - just throw away huge rn
-            #prop_rns[it] = rn1
 
             #########  log proposal density for rn1
             ir_prp_rn1 = int(r_prp_rn1)
@@ -192,7 +190,6 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
                 print "restart  %(it)d   todist   %(to)d   dist %(fr)d   rn0 %(rn0)d >> rn1 %(rn1)d" % {"to" : todist, "fr" : dist, "it" : it, "rn0" : rn0, "rn1" : rn1}
                 mn_u1  = 0
 
-
             u1          = mn_u1 + stdu*p_rdns[it]
             p1x = 1 / (1 + _N.exp(-(u1+xn)))
             p1  = 1/(1 + exp(-u1))
@@ -200,7 +197,6 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             utr = (u1 - u_m)*mag
             jxr = 0.9 / (1 + exp(2*utr))
 
-            #prop_us[it] = u1
             mn_u0 = -log(rn0 * (1+exp(-u1))/rn1 - 1) if dist == _cd.__BNML__ else (u1 - log(float(rn0)/rn1))
 
             lprop1 = -0.5*(u1 - mn_u1)*(u1-mn_u1)*istdu2 + lpmf1 + log(1-jx) #  forward
@@ -224,8 +220,7 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
         lrat = ll1 - ll0 + lpru1 - lpru0 + lprop0 - lprop1 + ljac
 
         aln   = 1 if (lrat > 0) else exp(lrat)
-        accpts = p_ran_accpt[it] < aln
-        if accpts:   #  accept
+        if p_ran_accpt[it] < aln:   #  accept
             u0 = u1
             rn0 = rn1
             ll0 = ll1

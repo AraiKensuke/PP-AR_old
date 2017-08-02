@@ -168,10 +168,10 @@ def startingValuesMw(cts, J, zs, fillsmpx=None, indLH=False):
     if J > 1:  # consensus of both windows
         if WNS > 1:
             loInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) >= 0.55)[0]
-            hiInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) <  0.45)[0]
+            hiInds = _N.where(_N.mean(zsW[:, :, 0], axis=0) <  0.55)[0]
         else:
-            loInds = _N.where(zsW[0, :, 0] >= 0.5)[0]
-            hiInds = _N.where(zsW[0, :, 0] <  0.5)[0]
+            loInds = _N.where(zsW[0, :, 0] >= 0.55)[0]
+            hiInds = _N.where(zsW[0, :, 0] <  0.55)[0]
 
         zs[loInds, 0] = 1
         zs[hiInds, 1] = 1

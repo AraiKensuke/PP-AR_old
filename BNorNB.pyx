@@ -162,10 +162,10 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
 
             #########  log proposal density for rn1
             ir_prp_rn1 = int(r_prp_rn1)
-            ltrms = logfact[zr2rnmin+ir_prp_rn1-1]  - logfact[ir_prp_rn1-1] - logfact[zr2rnmin] + ir_prp_rn1*_N.log(1-p_prp_rn1) + zr2rnmin*_N.log(p_prp_rn1)
-            lCnb1        = _N.log(1 - _N.sum(_N.exp(ltrms)))  #  nrmlzation 4 truncated pmf
+            ltrms = logfact[zr2rnmin+ir_prp_rn1-1]  - logfact[ir_prp_rn1-1] - logfact[zr2rnmin] + ir_prp_rn1*log(1-p_prp_rn1) + zr2rnmin*log(p_prp_rn1)
+            lCnb1        = log(1 - _N.sum(_N.exp(ltrms)))  #  nrmlzation 4 truncated pmf
 
-            lpmf1       = logfact[rn1+ir_prp_rn1-1]  - logfact[ir_prp_rn1-1] - logfact[rn1] + r_prp_rn1*_N.log(1-p_prp_rn1) + rn1*_N.log(p_prp_rn1) - lCnb1
+            lpmf1       = logfact[rn1+ir_prp_rn1-1]  - logfact[ir_prp_rn1-1] - logfact[rn1] + r_prp_rn1*log(1-p_prp_rn1) + rn1*log(p_prp_rn1) - lCnb1
 
             #########  log proposal density for rn0
             ##  rn1
@@ -174,11 +174,11 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             r_prp_rn0        = rn1 / (rn1*m2-1.) # param r for proposal for rn1
             ir_prp_rn0 = int(r_prp_rn0)
 
-            ltrms = logfact[zr2rnmin+ir_prp_rn0-1]  - logfact[ir_prp_rn0-1] - logfact[zr2rnmin] + ir_prp_rn0*_N.log(1-p_prp_rn0) + zr2rnmin*_N.log(p_prp_rn0)
+            ltrms = logfact[zr2rnmin+ir_prp_rn0-1]  - logfact[ir_prp_rn0-1] - logfact[zr2rnmin] + ir_prp_rn0*log(1-p_prp_rn0) + zr2rnmin*log(p_prp_rn0)
             smelt = _N.sum(_N.exp(ltrms))
-            lCnb0        = _N.log(1 - _N.sum(_N.exp(ltrms)))  #  nrmlzation 4 truncated 
+            lCnb0        = log(1 - _N.sum(_N.exp(ltrms)))  #  nrmlzation 4 truncated 
 
-            lpmf0       = logfact[rn0+ir_prp_rn0-1]  - logfact[ir_prp_rn0-1] - logfact[rn0] + r_prp_rn0*_N.log(1-p_prp_rn0) + rn0*_N.log(p_prp_rn0) - lCnb0
+            lpmf0       = logfact[rn0+ir_prp_rn0-1]  - logfact[ir_prp_rn0-1] - logfact[rn0] + r_prp_rn0*log(1-p_prp_rn0) + rn0*log(p_prp_rn0) - lCnb0
 
             ###################################################
             #  propose p1

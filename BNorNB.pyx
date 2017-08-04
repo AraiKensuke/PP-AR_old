@@ -79,6 +79,7 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
     #  the poisson distribution needs to be truncated
 
     zr2rnmins  = _N.array([None, _N.arange(rnmin[1]), _N.arange(rnmin[2])]) # rnmin is a valid value for n
+    lf_zr2rnmins  = _N.array([None, logfact[_N.arange(rnmin[1])], logfact[_N.arange(rnmin[2])]]) # rnmin is a valid value for n
 
     cdef double u_m     = (uTH1_pl_uTH2)*0.5
     cdef double mag     = 4./(uTH2 - uTH1)
@@ -88,32 +89,30 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
     #  other side might be very large where the prior prob. is very small
     cdef long accptd  = 0
     
-    cdef double ut
+    cdef double ut, utr
     cdef double jx, jxr
     cdef long it
     cdef double u1
     cdef double p1, ip0, ip1
     cdef long rn1
+    cdef double irn0
     cdef double lprop0, lprop1, ljac, ll1, lpru0, lpru1
+    cdef double e_mu0   # exp(-u0)
+
+    #  initialize these.  Won't need to recalculate until proposal accept
+    ut    = (u0 - u_m)*mag
+    jx    = 0.9 / (1 + exp(2*ut))
+    lpru0   = -0.5*(u0 - mn_u)*(u0 - mn_u)*iu_sd2
+    p0  = 1 / (1 + exp(-u0))
+    irn0=1./rn0
 
     for it in xrange(iters):
-        # us[it] = u0
-        # rns[it] = rn0    #  rn0 is the newly sampled value if accepted
-        # dty[it] = dist
-
-        ut    = (u0 - u_m)*mag
-        jx    = 0.9 / (1 + exp(2*ut))
-        #
-        #dbtt1 = _tm.time()
-
         if p_rjxs[it] < jx:  #  JUMP
             todist = _cd.__NBML__ if dist == _cd.__BNML__ else _cd.__BNML__
             #  jump
-            #print "here  %(it)d   %(jx).3f" % {"it" : it, "jx" : jx}
             u1 = (uTH1_pl_uTH2) - u0
             ip1 = 1 + exp(-u1)
-            p0  = 1 / (1 + exp(-u0))
-            p1  = 1 / (1 + exp(-u1))
+            p1  = 1 / ip1
             p1x = 1 / (1 + _N.exp(-(u1+xn)))
 
             rr   = ((rn0*p0) / (p1*(1-p0))) if dist == _cd.__NBML__ else ((rn0*p0*(1-p1))/p1)
@@ -124,7 +123,7 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             if p_rrmdr[it] < rmdr:
                 rn1 += 1
             if rn1 == 0:
-                print "IN JUMP woa, rn1=0.  it %(it)d  current dist %(dist)d.   %(rr).3f" % {"it" : it, "dist" : dist, "rr" : rr}
+                print "IN JUMP woa, rn1=0.  it %(it)d  current dist %(dist)d.   %(p0).3f  %(p1).3f" % {"it" : it, "dist" : dist, "p0" : p0, "p1" : p1}
                 if dist == _cd.__BNML__:
                     rn1 = 1
 
@@ -138,15 +137,15 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
 
             lprop0 = lprop1 = 0  #
 
-            lpru0   = -0.5*(u0 - mn_u)*(u0 - mn_u)*iu_sd2
             lpru1   = -0.5*(u1 - mn_u)*(u1 - mn_u)*iu_sd2
         else:    #  ########   DIFFUSION    ############
             todist = dist
 
             zr2rnmin = zr2rnmins[dist]
+            lf_zr2rnmin = lf_zr2rnmins[dist]
 
             ##  propose an rn1 
-            m2          = 1./rn0 + 0.9      # rn0 is the mean for proposal for rn1
+            m2          = irn0 + 0.9      # rn0 is the mean for proposal for rn1
             p_prp_rn1        = 1 - 1./(rn0*m2)  # param p for proposal for rn1
             r_prp_rn1        = rn0 / (rn0*m2-1) # param r for proposal for rn1
             ir_prp_rn1 = int(r_prp_rn1)
@@ -158,8 +157,7 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
                     bGood = True  # rn1 < maxrn  - just throw away huge rn
 
             #########  log proposal density for rn1
-            ir_prp_rn1 = int(r_prp_rn1)
-            ltrms = logfact[zr2rnmin+ir_prp_rn1-1]  - p_logfact[ir_prp_rn1-1] - logfact[zr2rnmin] + ir_prp_rn1*log(1-p_prp_rn1) + zr2rnmin*log(p_prp_rn1)
+            ltrms = logfact[zr2rnmin+ir_prp_rn1-1]  - p_logfact[ir_prp_rn1-1] - lf_zr2rnmin + ir_prp_rn1*log(1-p_prp_rn1) + zr2rnmin*log(p_prp_rn1)
             lCnb1        = log(1 - _N.sum(_N.exp(ltrms)))  #  nrmlzation 4 truncated pmf
 
             lpmf1       = p_logfact[rn1+ir_prp_rn1-1]  - p_logfact[ir_prp_rn1-1] - p_logfact[rn1] + r_prp_rn1*log(1-p_prp_rn1) + rn1*log(p_prp_rn1) - lCnb1
@@ -171,7 +169,7 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             r_prp_rn0        = rn1 / (rn1*m2-1.) # param r for proposal for rn1
             ir_prp_rn0 = int(r_prp_rn0)
 
-            ltrms = logfact[zr2rnmin+ir_prp_rn0-1]  - p_logfact[ir_prp_rn0-1] - logfact[zr2rnmin] + ir_prp_rn0*log(1-p_prp_rn0) + zr2rnmin*log(p_prp_rn0)
+            ltrms = logfact[zr2rnmin+ir_prp_rn0-1]  - p_logfact[ir_prp_rn0-1] - lf_zr2rnmin + ir_prp_rn0*log(1-p_prp_rn0) + zr2rnmin*log(p_prp_rn0)
             smelt = _N.sum(_N.exp(ltrms))
             lCnb0        = log(1 - _N.sum(_N.exp(ltrms)))  #  nrmlzation 4 truncated 
 
@@ -184,10 +182,10 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             #  
 
             try:
-                mn_u1 = -_N.log(rn1 * (1+exp(-u0))/rn0 - 1) if dist == _cd.__BNML__ else (u0 - _N.log(float(rn1)/rn0))
+                mn_u1 = -_N.log(rn1 * (1+e_mu0)/rn0 - 1) if dist == _cd.__BNML__ else (u0 - _N.log(rn1*irn0))
             except Warning:
                 #  if rn0 >> rn1, (rn0/rn1) >> 1.   p0 x (rn0/rn1) could be > 1.
-                print "restart  %(it)d   todist   %(to)d   dist %(fr)d   rn0 %(rn0)d >> rn1 %(rn1)d" % {"to" : todist, "fr" : dist, "it" : it, "rn0" : rn0, "rn1" : rn1}
+                #print "restart  %(it)d   todist   %(to)d   dist %(fr)d   rn0 %(rn0)d >> rn1 %(rn1)d" % {"to" : todist, "fr" : dist, "it" : it, "rn0" : rn0, "rn1" : rn1}
                 mn_u1  = 0
 
             u1          = mn_u1 + stdu*p_rdns[it]
@@ -203,28 +201,38 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             lprop0 = -0.5*(u0 - mn_u0)*(u0-mn_u0)*istdu2 + lpmf0 + log(1-jxr) #  backwards
 
             if _cd.__BNML__:
-                ratn    = float(rn1)/rn0
-                bot     = (ratn*(1+exp(-u0))-1)
+                ratn    = rn1*irn0
+                bot     = (ratn*(1+e_mu0)-1)
                 if bot == 0:
                     ljac = -30
                 else:
-                    logme   = abs((ratn*exp(-u0)) / bot)
+                    logme   = abs((ratn*e_mu0) / bot)
                     ljac    = log(logme)
             else:
                 ljac    = 0
 
-            lpru0   = -0.5*(u0 - mn_u)*(u0 - mn_u)*iu_sd2
             lpru1   = -0.5*(u1 - mn_u)*(u1 - mn_u)*iu_sd2
         ll1 = Llklhds(todist, N, cts, rn1, p1x)  #  forward
 
-        lrat = ll1 - ll0 + lpru1 - lpru0 + lprop0 - lprop1 + ljac
+        #lrat = ll1 - ll0 + lpru1 - lpru0 + lprop0 - lprop1 + ljac
+        lrat = ll1 - ll0# + lpru1 - lpru0 + lprop0 - lprop1 + ljac
 
-        aln   = 1 if (lrat > 0) else exp(lrat)
+        #aln   = 1 if (lrat > 0) else exp(lrat)
+        aln   = 1 if (lrat > 0) else 0
         if p_ran_accpt[it] < aln:   #  accept
             u0 = u1
             rn0 = rn1
+            irn0=1./rn0
             ll0 = ll1
             p0  = p1
             dist=todist
+
+            e_mu0 = exp(-u0)
+            ut    = (u0 - u_m)*mag
+            jx    = 0.9 / (1 + exp(2*ut))
+
+            lpru0   = -0.5*(u0 - mn_u)*(u0 - mn_u)*iu_sd2
+
             accptd += 1
+
     return u0, rn0, dist, accptd

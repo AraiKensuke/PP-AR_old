@@ -140,7 +140,10 @@ class mcmcARcntMW(mAR.mcmcAR):
         BB = oo.B_q2 + 0.5 * _N.dot(rsd_stp, rsd_stp)
         oo.q2 = _ss.invgamma.rvs(a, scale=BB)
 
-        oo.alp       = _N.array([1, 1])
+        if oo.J == 2:
+            oo.alp       = _N.array([1, 1])
+        else:
+            oo.alp       = _N.array([1])
 
     def gibbsSamp(self, logfact, cntMCMCiters=50):  #########  GIBBS SAMPLER  ############
         #####  MCMC start
@@ -280,18 +283,6 @@ class mcmcARcntMW(mAR.mcmcAR):
             else:
                 lht = [_N.where(oo.zs[:, 0] == 1)[0]]
 
-            for w in xrange(oo.W):
-                for j in xrange(oo.J):
-                    #oo.us[w, j], oo.rn[w, j], oo.model[w, j] = _cUpyx.cntmdlMCMCOnly(it, cntMCMCiters, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
-                    #oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.accpts[it, w, j] = _bob.BNorNB(cntMCMCiters, w, j, 0, maxcts[w]*2, _cd.__BNML__, oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]], 0.05)
-                    oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.accpts[it, w, j] = _bob.BNorNB(cntMCMCiters, w, j, 0, maxcts[w]*2, _cd.__BNML__, oo.y[lht[j], w], oo.smpx[lht[j]], 0.05)
-
-            _N.add(oo.alp, _N.sum(oo.zs, axis=0), out=dirArgs)
-            oo.m[:] = _N.random.dirichlet(dirArgs)
-            oo.smp_m[it] = oo.m
-            oo.smp_rn[it] = oo.rn
-            oo.smp_dty[it] = oo.model
-
             #dbtt4 = _tm.time()
             ### offset
             for j in xrange(oo.J):
@@ -340,6 +331,7 @@ class mcmcARcntMW(mAR.mcmcAR):
 
                 # sample F0
 
+
                 F0AA = _N.dot(oo.smpx[0:-1], oo.smpx[0:-1])
                 F0BB = _N.dot(oo.smpx[0:-1], oo.smpx[1:])
 
@@ -365,7 +357,6 @@ class mcmcARcntMW(mAR.mcmcAR):
 
                 oo.smp_F[it]       = oo.F0
                 oo.smp_q2[it]      = oo.q2
-                oo.smp_u[it]      = oo.us
             #dbtt7 = _tm.time()
             # print "#timing start"
             # print "nt+= 1"
@@ -378,6 +369,21 @@ class mcmcARcntMW(mAR.mcmcAR):
             # print "#timing end"
 
             ### offset
+
+            for w in xrange(oo.W):
+                for j in xrange(oo.J):
+                    #oo.us[w, j], oo.rn[w, j], oo.model[w, j] = _cUpyx.cntmdlMCMCOnly(it, cntMCMCiters, oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]])
+                    #oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.accpts[it, w, j] = _bob.BNorNB(cntMCMCiters, w, j, 0, maxcts[w]*2, _cd.__BNML__, oo.y[lht[j], w], oo.mrns[it, :, w], oo.mus[it, :, w], oo.mdty[it, :, w], oo.smpx[lht[j]], 0.05)
+                    oo.us[w, j], oo.rn[w, j], oo.model[w, j], oo.accpts[it, w, j] = _bob.BNorNB(cntMCMCiters, w, j, 0, maxcts[w]*2, _cd.__BNML__, oo.y[lht[j], w], oo.smpx[lht[j]], 0.05)
+
+            _N.add(oo.alp, _N.sum(oo.zs, axis=0), out=dirArgs)
+            oo.m[:] = _N.random.dirichlet(dirArgs)
+            oo.smp_m[it] = oo.m
+            oo.smp_rn[it] = oo.rn
+            oo.smp_u[it]      = oo.us
+
+            oo.smp_dty[it] = oo.model
+
 
 
     def run(self, logfact, env_dirname=None, datafn="cnt_data.dat", batch=False, usewin=None, cntMCMCiters=50): ###########  RUN    
@@ -421,14 +427,14 @@ class mcmcARcntMW(mAR.mcmcAR):
         oo    = self
         pcklme = {}
 
-        pcklme["F"]    = oo.smp_F
-        pcklme["q2"]   = oo.smp_q2
-        pcklme["u"]    = oo.smp_u
-        pcklme["m"]    = oo.smp_m
-        pcklme["dty"]  = oo.smp_dty
+        pcklme["F"]     = oo.smp_F
+        pcklme["q2"]    = oo.smp_q2
+        pcklme["u"]     = oo.smp_u
+        pcklme["m"]     = oo.smp_m
+        pcklme["dty"]   = oo.smp_dty
 
-        pcklme["Bsmpx"]    = oo.Bsmpx
-        pcklme["zs"]   = oo.smp_zs
+        pcklme["Bsmpx"] = oo.Bsmpx
+        pcklme["zs"]    = oo.smp_zs
 
         if dir is None:
             dmp = open(oo.outSmplFN, "wb")

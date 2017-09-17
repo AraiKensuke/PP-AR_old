@@ -214,11 +214,9 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             lpru1   = -0.5*(u1 - mn_u)*(u1 - mn_u)*iu_sd2
         ll1 = Llklhds(todist, N, cts, rn1, p1x)  #  forward
 
-        #lrat = ll1 - ll0 + lpru1 - lpru0 + lprop0 - lprop1 + ljac
-        lrat = ll1 - ll0# + lpru1 - lpru0 + lprop0 - lprop1 + ljac
+        lrat = ll1 - ll0 + lpru1 - lpru0 + lprop0 - lprop1 + ljac
 
-        #aln   = 1 if (lrat > 0) else exp(lrat)
-        aln   = 1 if (lrat > 0) else 0
+        aln   = 1 if (lrat > 0) else exp(lrat)
         if p_ran_accpt[it] < aln:   #  accept
             u0 = u1
             rn0 = rn1

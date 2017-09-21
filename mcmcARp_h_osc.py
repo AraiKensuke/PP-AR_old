@@ -23,7 +23,7 @@ import utilities as _U
 import numpy.polynomial.polynomial as _Npp
 import time as _tm
 import ARlib as _arl
-import kfARlibMPmv as _kfar
+import kfARlibMPmv_ram2 as _kfar
 import pyPG as lw
 from ARcfSmpl import ARcfSmpl, FilteredTimeseries
 
@@ -247,7 +247,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 # print RHS[vInds]
                 vm = _N.linalg.solve(HcM, RHS[vInds])
                 Cov = _N.linalg.inv(HcM)
-                print vm
+                #print vm
                 cfs = _N.random.multivariate_normal(vm[:, 0], Cov, size=1)
 
                 RHS[vInds,0] = cfs[0]
@@ -288,6 +288,9 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 #iBDBW = _N.linalg.inv(BDB + lv_f)   # BDB not diag
                 #Mn    = oo.u_a + _N.dot(DB, _N.dot(iBDBW, lm_f - BTua))
 
+                #  BDB + lv_f     N+1 x N+1
+                print BDB.shape
+                print lm_f.shape
                 Mn = oo.u_a + _N.dot(DB, _N.linalg.solve(BDB + lv_f, lm_f - BTua))
 
                 t4c = _tm.time()
@@ -296,6 +299,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.smp_aS[it, :] = oo.aS
                 _N.dot(oo.B.T, oo.aS, out=BaS)
 
+            t4 = _tm.time()
             ########     per trial offset sample  burns==None, only psth fit
             Ons  = kpOws - oo.smpx[..., 2:, 0] - ARo - BaS - oo.knownSig
 
@@ -364,7 +368,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                     ARcfSmpl(oo.lfc, ooN+1-oo.ignr, ook, oo.AR2lims, oo.smpx[:, 1+oo.ignr:, 0:ook], oo.smpx[:, oo.ignr:, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H)  
                     oo.F_alfa_rep = alpR + alpC   #  new constructed
                     prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
-                    print prt
+                    #print prt
                 #ut, wt = FilteredTimeseries(ooN+1, ook, oo.smpx[:, 1:, 0:ook], oo.smpx[:, :, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR)
                 #ranks[it]    = rank
                 oo.allalfas[it] = oo.F_alfa_rep
@@ -408,6 +412,16 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 oo.smp_q2[:, it]= oo.q2
 
             t6 = _tm.time()
+
+            print ("t2-t1  %.4f" % (t2-t1))
+            print ("t3-t2  %.4f" % (t3-t2))
+            print ("t4a-t3  %.4f" % (t4a-t3))
+            print ("t4b-t4a  %.4f" % (t4b-t4a))
+            print ("t4c-t4b  %.4f" % (t4c-t4b))
+            print ("t4-t4c  %.4f" % (t4-t4c))
+            print ("t5-t4  %.4f" % (t5-t4))
+            print ("t6-t5  %.4f" % (t6-t5))
+
 
             if (it > 1) and (it % oo.peek == 0):
                 fig = _plt.figure(figsize=(8, 8))

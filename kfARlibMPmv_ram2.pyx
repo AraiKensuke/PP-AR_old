@@ -83,7 +83,7 @@ def FFdv(double[::1] y, double[::1] Rv, N, long k, double[:, ::1] F, double q2, 
     cdef double* p_pV             = &pVmv[0, 0, 0]
     cdef int n, i, j, ii, jj, nKK, nK, ik, n_m1_KK, n_m1_K, i_m1_K, iik
 
-    cdef double dd = 0, val, Kfac
+    cdef double dd = 0, val, Kfac, pKnKi
 
     for n from 1 <= n < N + 1:
         nKK = n * k * k
@@ -95,8 +95,6 @@ def FFdv(double[::1] y, double[::1] Rv, N, long k, double[:, ::1] F, double q2, 
         for i in xrange(1, k):#  use same loop to copy and do dot product
             dd             += p_F[i]*p_fx[n_m1_K + i]
             p_px[nK + i] = p_fx[n_m1_K + (i-1)] # shift older state
-        #p_px[nKK]          = dd + p_F[0]*p_fx[n_m1_KK]  #  1-step prediction 
-        #p_px[nKK]          = dd + p_F[0]*p_fx[(n-1)*k]  #  1-step prediction 
         p_px[nK]          = dd + p_F[0]*p_fx[n_m1_K]  #  1-step prediction 
 
 
@@ -123,12 +121,13 @@ def FFdv(double[::1] y, double[::1] Rv, N, long k, double[:, ::1] F, double q2, 
         ######  Kalman gain
         Kfac  = 1. / (p_pV[nKK] + p_Rv[n])  #  scalar
         for i in xrange(k):
-            p_K[nK + i] = p_pV[nKK + i*k] * Kfac
-        #################  filter mean
-        for i in xrange(k):
-            p_fx[nK+i] = p_px[nK+ i] + p_K[nK+ i]*(p_y[n] - p_px[nK])
+            #p_K[nK + i] = p_pV[nKK + i*k] * Kfac
+            pKnKi = p_pV[nKK + i*k] * Kfac
+
+            p_fx[nK+i] = p_px[nK+ i] + pKnKi*(p_y[n] - p_px[nK])
 
             for j in xrange(i, k):
-                p_fV[nKK+i*k+ j] = p_pV[nKK+ i*k+ j] - p_pV[nKK+j]*p_K[nK+i]
+                p_fV[nKK+i*k+ j] = p_pV[nKK+ i*k+ j] - p_pV[nKK+j]*pKnKi
                 p_fV[nKK+j*k + i] = p_fV[nKK+i*k+ j]
+            p_K[nK+i] = pKnKi
 

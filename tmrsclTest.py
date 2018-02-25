@@ -34,8 +34,12 @@ def timeRescaleTest(fr, spks01, dt, TR, m, nohist=False, loP=0.00001):
     for tr in xrange(TR):
         N  = len(mspkts[tr])
         rt = _N.empty(N)    #  rescaled time
-        for i in xrange(N):
-            rt[i] = _N.trapz(frm[tr, 0:mspkts[tr][i]])*dtm
+        rt[0] = _N.trapz(frm[tr, 0:mspkts[tr][0]])*dtm
+
+        for i in xrange(1,  N):
+            rt[i] = rt[i-1]+_N.trapz(frm[tr, mspkts[tr][i-1]:mspkts[tr][i]])*dtm
+        # for i in xrange(N):
+        #     rt[i] = _N.trapz(frm[tr, 0:mspkts[tr][i]])*dtm
 
         #  this means that small ISIs are underrepresented
         taus = _N.diff(rt)

@@ -59,7 +59,6 @@ def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, TR, ac
         arInd = range(C-1, -1, -1)
 
     for c in arInd:   #  Filtering signal root first drastically alters the strength of the signal root upon update sometimes.  
-    #for c in xrange(C-1, -1, -1):
         rprior = prior
         if c >= Cs:
            rprior = _cd.__COMP_REF__
@@ -121,7 +120,6 @@ def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, TR, ac
 
         #bBdd, iBdd, mags, vals = _arl.ARevals(U[:, 0])
         #print "U"
-        print J
         #print U[:, 0]
         #print ":::::: *****"
         #print ampAngRep(vals)
@@ -132,116 +130,29 @@ def ARcfSmpl(lfc, N, k, AR2lims, smpxU, smpxW, q2, R, Cs, Cn, alpR, alpC, TR, ac
 
         # #  If posterior valid Gaussian    q2 x H - oNZ * prH00
 
-        try:
-            ph1j1, ph1j2 = _N.random.multivariate_normal(U[:, 0], J, size=1)[0, :]
-        except ValueError:
-            print "Nans, infs"
-            print U
-            print J
-            raise
+        ###  This case is still fairly inexpensive.  
+        vPr1  = J[0, 0] - (J[0, 1]*J[0, 1])   / J[1, 1]   # known as Mj
+        vPr2  = J[1, 1]
+        svPr2 = _N.sqrt(vPr2)     ####  VECTORIZE
+        svPr1 = _N.sqrt(vPr1)
 
-            #  sampled points lie in stationary region
-        if ((ph1j2 < ph0H) and (ph1j2 > ph0L)) and \
-           ((ph1j1 > p1a*_N.sqrt(-1*ph1j2)) and (ph1j1 < p1b*_N.sqrt(-1*ph1j2))):
-            A[0] = ph1j1; A[1] = ph1j2
-            bSimpOK = True
+        #b2Real = (U[1, 0] + 0.25*U[0, 0]*U[0, 0] > 0)
+        ######  Initialize F0
 
-        if not bSimpOK:
-            ###  This case is still fairly inexpensive.  
-            print "!!  not bSimpOK"
-            iAcc = 0
+        mu1prp = U[1, 0]
+        mu0prp = U[0, 0]
 
-            vPr1  = J[0, 0] - (J[0, 1]*J[0, 1])   / J[1, 1]   # known as Mj
-            vPr2  = J[1, 1]
-            svPr2 = _N.sqrt(vPr2)     ####  VECTORIZE
-            svPr1 = _N.sqrt(vPr1)
+        #print "ph0L  %(L).4f  ph1L  %(H).4f   %(u).4f   %(s).4f" % {"L" : ph0L, "H" : ph0H, "u" : mu1prp, "s" : svPr2}
+        #print "vPr1  %(1).4e  vPr2 %(2).4e" % {"1" : vPr1, "2" : vPr2}
+        ph0j2 = _kd.truncnorm(a=ph0L, b=ph0H, u=mu1prp, std=svPr2)
+        r1    = _N.sqrt(-1*ph0j2)
+        mj0   = mu0prp + (J[0, 1] * (ph0j2 - mu1prp)) / J[1, 1]
+        ph0j1 = _kd.truncnorm(a=p1a*r1, b=p1b*r1, u=mj0, std=svPr1)
 
-            b2Real = (U[1, 0] + 0.25*U[0, 0]*U[0, 0] > 0)
-            ######  Initialize F0
-            if not b2Real:    #  complex roots
-                mu1prp = U[1, 0]
-                mu0prp = U[0, 0]
-            else:
-                mu0prp, mu1prp = ac.betterProposal(J, Ji, U)
-                
-            ph0j2 = _kd.truncnorm(a=ph0L, b=ph0H, u=mu1prp, std=svPr2)
-            r1    = _N.sqrt(-1*ph0j2)
-            mj0   = mu0prp + (J[0, 1] * (ph0j2 - mu1prp)) / J[1, 1]
-            ph0j1 = _kd.truncnorm(a=p1a*r1, b=p1b*r1, u=mj0, std=svPr1)
-            F0[0] = ph0j1; F0[1] = ph0j2
+        A[0] = ph0j1; A[1] = ph0j2
 
-            sinceLast = 0
-            #print "^^^^   %(1).3e   %(2).3e" % {"1" : ph0j1, "2" : ph0j2}
-            while (iAcc < accepts) and (sinceLast < 100):
-                #print "%(1).3f   %(2).3f    %(sl)d" % {"1" : p1a, "2" : p1b, "sl" : sinceLast}
+        #F0[0] = ph0j1; F0[1] = ph0j2
 
-                ##########  *CURRENT* parameters, calculate 
-                ph0j1     = F0[0]
-                ph0j2     = F0[1]
-
-                ########## phj2
-                #  truncated Gaussian to [-1, 1]
-                ph1j2 = _kd.truncnorm(a=ph0L, b=ph0H, u=mu1prp, std=svPr2)
-                r1    = _N.sqrt(-1*ph1j2)
-                mj0= mu0prp + (J[0, 1] * (ph1j2 - mu1prp)) / J[1, 1]
-                ph1j1 = _kd.truncnorm(a=p1a*r1, b=p1b*r1, u=mj0, std=svPr1)
-                #print "%(1).3e   %(2).3e" % {"1" : ph1j1, "2" : ph1j2}
-
-                F1[0] = ph1j1; F1[1] = ph1j2
-
-                lNC2 = lfc.trncNrmNrmlz(ph0L, ph0H, mu1prp, svPr2)
-                lNC1 = lfc.trncNrmNrmlz(p1a*r1, p1b*r1, mj0, svPr1)
-                Apd_ph1j2    = -(ph1j2 - mu1prp)**2 / (2*vPr2) - lNC2
-                Apd_ph1j1    = -(ph1j1 - mj0)**2 / (2*vPr1) - lNC1
-
-                #  proposal density g.  Want to sample from p
-                #  accR = min(1, [p(x') g(x'->x)] / [p(x) g(x->x')])
-                #####  Calculate ratio of proposal density
-                #  p(ph1j1, ph1j2) = p(ph1j1 | ph1j2) p(ph1j2)
-
-                ################
-                r0    = _N.sqrt(-1*ph0j2)
-                mj1= mu0prp + (J[0, 1] * (ph0j2 - mu1prp)) / J[1, 1]
-
-                lNC2 = lfc.trncNrmNrmlz(ph0L, ph0H, mu1prp, svPr2) # same value
-                lNC1 = lfc.trncNrmNrmlz(p1a*r0, p1b*r0, mj1, svPr1)
-                Apd_ph0j2    = -(ph0j2 - mu1prp)**2 / (2*vPr2) - lNC2
-                Apd_ph0j1    = -(ph0j1 - mj1)**2 / (2*vPr1) - lNC1
-                PrpRArg  = Apd_ph0j2 + Apd_ph0j1 - (Apd_ph1j2 + Apd_ph1j1)
-
-                #####  Ratio of likelihood
-                rsd12 = -0.5*_N.dot(F1 - U[:,0], _N.dot(Ji, F1 - U[:,0]))
-                rsd02 = -0.5*_N.dot(F0 - U[:,0], _N.dot(Ji, F0 - U[:,0]))
-                LRArg = (rsd12 - rsd02)
-
-                #####  Ratio of priors
-                #  priorProb(F') / priorProb(F)
-                #  PrRArg = ph1j1*ph1j1*prH00 - ph0j1*ph0j1*prH00
-
-                lPrRarg = 0
-                if (rprior == _cd.__FREQ_REF__) or (rprior == _cd.__ONOF_REF__):
-                    PrRarg =  _N.sqrt((1 - (ph0j1*ph0j1)/(4*r0*r0)) / (1 - (ph1j1*ph1j1)/(4*r1*r1)))
-                    PrRarg *= r1*r1 / (r0*r0)
-                    if rprior == _cd.__ONOF_REF__:
-                        wN    = _N.arccos(ph1j1 / (2*r1))
-                        wP    = _N.arccos(ph0j1 / (2*r0))
-                        PrRarg *= (wP+0.8)/(wN+0.8)
-                    lPrRarg = _N.log(PrRarg)
-                
-                RatArg = LRArg + PrpRArg + lPrRarg
-                if RatArg > 0:
-                    RatArg = 0
-                accR = min(1, _N.exp(RatArg))
-
-                if _N.random.rand() < accR:
-                    A[0] = ph1j1; A[1] = ph1j2
-                    iAcc += 1
-                    sinceLast = 0
-                else:
-                    sinceLast += 1
-                    A[0] = ph0j1; A[1] = ph0j2
-
-                F0[:]  = A[:]
         #  F1 +/- sqrt(F1^2 + 4F1) / 
         img        = _N.sqrt(-(A[0]*A[0] + 4*A[1]))*1j
         #vals, vecs = _N.linalg.eig(_N.array([A, [1, 0]]))

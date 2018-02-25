@@ -101,10 +101,17 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
 
     #  initialize these.  Won't need to recalculate until proposal accept
     ut    = (u0 - u_m)*mag
-    jx    = 0.9 / (1 + exp(2*ut))
+
+    cdef double jxMax = 0.
+    jx    = jxMax / (1 + exp(2*ut))
     lpru0   = -0.5*(u0 - mn_u)*(u0 - mn_u)*iu_sd2
     p0  = 1 / (1 + exp(-u0))
     irn0=1./rn0
+
+    smp_us   = _N.empty(iters)
+    smp_rns  = _N.empty(iters)
+    smp_dtys = _N.empty(iters)
+    
 
     for it in xrange(iters):
         if p_rjxs[it] < jx:  #  JUMP
@@ -156,6 +163,8 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
                 if (rn1 >= p_rnmin[dist]) and (rn1 < maxrn):
                     bGood = True  # rn1 < maxrn  - just throw away huge rn
 
+            print "prop rn1 %d" % rn1
+
             #########  log proposal density for rn1
             ltrms = logfact[zr2rnmin+ir_prp_rn1-1]  - p_logfact[ir_prp_rn1-1] - lf_zr2rnmin + ir_prp_rn1*log(1-p_prp_rn1) + zr2rnmin*log(p_prp_rn1)
             lCnb1        = log(1 - _N.sum(_N.exp(ltrms)))  #  nrmlzation 4 truncated pmf
@@ -181,19 +190,29 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             #  p1 x rn1 = p0 x rn0      --> p1 = p0 x rn0/rn1   BINOMIAL
             #  
 
-            try:
+            # try:
+            #     mn_u1 = -_N.log(rn1 * (1+e_mu0)/rn0 - 1) if dist == _cd.__BNML__ else (u0 - _N.log(rn1*irn0))
+            # except Warning:
+            #     #  if rn0 >> rn1, (rn0/rn1) >> 1.   p0 x (rn0/rn1) could be > 1.
+            #     print "restart  %(it)d   todist   %(to)d   dist %(fr)d   rn0 %(rn0)d >> rn1 %(rn1)d" % {"to" : todist, "fr" : dist, "it" : it, "rn0" : rn0, "rn1" : rn1}
+            #     mn_u1  = 0
+            if dist == _cd.__BNML__:
+
                 mn_u1 = -_N.log(rn1 * (1+e_mu0)/rn0 - 1) if dist == _cd.__BNML__ else (u0 - _N.log(rn1*irn0))
             except Warning:
                 #  if rn0 >> rn1, (rn0/rn1) >> 1.   p0 x (rn0/rn1) could be > 1.
-                #print "restart  %(it)d   todist   %(to)d   dist %(fr)d   rn0 %(rn0)d >> rn1 %(rn1)d" % {"to" : todist, "fr" : dist, "it" : it, "rn0" : rn0, "rn1" : rn1}
+                print "restart  %(it)d   todist   %(to)d   dist %(fr)d   rn0 %(rn0)d >> rn1 %(rn1)d" % {"to" : todist, "fr" : dist, "it" : it, "rn0" : rn0, "rn1" : rn1}
                 mn_u1  = 0
 
+
             u1          = mn_u1 + stdu*p_rdns[it]
+            print "mn_u1  %(m).4e    stdu %(s).4e" % {"m" : mn_u1, "s" : stdu}
+            print "prop u1 %.4e" % u1
             p1x = 1 / (1 + _N.exp(-(u1+xn)))
             p1  = 1/(1 + exp(-u1))
 
             utr = (u1 - u_m)*mag
-            jxr = 0.9 / (1 + exp(2*utr))
+            jxr = jxMax / (1 + exp(2*utr))
 
             mn_u0 = -log(rn0 * (1+exp(-u1))/rn1 - 1) if dist == _cd.__BNML__ else (u1 - log(float(rn0)/rn1))
 
@@ -214,9 +233,23 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
             lpru1   = -0.5*(u1 - mn_u)*(u1 - mn_u)*iu_sd2
         ll1 = Llklhds(todist, N, cts, rn1, p1x)  #  forward
 
+        print "!!!!!!!!!!!!"
+        print _N.log(1-jx)
+        print _N.log(1-jxr)
+        print ll0
+        print ll1
+        print lpru0
+        print lpru1
+        print "**"
+        print lCnb0
+        print lprop0
+        print lprop1
+        print ljac
+
         lrat = ll1 - ll0 + lpru1 - lpru0 + lprop0 - lprop1 + ljac
 
         aln   = 1 if (lrat > 0) else exp(lrat)
+        print aln
         if p_ran_accpt[it] < aln:   #  accept
             u0 = u1
             rn0 = rn1
@@ -227,10 +260,15 @@ def BNorNB(long iters, long w, long j, double u0, long rn0, long dist, cts, xn, 
 
             e_mu0 = exp(-u0)
             ut    = (u0 - u_m)*mag
-            jx    = 0.9 / (1 + exp(2*ut))
+            jx    = jxMax / (1 + exp(2*ut))
 
             lpru0   = -0.5*(u0 - mn_u)*(u0 - mn_u)*iu_sd2
 
             accptd += 1
 
-    return u0, rn0, dist, accptd
+        smp_us[it] = u0
+        smp_rns[it] = rn0
+        smp_dtys[it] = dist
+
+    #return u0, rn0, dist, accptd
+    return smp_us, smp_rns, smp_dtys, accptd

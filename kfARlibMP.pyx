@@ -1,6 +1,6 @@
 import numpy as _N
 cimport numpy as _N
-import kfcomMP as _kfcom
+import kfcomMPmv as _kfcom
 import time as _tm
 import cython
 

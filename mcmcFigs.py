@@ -642,6 +642,8 @@ def arbitraryAxes(ax, axesVis=[True, True, True, True], xtpos="bottom", ytpos="l
 
     ax.xaxis.set_ticks_position(xtpos)
     ax.yaxis.set_ticks_position(ytpos)
+    ax.xaxis.set_label_position(xtpos)
+    ax.yaxis.set_label_position(ytpos)
 
     ax.spines["left"].axis.axes.tick_params(direction="inward", width=2)
     ax.spines["bottom"].axis.axes.tick_params(direction="outward", width=2)

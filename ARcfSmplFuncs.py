@@ -222,8 +222,8 @@ def betterProposal(J, Ji, U):
     """
     Move the proposal nearer to 
     """
-    a          = Ji[1, 1]/4
-    b          = -3*Ji[0, 1]/2
+    a          = 0.25*Ji[1, 1]
+    b          = -1.5*Ji[0, 1]
     c          = 2*Ji[0, 0] + U[0, 0]*Ji[0, 1] + U[1, 0]*Ji[1, 1]
     d          = -2 * (U[0, 0]*Ji[0, 0] + U[1, 0]*Ji[0, 1])
     if a != 0:

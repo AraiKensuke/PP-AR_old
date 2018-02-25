@@ -49,6 +49,7 @@ def armdl_FFBS_1itrMP(args):   #  approximation
     #fx[0, :, 0] = fx00
     fx[0] = fx00
     fV[0] = fV00
+    
     GQGT   = _N.zeros((k, k))
     GQGT[0, 0] = q2
 

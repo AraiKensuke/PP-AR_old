@@ -418,11 +418,13 @@ class mcmcARspk(mAR.mcmcAR):
             oo.aS = _N.zeros(4)
 
             #oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.h0_5, int(0.7*(oo.N+1))]), include_intercept=True)    #  spline basisp
-        if oo.hist_max_at_0:
-            oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.maxISI*2]), include_intercept=True)    #  spline basisp
-        else:
-            oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.h0_5, oo.maxISI*2]), include_intercept=True)    #  spline basisp
 
+        #farknot = oo.maxISI*2# < (oo.t1-oo.t0) if oo.maxISI*2  else int((oo.t1-oo.t0) *0.9)
+        farknot = oo.maxISI*1.3# < (oo.t1-oo.t0) if oo.maxISI*2  else int((oo.t1-oo.t0) *0.9)
+        if oo.hist_max_at_0:
+            oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, farknot]), include_intercept=True)    #  spline basisp
+        else:
+            oo.Hbf = patsy.bs(_N.linspace(0, (oo.N+1), oo.N+1, endpoint=False), knots=_N.array([oo.h0_1, oo.h0_2, oo.h0_3, oo.h0_4, oo.h0_5, farknot]), include_intercept=True)    #  spline basisp
 
     def stitch_Hist(self, ARo, hcrv, stsM):  # history curve
         #  this has no direct bearing on sampling of history knots
@@ -597,7 +599,8 @@ class mcmcARspk(mAR.mcmcAR):
             pcklme = {}
 
         toiter         = oo.NMC + oo.burn if (toiter is None) else toiter
-        pcklme["aS"]   = oo.smp_aS[0:toiter]  #  this is last
+        if oo.bpsth:
+            pcklme["aS"]   = oo.smp_aS[0:toiter]  #  this is last
         pcklme["B"]    = oo.B
         pcklme["q2"]   = oo.smp_q2[:, 0:toiter]
         pcklme["amps"] = oo.amps[0:toiter]

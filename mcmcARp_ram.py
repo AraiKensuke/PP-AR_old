@@ -25,7 +25,10 @@ import time as _tm
 import ARlib as _arl
 import kfARlibMPmv_ram2 as _kfar
 import pyPG as lw
-from ARcfSmpl import ARcfSmpl, FilteredTimeseries
+#from ARcfSmpl import ARcfSmpl, FilteredTimeseries
+#from ARcfSmplCy import ARcfSmpl
+from ARcfSmplNoMCMC import ARcfSmpl
+#from ARcfSmpl import ARcfSmpl
 
 import commdefs as _cd
 
@@ -72,7 +75,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
     #  coefficient sampling
     fSigMax       = 500.    #  fixed parameters
-    freq_lims     = [[1 / .85, fSigMax]]
+    #freq_lims     = [[1 / .85, fSigMax]]
+    freq_lims     = [[.1, fSigMax]]
     sig_ph0L      = -1
     sig_ph0H      = 0
 
@@ -123,14 +127,17 @@ class mcmcARp(mcmcARspk.mcmcARspk):
         smWimOm      = _N.zeros(ooN + 1)
         smWinOn      = _N.zeros(ooTR)
         bConstPSTH   = False
+
         D_f          = _N.diag(_N.ones(oo.B.shape[0])*oo.s2_a)   #  spline
         iD_f = _N.linalg.inv(D_f)
         D_u  = _N.diag(_N.ones(oo.TR)*oo.s2_u)   #  This should 
         iD_u = _N.linalg.inv(D_u)
         iD_u_u_u = _N.dot(iD_u, _N.ones(oo.TR)*oo.u_u)
-        BDB  = _N.dot(oo.B.T, _N.dot(D_f, oo.B))
-        DB   = _N.dot(D_f, oo.B)
-        BTua = _N.dot(oo.B.T, oo.u_a)
+
+        if oo.bpsth:
+            BDB  = _N.dot(oo.B.T, _N.dot(D_f, oo.B))
+            DB   = _N.dot(D_f, oo.B)
+            BTua = _N.dot(oo.B.T, oo.u_a)
 
         it    = -1
 
@@ -303,20 +310,37 @@ class mcmcARp(mcmcARspk.mcmcARspk):
             Ons  = kpOws - oo.smpx[..., 2:, 0] - ARo - BaS - oo.knownSig
 
             #  solve for the mean of the distribution
-            H    = _N.ones((oo.TR-1, oo.TR-1)) * _N.sum(oo.ws[0])
-            uRHS = _N.empty(oo.TR-1)
-            for dd in xrange(1, oo.TR):
-                H[dd-1, dd-1] += _N.sum(oo.ws[dd])
-                uRHS[dd-1] = _N.sum(oo.ws[dd]*Ons[dd] - oo.ws[0]*Ons[0])
 
-            MM  = _N.linalg.solve(H, uRHS)
-            Cov = _N.linalg.inv(H)
 
-            oo.us[1:] = _N.random.multivariate_normal(MM, Cov, size=1)
-            oo.us[0]  = -_N.sum(oo.us[1:])
-            if not oo.bIndOffset:
-                oo.us[:] = _N.mean(oo.us)
-            oo.smp_u[:, it] = oo.us
+            if not oo.bpsth:  # if not doing PSTH, don't constrain offset, as there are no confounds controlling offset
+                _N.einsum("mn,mn->m", oo.ws, Ons, out=smWinOn)  #  sum over trials
+                ilv_u  = _N.diag(_N.sum(oo.ws, axis=1))  #  var  of LL
+                #  diag(_N.linalg.inv(Bi)) == diag(1./Bi).  Bii = inv(Bi)
+                _N.fill_diagonal(lv_u, 1./_N.diagonal(ilv_u))
+                lm_u  = _N.dot(lv_u, smWinOn)  #  nondiag of 1./Bi are inf, mean LL
+                #  now sample
+                iVAR = ilv_u + iD_u
+                VAR  = _N.linalg.inv(iVAR)  #
+                Mn    = _N.dot(VAR, _N.dot(ilv_u, lm_u) + iD_u_u_u)
+                oo.us[:]  = _N.random.multivariate_normal(Mn, VAR, size=1)[0, :]
+                if not oo.bIndOffset:
+                    oo.us[:] = _N.mean(oo.us)
+                oo.smp_u[:, it] = oo.us
+            else:
+                H    = _N.ones((oo.TR-1, oo.TR-1)) * _N.sum(oo.ws[0])
+                uRHS = _N.empty(oo.TR-1)
+                for dd in xrange(1, oo.TR):
+                    H[dd-1, dd-1] += _N.sum(oo.ws[dd])
+                    uRHS[dd-1] = _N.sum(oo.ws[dd]*Ons[dd] - oo.ws[0]*Ons[0])
+
+                MM  = _N.linalg.solve(H, uRHS)
+                Cov = _N.linalg.inv(H)
+
+                oo.us[1:] = _N.random.multivariate_normal(MM, Cov, size=1)
+                oo.us[0]  = -_N.sum(oo.us[1:])
+                if not oo.bIndOffset:
+                    oo.us[:] = _N.mean(oo.us)
+                oo.smp_u[:, it] = oo.us
 
             # Ons  = kpOws - ARo
             # _N.einsum("mn,mn->m", oo.ws, Ons, out=smWinOn)  #  sum over trials
@@ -364,7 +388,7 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
                 t5 = _tm.time()
                 if not oo.bFixF:   
-                    ARcfSmpl(oo.lfc, ooN+1-oo.ignr, ook, oo.AR2lims, oo.smpx[:, 1+oo.ignr:, 0:ook], oo.smpx[:, oo.ignr:, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=30, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H)  
+                    ARcfSmpl(oo.lfc, ooN+1-oo.ignr, ook, oo.AR2lims, oo.smpx[:, 1+oo.ignr:, 0:ook], oo.smpx[:, oo.ignr:, 0:ook-1], oo.q2, oo.R, oo.Cs, oo.Cn, alpR, alpC, oo.TR, prior=oo.use_prior, accepts=50, aro=oo.ARord, sig_ph0L=oo.sig_ph0L, sig_ph0H=oo.sig_ph0H)  
                     oo.F_alfa_rep = alpR + alpC   #  new constructed
                     prt, rank, f, amp = ampAngRep(oo.F_alfa_rep, f_order=True)
                     #print prt
@@ -414,10 +438,10 @@ class mcmcARp(mcmcARspk.mcmcARspk):
 
             print ("t2-t1  %.4f" % (t2-t1))
             print ("t3-t2  %.4f" % (t3-t2))
-            print ("t4a-t3  %.4f" % (t4a-t3))
-            print ("t4b-t4a  %.4f" % (t4b-t4a))
-            print ("t4c-t4b  %.4f" % (t4c-t4b))
-            print ("t4-t4c  %.4f" % (t4-t4c))
+            print ("t4-t3  %.4f" % (t4-t3))
+#            print ("t4b-t4a  %.4f" % (t4b-t4a))
+#            print ("t4c-t4b  %.4f" % (t4c-t4b))
+#            print ("t4-t4c  %.4f" % (t4-t4c))
             print ("t5-t4  %.4f" % (t5-t4))
             print ("t6-t5  %.4f" % (t6-t5))
 
@@ -500,8 +524,9 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                 pckldITERS = pckl["allalfas"].shape[0]
                 print "found %d Gibbs iterations samples" % pckldITERS
                 oo.pkldalfas  = pckl["allalfas"][pckldITERS-1]
-                oo.aS     = pckl["aS"][pckldITERS-1]
-                oo.B      = pckl["B"]
+                if oo.bpsth:
+                    oo.aS     = pckl["aS"][pckldITERS-1]
+                    oo.B      = pckl["B"]
                 oo.hS     = pckl["h_coeffs"][:, pckldITERS-1]
                 oo.q2     = pckl["q2"][:, pckldITERS-1]
                 oo.us     = pckl["u"][:, pckldITERS-1]
@@ -518,7 +543,8 @@ class mcmcARp(mcmcARspk.mcmcARspk):
                     oo.smp_u = pckl["u"]
                     oo.smp_hS= pckl["h_coeffs"]
                     oo.smp_q2= pckl["q2"]
-                    oo.smp_aS= pckl["aS"]
+                    if oo.bpsth:
+                        oo.smp_aS= pckl["aS"]
                     oo.fs    = pckl["fs"]
                     oo.amps  = pckl["amps"]
 

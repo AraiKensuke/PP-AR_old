@@ -41,6 +41,9 @@ def BSvec(F, N, _N.intp_t k, GQGT, fx, fV, smXN):
     VsRn2  =  Vs*mvn1
     zrmn   = _N.einsum("njk,nk->nj", S, VsRn2)
 
+    #print "noises"
+    #print PtN
+
     cdef double[:, ::1] zrmnmv = zrmn
 
     #  out of order calculation.  one of the terms can be calculated
@@ -64,7 +67,9 @@ def BSvec(F, N, _N.intp_t k, GQGT, fx, fV, smXN):
             smXmv[n, i] = zrmnmv[n, i] + Asxmv[i]
 
     t5 = _tm.time()
-    print "%(t2t1).3f   %(t3t2).3f   %(t4t3).3f   %(t5t4).3f" % {"t2t1" : (t2-t1), "t3t2" : (t3-t2), "t4t3" : (t4-t3), "t5t4" : (t5-t4)}
+
+
+    #print "%(t2t1).3f   %(t3t2).3f   %(t4t3).3f   %(t5t4).3f" % {"t2t1" : (t2-t1), "t3t2" : (t3-t2), "t4t3" : (t4-t3), "t5t4" : (t5-t4)}
     return smX
 
 

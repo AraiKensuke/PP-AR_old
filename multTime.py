@@ -5,12 +5,13 @@ exf("filter.py")
 
 
 #  modulation histogram.  phase @ spike
-setname="080402-2-3-theta"
+#setname="080402-2-3-theta"
+setname="tim_n8"
 p = _re.compile("^\d{6}")   # starts like "exptDate-....."
 m = p.match(setname)
 
-bRealDat = True
-COLS = 4
+bRealDat = False
+COLS = 3
 
 if m == None:
     bRealDat = False
@@ -21,7 +22,7 @@ N, cols = dat.shape
 
 TR   = cols / COLS
 
-M    = 2   #  mult by
+M    = 3   #  mult by
 datM = _N.zeros((N/M, cols))
 
 missingSpikes = 0
